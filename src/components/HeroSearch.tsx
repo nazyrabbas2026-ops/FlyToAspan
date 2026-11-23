@@ -1,0 +1,1232 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Plane,
+  Building2,
+  CarTaxiFront,
+  ArrowRight,
+  ArrowLeftRight,
+  PlaneTakeoff,
+  PlaneLanding,
+  Calendar,
+  Users,
+  ShieldCheck,
+  Tag,
+  Headphones,
+  Search,
+  MapPin,
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  Sparkles,
+  Star,
+  Zap,
+} from 'lucide-react';
+import { AIRPORTS, Airport } from '../data/mockData';
+import { addCalendarDays, fromCalendarDate, toCalendarDate } from '../data/calendarDates';
+import { TRANSLATIONS } from '../i18n/translations';
+import { HeroFlightMap } from './HeroFlightMap';
+import {
+  FlightSearchQuery,
+  HotelSearchQuery,
+  LangCode,
+  SearchTab,
+  TransferSearchQuery,
+} from '../types';
+
+interface HeroSearchProps {
+  lang: LangCode;
+  activeTab: SearchTab;
+  onTabChange: (tab: SearchTab) => void;
+  flightQuery: FlightSearchQuery;
+  onFlightQueryChange: (next: FlightSearchQuery) => void;
+  onSearchFlight: (q: FlightSearchQuery) => void;
+  onSearchHotel: (q: HotelSearchQuery) => void;
+  onSearchTransfer: (q: TransferSearchQuery) => void;
+}
+
+type CalendarField = 'depart' | 'return' | 'hotelIn' | 'hotelOut' | 'trDate';
+
+function getMonthCells(year: number, month: number) {
+  const first = new Date(year, month, 1);
+  const offset = (first.getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: Array<Date | null> = [];
+  for (let i = 0; i < offset; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
+  return cells;
+}
+
+const PROMO_IMAGES: Record<SearchTab, string> = {
+  flight:
+    'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=1000&q=85',
+  hotel:
+    'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=900&q=85',
+  transfer:
+    'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?auto=format&fit=crop&w=900&q=85',
+};
+
+// High-altitude commercial aircraft in-flight photography for every destination route
+const FLIGHT_DEST_IMAGES: Record<string, string> = {
+  IST: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=1000&q=85',
+  SAW: 'https://images.unsplash.com/photo-1529074963764-98f45c47344b?auto=format&fit=crop&w=1000&q=85',
+  AYT: 'https://images.unsplash.com/photo-1508614589041-895b88991e3e?auto=format&fit=crop&w=1000&q=85',
+  ALA: 'https://images.unsplash.com/photo-1540339832862-474599807836?auto=format&fit=crop&w=1000&q=85',
+  NQZ: 'https://images.unsplash.com/photo-1569154941061-e231b4725ef1?auto=format&fit=crop&w=1000&q=85',
+  LHR: 'https://images.unsplash.com/photo-1529074963764-98f45c47344b?auto=format&fit=crop&w=1000&q=85',
+  CDG: 'https://images.unsplash.com/photo-1508614589041-895b88991e3e?auto=format&fit=crop&w=1000&q=85',
+  AMS: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=1000&q=85',
+  FCO: 'https://images.unsplash.com/photo-1540339832862-474599807836?auto=format&fit=crop&w=1000&q=85',
+  DXB: 'https://images.unsplash.com/photo-1569154941061-e231b4725ef1?auto=format&fit=crop&w=1000&q=85',
+  ADB: 'https://images.unsplash.com/photo-1529074963764-98f45c47344b?auto=format&fit=crop&w=1000&q=85',
+  ESB: 'https://images.unsplash.com/photo-1508614589041-895b88991e3e?auto=format&fit=crop&w=1000&q=85',
+  TZX: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=1000&q=85',
+};
+
+export const HeroSearch: React.FC<HeroSearchProps> = ({
+  lang,
+  activeTab,
+  onTabChange,
+  flightQuery,
+  onFlightQueryChange,
+  onSearchFlight,
+  onSearchHotel,
+  onSearchTransfer,
+}) => {
+  const t = TRANSLATIONS[lang].hero;
+  const widgetRef = useRef<HTMLDivElement>(null);
+  const today = new Date();
+  const todayIso = toCalendarDate(today);
+
+  const [openPop, setOpenPop] = useState<
+    null | 'from' | 'to' | 'pax' | CalendarField
+  >(null);
+  const [fromFilter, setFromFilter] = useState('');
+  const [toFilter, setToFilter] = useState('');
+  const [calMonth, setCalMonth] = useState(() => ({ year: today.getFullYear(), month: today.getMonth() }));
+  const [invalidTab, setInvalidTab] = useState<SearchTab | null>(null);
+  const [userChangedDest, setUserChangedDest] = useState(false);
+
+  const [hotelQuery, setHotelQuery] = useState<HotelSearchQuery>({
+    destination: 'Bodrum, Muğla',
+    checkIn: addCalendarDays(todayIso, 5),
+    checkOut: addCalendarDays(todayIso, 7),
+    adults: 2,
+    children: 0,
+  });
+
+  const [transferQuery, setTransferQuery] = useState<TransferSearchQuery>({
+    from: 'İstanbul Havalimanı (IST)',
+    to: 'Taksim / Beşiktaş Otel',
+    date: addCalendarDays(todayIso, 15),
+    time: '14:30',
+    adults: 2,
+    children: 0,
+  });
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      // Close popover whenever clicking anywhere outside an active field/popover wrapper
+      if (!target.closest('.u4-field-wrap')) {
+        setOpenPop(null);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpenPop(null);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!openPop || !widgetRef.current) return;
+    const timer = window.setTimeout(() => {
+      const pop = widgetRef.current?.querySelector('.uf-popover.is-open') as HTMLElement | null;
+      if (!pop) return;
+      const rect = pop.getBoundingClientRect();
+      if (rect.bottom > window.innerHeight - 12) {
+        pop.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }, 40);
+    return () => window.clearTimeout(timer);
+  }, [openPop]);
+
+  const formatDateLocal = (iso: string): string => {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-').map(Number);
+    if (!y || !m || !d) return '';
+    return `${d} ${t.months[m - 1].slice(0, 3)} ${y}`;
+  };
+
+  const fromAirport = useMemo(
+    () => AIRPORTS.find((a) => a.code === flightQuery.fromCode) || AIRPORTS[0],
+    [flightQuery.fromCode]
+  );
+  const toAirport = useMemo(
+    () => AIRPORTS.find((a) => a.code === flightQuery.toCode) || AIRPORTS[4],
+    [flightQuery.toCode]
+  );
+
+  const filteredFrom = useMemo(() => {
+    const q = fromFilter.trim().toLowerCase();
+    if (!q) return AIRPORTS;
+    return AIRPORTS.filter(
+      (a) =>
+        a.city.toLowerCase().includes(q) ||
+        a.code.toLowerCase().includes(q) ||
+        a.airport.toLowerCase().includes(q) ||
+        a.country.toLowerCase().includes(q)
+    );
+  }, [fromFilter]);
+
+  const filteredTo = useMemo(() => {
+    const q = toFilter.trim().toLowerCase();
+    if (!q) return AIRPORTS;
+    return AIRPORTS.filter(
+      (a) =>
+        a.city.toLowerCase().includes(q) ||
+        a.code.toLowerCase().includes(q) ||
+        a.airport.toLowerCase().includes(q) ||
+        a.country.toLowerCase().includes(q)
+    );
+  }, [toFilter]);
+
+  const totalPax = flightQuery.adults + flightQuery.children + flightQuery.infants;
+
+  const promoContent =
+    activeTab === 'flight'
+      ? { stat1: '500+ rota', stat2: 'Anında bilet', title: t.flightPromoTitle, sub: t.flightPromoSub }
+      : activeTab === 'hotel'
+        ? { stat1: '5.000+ otel', stat2: 'Gerçek fiyat', title: t.hotelPromoTitle, sub: t.hotelPromoSub }
+        : { stat1: 'Özel VIP', stat2: 'Sabit fiyat', title: t.transferPromoTitle, sub: t.transferPromoSub };
+
+  const handleSwapFlight = () => {
+    setUserChangedDest(true);
+    onFlightQueryChange({
+      ...flightQuery,
+      fromCode: flightQuery.toCode,
+      toCode: flightQuery.fromCode,
+    });
+  };
+
+  const handleSwapTransfer = () => {
+    setTransferQuery((prev) => ({ ...prev, from: prev.to, to: prev.from }));
+  };
+
+  const shiftMonth = (delta: number) => {
+    setCalMonth((prev) => {
+      const d = new Date(prev.year, prev.month + delta, 1);
+      return { year: d.getFullYear(), month: d.getMonth() };
+    });
+  };
+
+  const showCalendar = (field: CalendarField, selectedIso: string, minIso = todayIso) => {
+    setOpenPop(field);
+    const date = fromCalendarDate(selectedIso >= minIso ? selectedIso : minIso);
+    setCalMonth({ year: date.getFullYear(), month: date.getMonth() });
+  };
+
+  const toggleCalendar = (field: CalendarField, selectedIso: string, minIso = todayIso) => {
+    if (openPop === field) setOpenPop(null);
+    else showCalendar(field, selectedIso, minIso);
+  };
+
+  const defaultReturnDate = addCalendarDays(
+    flightQuery.departDate >= todayIso ? flightQuery.departDate : todayIso,
+    7
+  );
+  const minReturnDate = flightQuery.departDate > todayIso ? flightQuery.departDate : todayIso;
+  const dayAfterCheckIn = addCalendarDays(hotelQuery.checkIn, 1);
+  const minHotelOut = dayAfterCheckIn > todayIso ? dayAfterCheckIn : todayIso;
+
+  const invalidDates = {
+    flight: flightQuery.departDate < todayIso ||
+      (flightQuery.tripType === 'roundtrip' && flightQuery.returnDate < minReturnDate),
+    hotel: hotelQuery.checkIn < todayIso || hotelQuery.checkOut < minHotelOut,
+    transfer: transferQuery.date < todayIso,
+  };
+  const searchError = activeTab === 'flight' && flightQuery.fromCode === flightQuery.toCode
+    ? t.invalidFlightRoute
+    : invalidDates[activeTab] ? t.invalidDates : '';
+
+  const handleSearch = () => {
+    if (searchError) {
+      setInvalidTab(activeTab);
+      return;
+    }
+
+    if (activeTab === 'flight') onSearchFlight(flightQuery);
+    else if (activeTab === 'hotel') onSearchHotel(hotelQuery);
+    else onSearchTransfer(transferQuery);
+  };
+
+  const selectDate = (iso: string) => {
+    if (openPop === 'depart') {
+      const nextReturn = flightQuery.returnDate >= iso ? flightQuery.returnDate : addCalendarDays(iso, 7);
+      onFlightQueryChange({ ...flightQuery, departDate: iso, returnDate: nextReturn });
+      if (flightQuery.tripType === 'roundtrip') showCalendar('return', nextReturn, iso);
+      else setOpenPop(null);
+    } else if (openPop === 'return') {
+      onFlightQueryChange({ ...flightQuery, returnDate: iso });
+      setOpenPop(null);
+    } else if (openPop === 'hotelIn') {
+      const minOut = addCalendarDays(iso, 1);
+      const checkOut = hotelQuery.checkOut >= minOut ? hotelQuery.checkOut : minOut;
+      setHotelQuery((prev) => ({ ...prev, checkIn: iso, checkOut }));
+      showCalendar('hotelOut', checkOut, minOut);
+    } else if (openPop === 'hotelOut') {
+      setHotelQuery((prev) => ({ ...prev, checkOut: iso }));
+      setOpenPop(null);
+    } else if (openPop === 'trDate') {
+      setTransferQuery((prev) => ({ ...prev, date: iso }));
+      setOpenPop(null);
+    }
+  };
+
+  const renderCalendarPopover = (
+    title: string,
+    selectedIso: string,
+    minIso = todayIso,
+    isOpen = false
+  ) => {
+    const nextM = new Date(calMonth.year, calMonth.month + 1, 1);
+    const months = [
+      { year: calMonth.year, month: calMonth.month },
+      { year: nextM.getFullYear(), month: nextM.getMonth() },
+    ];
+    const monthStart = toCalendarDate(new Date(calMonth.year, calMonth.month, 1));
+    const tomorrow = addCalendarDays(todayIso, 1);
+    const saturday = addCalendarDays(todayIso, (6 - today.getDay() + 7) % 7);
+    const quickDates = [
+      { label: t.today, date: todayIso },
+      { label: t.tomorrow, date: tomorrow },
+      ...(saturday > tomorrow ? [{ label: t.weekend, date: saturday }] : []),
+    ].filter(({ date }) => date >= minIso);
+
+    return (
+      <div
+        className={`uf-popover uf-date-pop ${isOpen ? 'is-open' : ''}`}
+        aria-hidden={!isOpen}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="uf-pop-head">
+          <span className="uf-pop-title">{title}</span>
+          <div className="uf-cal-nav">
+            <button
+              type="button"
+              className="uf-cal-nav-btn"
+              aria-label={t.previousMonth}
+              disabled={monthStart.slice(0, 7) <= minIso.slice(0, 7)}
+              onClick={() => shiftMonth(-1)}
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button type="button" className="uf-cal-nav-btn" aria-label={t.nextMonth} onClick={() => shiftMonth(1)}>
+              <ChevronRight size={16} />
+            </button>
+            <button type="button" className="uf-cal-nav-btn" onClick={() => setOpenPop(null)}>
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+
+        {quickDates.length > 0 && (
+          <div className="uf-quick-dates">
+            {quickDates.map(({ label, date }) => (
+              <button key={date} type="button" className="uf-quick-pill" onClick={() => selectDate(date)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="uf-months-grid">
+          {months.map((m) => {
+            const cells = getMonthCells(m.year, m.month);
+            return (
+              <div key={`${m.year}-${m.month}`}>
+                <div className="uf-month-title">
+                  {t.months[m.month]} {m.year}
+                </div>
+                <div className="uf-weekdays">
+                  {t.weekdays.map((w) => (
+                    <div key={w} className="uf-weekday">
+                      {w}
+                    </div>
+                  ))}
+                </div>
+                <div className="uf-days-grid">
+                  {cells.map((dt, idx) => {
+                    if (!dt) return <div key={`empty-${idx}`} />;
+                    const iso = toCalendarDate(dt);
+                    const disabled = iso < minIso;
+                    const isSelected = iso === selectedIso;
+                    const isToday = iso === todayIso;
+                    const inRange =
+                      activeTab === 'flight' &&
+                      flightQuery.tripType === 'roundtrip' &&
+                      flightQuery.departDate &&
+                      flightQuery.returnDate &&
+                      iso > flightQuery.departDate &&
+                      iso < flightQuery.returnDate;
+                    return (
+                      <button
+                        key={iso}
+                        type="button"
+                        disabled={disabled}
+                        aria-label={formatDateLocal(iso)}
+                        aria-pressed={isSelected}
+                        className={`uf-day-btn ${isSelected ? 'selected' : ''} ${
+                          isToday ? 'today' : ''
+                        } ${inRange ? 'in-range' : ''}`}
+                        onClick={() => selectDate(iso)}
+                      >
+                        {dt.getDate()}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+      </div>
+    );
+  };
+
+  const renderAirportOption = (
+    a: Airport,
+    idx: number,
+    onSelect: (code: string) => void
+  ) => (
+    <button
+      key={a.code}
+      type="button"
+      className="uf-airport-opt"
+      style={{ '--i': Math.min(idx, 6) } as React.CSSProperties}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect(a.code);
+        setFromFilter('');
+        setToFilter('');
+        setOpenPop(null);
+      }}
+    >
+      <div>
+        <div className="uf-airport-city">
+          {a.city}, {a.country}
+        </div>
+        <div className="uf-airport-name">{a.airport}</div>
+      </div>
+      <span className="uf-airport-code">{a.code}</span>
+    </button>
+  );
+
+  return (
+    <section className="hero-section" id="search-hero">
+      <h1 className="sr-only">
+        {t.heroTitle1} {t.heroTitle2} — FlyToAspan
+      </h1>
+      <div className="hero-map-band">
+        <HeroFlightMap />
+      </div>
+
+      {/* Main White Search Widget Card */}
+      <div className="container" ref={widgetRef}>
+        <div className="u4-card">
+          <div className="u4-left">
+            {/* TOP TABS: ONLY Uçak, Otel, Transfer */}
+            <div className="u4-tabs-bar" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'flight'}
+                className={`u4-tab-btn ${activeTab === 'flight' ? 'active' : ''}`}
+                onClick={() => {
+                  onTabChange('flight');
+                  setOpenPop(null);
+                }}
+              >
+                <Plane size={17} />
+                <span>{t.tabFlight}</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'hotel'}
+                className={`u4-tab-btn ${activeTab === 'hotel' ? 'active' : ''}`}
+                onClick={() => {
+                  onTabChange('hotel');
+                  setOpenPop(null);
+                }}
+              >
+                <Building2 size={17} />
+                <span>{t.tabHotel}</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'transfer'}
+                className={`u4-tab-btn ${activeTab === 'transfer' ? 'active' : ''}`}
+                onClick={() => {
+                  onTabChange('transfer');
+                  setOpenPop(null);
+                }}
+              >
+                <CarTaxiFront size={17} />
+                <span>{t.tabTransfer}</span>
+              </button>
+            </div>
+
+            {/* ================= FLIGHT FORM ================= */}
+            {activeTab === 'flight' && (
+              <div className="u4-form-stack">
+                <div className="u4-trip-bar">
+                  <button
+                    type="button"
+                    className={`u4-trip-btn ${flightQuery.tripType === 'oneway' ? 'active' : ''}`}
+                    onClick={() =>
+                      onFlightQueryChange({ ...flightQuery, tripType: 'oneway' })
+                    }
+                  >
+                    <ArrowRight size={15} />
+                    <span>{t.oneWay}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`u4-trip-btn ${flightQuery.tripType === 'roundtrip' ? 'active' : ''}`}
+                    onClick={() =>
+                      onFlightQueryChange({
+                        ...flightQuery,
+                        tripType: 'roundtrip',
+                        returnDate: flightQuery.returnDate >= minReturnDate
+                          ? flightQuery.returnDate
+                          : defaultReturnDate,
+                      })
+                    }
+                  >
+                    <ArrowLeftRight size={15} />
+                    <span>{t.roundTrip}</span>
+                  </button>
+                </div>
+
+                <div className="u4-row-route">
+                  <div className="u4-field-wrap">
+                    <div
+                      className={`u4-field ${openPop === 'from' ? 'focused' : ''}`}
+                      onClick={() => setOpenPop('from')}
+                    >
+                      <span className="u4-label">
+                        <PlaneTakeoff size={13} />
+                        {t.from}
+                      </span>
+                      <input
+                        id="flight-from"
+                        name="flightFrom"
+                        className="u4-input"
+                        value={
+                          openPop === 'from'
+                            ? fromFilter
+                            : `${fromAirport.city} (${fromAirport.code})`
+                        }
+                        placeholder={t.cityOrAirport}
+                        onFocus={() => setOpenPop('from')}
+                        onChange={(e) => setFromFilter(e.target.value)}
+                      />
+                    </div>
+                    <div
+                      className={`uf-popover uf-airport-pop ${openPop === 'from' ? 'is-open' : ''}`}
+                      aria-hidden={openPop !== 'from'}
+                    >
+                      {filteredFrom.map((a, idx) =>
+                        renderAirportOption(a, idx, (code) =>
+                          onFlightQueryChange({ ...flightQuery, fromCode: code })
+                        )
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="u4-swap-btn"
+                    onClick={handleSwapFlight}
+                    aria-label="Swap origin and destination"
+                  >
+                    <ArrowLeftRight size={17} />
+                  </button>
+
+                  <div className="u4-field-wrap">
+                    <div
+                      className={`u4-field ${openPop === 'to' ? 'focused' : ''}`}
+                      onClick={() => setOpenPop('to')}
+                    >
+                      <span className="u4-label">
+                        <PlaneLanding size={13} />
+                        {t.to}
+                      </span>
+                      <input
+                        id="flight-to"
+                        name="flightTo"
+                        className="u4-input"
+                        value={
+                          openPop === 'to'
+                            ? toFilter
+                            : `${toAirport.city} (${toAirport.code})`
+                        }
+                        placeholder={t.cityOrAirport}
+                        onFocus={() => setOpenPop('to')}
+                        onChange={(e) => setToFilter(e.target.value)}
+                      />
+                    </div>
+                    <div
+                      className={`uf-popover uf-airport-pop ${openPop === 'to' ? 'is-open' : ''}`}
+                      aria-hidden={openPop !== 'to'}
+                    >
+                      {filteredTo.map((a, idx) =>
+                        renderAirportOption(a, idx, (code) => {
+                          setUserChangedDest(true);
+                          onFlightQueryChange({ ...flightQuery, toCode: code });
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className={flightQuery.tripType === 'roundtrip' ? 'u4-row-3' : 'u4-row-2'}>
+                  <div className="u4-field-wrap">
+                    <button
+                      type="button"
+                      className={`u4-field u4-date-field ${openPop === 'depart' ? 'focused' : ''}`}
+                      aria-expanded={openPop === 'depart'}
+                      onClick={() => toggleCalendar('depart', flightQuery.departDate)}
+                    >
+                      <span className="u4-label">
+                        <Calendar size={13} />
+                        {t.depart}
+                      </span>
+                      <span
+                        className={`u4-value-text ${flightQuery.departDate ? '' : 'placeholder'}`}
+                      >
+                        {flightQuery.departDate
+                          ? formatDateLocal(flightQuery.departDate)
+                          : t.selectDate}
+                      </span>
+                    </button>
+                    {renderCalendarPopover(
+                      t.depart,
+                      flightQuery.departDate,
+                      todayIso,
+                      openPop === 'depart'
+                    )}
+                  </div>
+
+                  {flightQuery.tripType === 'roundtrip' && (
+                    <div className="u4-field-wrap">
+                      <button
+                        type="button"
+                        className={`u4-field u4-date-field ${openPop === 'return' ? 'focused' : ''}`}
+                        aria-expanded={openPop === 'return'}
+                        onClick={() => toggleCalendar('return', flightQuery.returnDate, minReturnDate)}
+                      >
+                        <span className="u4-label">
+                          <Calendar size={13} />
+                          {t.returnLbl}
+                        </span>
+                        <span
+                          className={`u4-value-text ${flightQuery.returnDate ? '' : 'placeholder'}`}
+                        >
+                          {flightQuery.returnDate
+                            ? formatDateLocal(flightQuery.returnDate)
+                            : t.selectDate}
+                        </span>
+                      </button>
+                      {renderCalendarPopover(
+                        t.returnLbl,
+                        flightQuery.returnDate,
+                        minReturnDate,
+                        openPop === 'return'
+                      )}
+                    </div>
+                  )}
+
+                  <div className="u4-field-wrap">
+                    <button
+                      type="button"
+                      className={`u4-field u4-date-field ${openPop === 'pax' ? 'focused' : ''}`}
+                      aria-expanded={openPop === 'pax'}
+                      onClick={() => setOpenPop(openPop === 'pax' ? null : 'pax')}
+                    >
+                      <span className="u4-label">
+                        <Users size={13} />
+                        {t.paxCabin}
+                      </span>
+                      <span className="u4-value-text">
+                        {totalPax} {t.passengerUnit},{' '}
+                        {flightQuery.cabin === 'Ekonomi' ? t.economy : t.business}
+                      </span>
+                    </button>
+
+                    <div
+                      className={`uf-popover uf-pax-pop ${openPop === 'pax' ? 'is-open' : ''}`}
+                      aria-hidden={openPop !== 'pax'}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="uf-pop-head" style={{ marginBottom: 4 }}>
+                          <div>
+                            <div className="uf-pop-title">{t.paxModalTitle}</div>
+                            <div style={{ fontSize: 11.5, color: 'var(--aspan-text-muted)' }}>
+                              {t.paxModalSub}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="uf-cal-nav-btn"
+                            onClick={() => setOpenPop(null)}
+                          >
+                            <X size={15} />
+                          </button>
+                        </div>
+
+                        <div className="uf-cabin-toggle">
+                          <button
+                            type="button"
+                            className={`uf-cabin-btn ${
+                              flightQuery.cabin === 'Ekonomi' ? 'active' : ''
+                            }`}
+                            onClick={() =>
+                              onFlightQueryChange({ ...flightQuery, cabin: 'Ekonomi' })
+                            }
+                          >
+                            {t.economy}
+                          </button>
+                          <button
+                            type="button"
+                            className={`uf-cabin-btn ${
+                              flightQuery.cabin === 'Business' ? 'active' : ''
+                            }`}
+                            onClick={() =>
+                              onFlightQueryChange({ ...flightQuery, cabin: 'Business' })
+                            }
+                          >
+                            {t.business}
+                          </button>
+                        </div>
+
+                        <div className="uf-pax-row">
+                          <div>
+                            <div className="uf-pax-label">{t.adultUnit}</div>
+                            <div className="uf-pax-sub">12+</div>
+                          </div>
+                          <div className="uf-pax-ctrl">
+                            <button
+                              type="button"
+                              className="u4-step-btn"
+                              disabled={flightQuery.adults <= 1}
+                              onClick={() =>
+                                onFlightQueryChange({
+                                  ...flightQuery,
+                                  adults: Math.max(1, flightQuery.adults - 1),
+                                })
+                              }
+                            >
+                              −
+                            </button>
+                            <span className="uf-pax-count">{flightQuery.adults}</span>
+                            <button
+                              type="button"
+                              className="u4-step-btn"
+                              disabled={flightQuery.adults >= 9}
+                              onClick={() =>
+                                onFlightQueryChange({
+                                  ...flightQuery,
+                                  adults: flightQuery.adults + 1,
+                                })
+                              }
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="uf-pax-row">
+                          <div>
+                            <div className="uf-pax-label">{t.childUnit}</div>
+                            <div className="uf-pax-sub">2–11</div>
+                          </div>
+                          <div className="uf-pax-ctrl">
+                            <button
+                              type="button"
+                              className="u4-step-btn"
+                              disabled={flightQuery.children <= 0}
+                              onClick={() =>
+                                onFlightQueryChange({
+                                  ...flightQuery,
+                                  children: Math.max(0, flightQuery.children - 1),
+                                })
+                              }
+                            >
+                              −
+                            </button>
+                            <span className="uf-pax-count">{flightQuery.children}</span>
+                            <button
+                              type="button"
+                              className="u4-step-btn"
+                              disabled={flightQuery.children >= 6}
+                              onClick={() =>
+                                onFlightQueryChange({
+                                  ...flightQuery,
+                                  children: flightQuery.children + 1,
+                                })
+                              }
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="uf-pax-row">
+                          <div>
+                            <div className="uf-pax-label">{t.infants}</div>
+                            <div className="uf-pax-sub">0–2</div>
+                          </div>
+                          <div className="uf-pax-ctrl">
+                            <button
+                              type="button"
+                              className="u4-step-btn"
+                              disabled={flightQuery.infants <= 0}
+                              onClick={() =>
+                                onFlightQueryChange({
+                                  ...flightQuery,
+                                  infants: Math.max(0, flightQuery.infants - 1),
+                                })
+                              }
+                            >
+                              −
+                            </button>
+                            <span className="uf-pax-count">{flightQuery.infants}</span>
+                            <button
+                              type="button"
+                              className="u4-step-btn"
+                              disabled={flightQuery.infants >= flightQuery.adults}
+                              onClick={() =>
+                                onFlightQueryChange({
+                                  ...flightQuery,
+                                  infants: flightQuery.infants + 1,
+                                })
+                              }
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="uf-pop-done"
+                          onClick={() => setOpenPop(null)}
+                        >
+                          {t.done}
+                        </button>
+                      </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ================= HOTEL FORM ================= */}
+            {activeTab === 'hotel' && (
+              <div className="u4-form-stack">
+                <div className="u4-field">
+                  <span className="u4-label">
+                    <MapPin size={13} />
+                    {t.to}
+                  </span>
+                  <input
+                    id="hotel-dest"
+                    name="hotelDest"
+                    className="u4-input"
+                    value={hotelQuery.destination}
+                    placeholder={t.cityOrHotel}
+                    onChange={(e) =>
+                      setHotelQuery((prev) => ({ ...prev, destination: e.target.value }))
+                    }
+                  />
+                </div>
+
+                <div className="u4-row-4">
+                  <div className="u4-field-wrap">
+                    <button
+                      type="button"
+                      className={`u4-field u4-date-field ${openPop === 'hotelIn' ? 'focused' : ''}`}
+                      aria-expanded={openPop === 'hotelIn'}
+                      onClick={() => toggleCalendar('hotelIn', hotelQuery.checkIn)}
+                    >
+                      <span className="u4-label">
+                        <Calendar size={13} />
+                        {t.checkIn}
+                      </span>
+                      <span className="u4-value-text">{formatDateLocal(hotelQuery.checkIn)}</span>
+                    </button>
+                    {renderCalendarPopover(
+                      t.checkIn,
+                      hotelQuery.checkIn,
+                      todayIso,
+                      openPop === 'hotelIn'
+                    )}
+                  </div>
+
+                  <div className="u4-field-wrap">
+                    <button
+                      type="button"
+                      className={`u4-field u4-date-field ${openPop === 'hotelOut' ? 'focused' : ''}`}
+                      aria-expanded={openPop === 'hotelOut'}
+                      onClick={() => toggleCalendar('hotelOut', hotelQuery.checkOut, minHotelOut)}
+                    >
+                      <span className="u4-label">
+                        <Calendar size={13} />
+                        {t.checkOut}
+                      </span>
+                      <span className="u4-value-text">{formatDateLocal(hotelQuery.checkOut)}</span>
+                    </button>
+                    {renderCalendarPopover(
+                      t.checkOut,
+                      hotelQuery.checkOut,
+                      minHotelOut,
+                      openPop === 'hotelOut'
+                    )}
+                  </div>
+
+                  <div className="u4-field">
+                    <span className="u4-label">
+                      <Users size={13} />
+                      {t.adults}
+                    </span>
+                    <div className="u4-inline-stepper">
+                      <button
+                        type="button"
+                        className="u4-step-btn"
+                        disabled={hotelQuery.adults <= 1}
+                        onClick={() =>
+                          setHotelQuery((p) => ({ ...p, adults: Math.max(1, p.adults - 1) }))
+                        }
+                      >
+                        −
+                      </button>
+                      <span className="u4-value-text">
+                        {hotelQuery.adults} {t.adultUnit}
+                      </span>
+                      <button
+                        type="button"
+                        className="u4-step-btn"
+                        onClick={() => setHotelQuery((p) => ({ ...p, adults: p.adults + 1 }))}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="u4-field">
+                    <span className="u4-label">
+                      <Users size={13} />
+                      {t.children}
+                    </span>
+                    <div className="u4-inline-stepper">
+                      <button
+                        type="button"
+                        className="u4-step-btn"
+                        disabled={hotelQuery.children <= 0}
+                        onClick={() =>
+                          setHotelQuery((p) => ({ ...p, children: Math.max(0, p.children - 1) }))
+                        }
+                      >
+                        −
+                      </button>
+                      <span className="u4-value-text">
+                        {hotelQuery.children} {t.childUnit}
+                      </span>
+                      <button
+                        type="button"
+                        className="u4-step-btn"
+                        onClick={() => setHotelQuery((p) => ({ ...p, children: p.children + 1 }))}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ================= TRANSFER FORM ================= */}
+            {activeTab === 'transfer' && (
+              <div className="u4-form-stack">
+                <div className="u4-row-route">
+                  <div className="u4-field">
+                    <span className="u4-label">
+                      <MapPin size={13} />
+                      {t.from}
+                    </span>
+                    <input
+                      id="transfer-from"
+                      name="transferFrom"
+                      className="u4-input"
+                      value={transferQuery.from}
+                      placeholder={t.airportOrHotel}
+                      onChange={(e) =>
+                        setTransferQuery((prev) => ({ ...prev, from: e.target.value }))
+                      }
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    className="u4-swap-btn"
+                    onClick={handleSwapTransfer}
+                    aria-label="Swap transfer route"
+                  >
+                    <ArrowLeftRight size={17} />
+                  </button>
+
+                  <div className="u4-field">
+                    <span className="u4-label">
+                      <MapPin size={13} />
+                      {t.to}
+                    </span>
+                    <input
+                      id="transfer-to"
+                      name="transferTo"
+                      className="u4-input"
+                      value={transferQuery.to}
+                      placeholder={t.airportOrHotel}
+                      onChange={(e) =>
+                        setTransferQuery((prev) => ({ ...prev, to: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="u4-row-4">
+                  <div className="u4-field-wrap">
+                    <button
+                      type="button"
+                      className={`u4-field u4-date-field ${openPop === 'trDate' ? 'focused' : ''}`}
+                      aria-expanded={openPop === 'trDate'}
+                      onClick={() => toggleCalendar('trDate', transferQuery.date)}
+                    >
+                      <span className="u4-label">
+                        <Calendar size={13} />
+                        {t.date}
+                      </span>
+                      <span className="u4-value-text">{formatDateLocal(transferQuery.date)}</span>
+                    </button>
+                    {renderCalendarPopover(
+                      t.date,
+                      transferQuery.date,
+                      todayIso,
+                      openPop === 'trDate'
+                    )}
+                  </div>
+
+                  <div className="u4-field">
+                    <span className="u4-label">
+                      <Clock size={13} />
+                      {t.time}
+                    </span>
+                    <input
+                      id="transfer-time"
+                      name="transferTime"
+                      type="time"
+                      className="u4-input"
+                      value={transferQuery.time}
+                      onChange={(e) =>
+                        setTransferQuery((prev) => ({ ...prev, time: e.target.value }))
+                      }
+                    />
+                  </div>
+
+                  <div className="u4-field">
+                    <span className="u4-label">
+                      <Users size={13} />
+                      {t.adults}
+                    </span>
+                    <div className="u4-inline-stepper">
+                      <button
+                        type="button"
+                        className="u4-step-btn"
+                        disabled={transferQuery.adults <= 1}
+                        onClick={() =>
+                          setTransferQuery((p) => ({ ...p, adults: Math.max(1, p.adults - 1) }))
+                        }
+                      >
+                        −
+                      </button>
+                      <span className="u4-value-text">
+                        {transferQuery.adults} {t.adultUnit}
+                      </span>
+                      <button
+                        type="button"
+                        className="u4-step-btn"
+                        onClick={() => setTransferQuery((p) => ({ ...p, adults: p.adults + 1 }))}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="u4-field">
+                    <span className="u4-label">
+                      <Users size={13} />
+                      {t.children}
+                    </span>
+                    <div className="u4-inline-stepper">
+                      <button
+                        type="button"
+                        className="u4-step-btn"
+                        disabled={transferQuery.children <= 0}
+                        onClick={() =>
+                          setTransferQuery((p) => ({
+                            ...p,
+                            children: Math.max(0, p.children - 1),
+                          }))
+                        }
+                      >
+                        −
+                      </button>
+                      <span className="u4-value-text">
+                        {transferQuery.children} {t.childUnit}
+                      </span>
+                      <button
+                        type="button"
+                        className="u4-step-btn"
+                        onClick={() =>
+                          setTransferQuery((p) => ({ ...p, children: p.children + 1 }))
+                        }
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {invalidTab === activeTab && searchError && (
+              <p className="u4-search-error" role="alert">{searchError}</p>
+            )}
+            {/* Trust badges & Submit button */}
+            <div className="u4-footer-strip">
+              <div className="u4-trust-list">
+                <span className="u4-trust-item">
+                  <ShieldCheck size={16} />
+                  {t.trust3d}
+                </span>
+                <span className="u4-trust-item">
+                  <Tag size={15} />
+                  {t.trustBestPrice}
+                </span>
+                <span className="u4-trust-item">
+                  <Headphones size={15} />
+                  {t.trustSupport}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                className="u4-submit-btn"
+                onClick={handleSearch}
+              >
+                <Search size={18} />
+                <span>
+                  {activeTab === 'flight'
+                    ? t.searchFlight
+                    : activeTab === 'hotel'
+                      ? t.searchHotel
+                      : t.searchTransfer}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Right Dynamic Visual Promo Card (Animated on Tab & Route Change) */}
+          <div
+            className="u4-promo-card"
+            key={`${activeTab}-${flightQuery.fromCode}-${flightQuery.toCode}`}
+          >
+            <img
+              src={
+                activeTab === 'flight' && userChangedDest && FLIGHT_DEST_IMAGES[flightQuery.toCode]
+                  ? FLIGHT_DEST_IMAGES[flightQuery.toCode]
+                  : PROMO_IMAGES[activeTab]
+              }
+              alt={promoContent.title}
+              className="u4-promo-bg promo-anim-img"
+            />
+            <div className="u4-promo-overlay" />
+
+            <div className="u4-promo-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <span className="u4-promo-badge">
+                <Tag size={13} />
+                {t.bestPriceBadge}
+              </span>
+              <span className="u4-promo-route-chip">
+                {activeTab === 'flight' ? (
+                  <>
+                    {fromAirport.code} <Plane size={11} style={{ margin: '0 3px' }} /> {toAirport.code}
+                  </>
+                ) : activeTab === 'hotel' ? (
+                  <>★ 5 Yıldız</>
+                ) : (
+                  <>VIP Mercedes</>
+                )}
+              </span>
+            </div>
+
+            <div className="u4-promo-bottom">
+              <div className="u4-promo-pills">
+                <span className="u4-promo-stat">
+                  {activeTab === 'flight' ? (
+                    <Plane size={12} />
+                  ) : activeTab === 'hotel' ? (
+                    <Building2 size={12} />
+                  ) : (
+                    <CarTaxiFront size={12} />
+                  )}
+                  {promoContent.stat1}
+                </span>
+                <span className="u4-promo-stat">
+                  {activeTab === 'flight' ? (
+                    <Zap size={12} />
+                  ) : activeTab === 'hotel' ? (
+                    <Star size={12} />
+                  ) : (
+                    <Sparkles size={12} />
+                  )}
+                  {promoContent.stat2}
+                </span>
+              </div>
+              <h5 className="u4-promo-title">
+                {activeTab === 'flight' && userChangedDest
+                  ? `${fromAirport.city} → ${toAirport.city}`
+                  : promoContent.title}
+              </h5>
+              <p className="u4-promo-sub">
+                {activeTab === 'flight' && userChangedDest
+                  ? `${toAirport.airport} direkt & aktarmalı en uygun uçuşlar.`
+                  : promoContent.sub}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
