@@ -184,6 +184,31 @@ export interface CrmTask {
   createdAt: number;
 }
 
+export interface CrmQuote {
+  id: string;
+  quoteNo: string;
+  customerName: string;
+  customerPhone: string;
+  type: 'Uçak' | 'Otel' | 'Transfer' | 'Tur';
+  title: string;
+  details: string;
+  travelDate: string;
+  price: number;
+  status: 'Taslak' | 'Gönderildi' | 'Onaylandı' | 'Kaybedildi';
+  convertedPnr: string;
+  createdBy: string;
+  createdAt: number;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  actor_email: string;
+  action: string;
+  target: string;
+  ip: string;
+  created_at: number;
+}
+
 export interface SavedPassenger {
   id: string;
   fullName: string;

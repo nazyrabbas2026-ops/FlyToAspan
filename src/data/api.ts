@@ -1,6 +1,8 @@
 import type {
   AdminMarkupConfig,
+  AuditLogEntry,
   BookingRecord,
+  CrmQuote,
   CrmTask,
   FinanceEntry,
   Organization,
@@ -131,6 +133,15 @@ export const api = {
   updateCrmTask: (id: string, status: 'open' | 'done') =>
     request<{ task: CrmTask }>(`/admin/crm/tasks/${encodeURIComponent(id)}`, 'PATCH', { status }),
   deleteCrmTask: (id: string) => request<{ ok: true }>(`/admin/crm/tasks/${encodeURIComponent(id)}`, 'DELETE'),
+  adminCrmQuotes: (signal?: AbortSignal) => request<{ quotes: CrmQuote[] }>('/admin/crm/quotes', 'GET', undefined, signal),
+  createCrmQuote: (payload: { customerName: string; customerPhone?: string; type: CrmQuote['type']; title: string; details?: string; travelDate: string; price: number }) =>
+    request<{ quote: CrmQuote }>('/admin/crm/quotes', 'POST', payload),
+  updateCrmQuoteStatus: (id: string, status: CrmQuote['status']) =>
+    request<{ quote: CrmQuote }>(`/admin/crm/quotes/${encodeURIComponent(id)}`, 'PATCH', { status }),
+  convertCrmQuote: (id: string) =>
+    request<{ quote: CrmQuote; booking: BookingRecord }>(`/admin/crm/quotes/${encodeURIComponent(id)}/convert`, 'POST'),
+  deleteCrmQuote: (id: string) => request<{ ok: true }>(`/admin/crm/quotes/${encodeURIComponent(id)}`, 'DELETE'),
+  adminAuditLogs: (signal?: AbortSignal) => request<{ logs: AuditLogEntry[] }>('/admin/audit', 'GET', undefined, signal),
 };
 
 export type BookingDraft = Pick<BookingRecord, 'type' | 'title' | 'subtitle' | 'date' | 'returnDate' | 'passenger' | 'price'> & {

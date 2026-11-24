@@ -115,6 +115,22 @@ export function openDatabase(filename = process.env.FLYTOASPAN_DB || '.data/flyt
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS price_alerts_user ON price_alerts(user_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS crm_quotes (
+      id TEXT PRIMARY KEY,
+      quote_no TEXT NOT NULL UNIQUE,
+      customer_name TEXT NOT NULL,
+      customer_phone TEXT NOT NULL DEFAULT '',
+      type TEXT NOT NULL DEFAULT 'Uçak',
+      title TEXT NOT NULL,
+      details TEXT NOT NULL DEFAULT '',
+      travel_date TEXT NOT NULL,
+      price INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'Taslak',
+      converted_pnr TEXT NOT NULL DEFAULT '',
+      created_by TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS crm_quotes_time ON crm_quotes(created_at DESC);
   `);
   const safeAlter = (sql) => { try { db.exec(sql); } catch { /* column already exists */ } };
   safeAlter("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
@@ -199,6 +215,24 @@ export function priceAlertRecord(row) {
     route: row.route,
     target: row.target_price,
     current: row.current_price,
+    createdAt: row.created_at,
+  };
+}
+
+export function crmQuoteRecord(row) {
+  return {
+    id: row.id,
+    quoteNo: row.quote_no,
+    customerName: row.customer_name,
+    customerPhone: row.customer_phone || '',
+    type: row.type || 'Uçak',
+    title: row.title,
+    details: row.details || '',
+    travelDate: row.travel_date,
+    price: row.price,
+    status: row.status || 'Taslak',
+    convertedPnr: row.converted_pnr || '',
+    createdBy: row.created_by || '',
     createdAt: row.created_at,
   };
 }

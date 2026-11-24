@@ -1619,6 +1619,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                   currency={currency}
                   markup={draft}
                   bookings={bookings}
+                  siteUsers={siteUsers}
                   onJumpToBookings={(st) => openBookings(st ?? 'ALL')}
                   onFlash={flash}
                   onError={setActionError}

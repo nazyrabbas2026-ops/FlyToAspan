@@ -3,6 +3,7 @@ import {
   accountProfile,
   bookingRecord,
   createAccount,
+  crmQuoteRecord,
   crmTaskRecord,
   financeEntryRecord,
   openDatabase,
@@ -870,8 +871,64 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         if (!existing) fail(404, 'CRM görevi bulunamadı.');
         db.prepare('DELETE FROM crm_tasks WHERE id = ?').run(id);
         send(res, 200, { ok: true });
+      } else if (method === 'GET' && path === '/api/admin/crm/quotes') {
+        const rows = db.prepare('SELECT * FROM crm_quotes ORDER BY created_at DESC LIMIT 200').all();
+        send(res, 200, { quotes: rows.map(crmQuoteRecord) });
+      } else if (method === 'POST' && path === '/api/admin/crm/quotes') {
+        const body = await readJson(req);
+        const customerName = text(body.customerName, 120, 2);
+        const customerPhone = typeof body.customerPhone === 'string' ? body.customerPhone.trim().slice(0, 32) : '';
+        const type = ['Uçak', 'Otel', 'Transfer', 'Tur'].includes(body.type) ? body.type : 'Uçak';
+        const title = text(body.title, 160, 2);
+        const details = typeof body.details === 'string' ? body.details.trim().slice(0, 240) : '';
+        const travelDate = typeof body.travelDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.travelDate)
+          ? body.travelDate
+          : new Date().toISOString().slice(0, 10);
+        const price = Math.round(Number(body.price));
+        if (!Number.isFinite(price) || price <= 0 || price > 50_000_000) fail(400, 'Geçerli bir teklif tutarı girin.');
+        const id = randomBytes(12).toString('hex');
+        const quoteNo = `TKF-${randomBytes(3).toString('hex').toUpperCase()}`;
+        db.prepare(`
+          INSERT INTO crm_quotes (id, quote_no, customer_name, customer_phone, type, title, details, travel_date, price, status, converted_pnr, created_by, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Taslak', '', ?, ?)
+        `).run(id, quoteNo, customerName, customerPhone, type, title, details, travelDate, price, user.email, Date.now());
+        const row = db.prepare('SELECT * FROM crm_quotes WHERE id = ?').get(id);
+        writeAuditLog(db, { actorEmail: user.email, action: 'admin:quote_create', target: `${quoteNo}:${customerName}`, ip });
+        send(res, 201, { quote: crmQuoteRecord(row) });
+      } else if (method === 'PATCH' && /^\/api\/admin\/crm\/quotes\/[a-f0-9]{24}$/.test(path)) {
+        const id = path.split('/').at(-1);
+        const body = await readJson(req);
+        const validQuoteStatuses = ['Taslak', 'Gönderildi', 'Onaylandı', 'Kaybedildi'];
+        if (!validQuoteStatuses.includes(body.status)) fail(400, 'Geçersiz teklif durumu.');
+        const row = db.prepare('UPDATE crm_quotes SET status = ? WHERE id = ? RETURNING *').get(body.status, id);
+        if (!row) fail(404, 'Teklif bulunamadı.');
+        send(res, 200, { quote: crmQuoteRecord(row) });
+      } else if (method === 'POST' && /^\/api\/admin\/crm\/quotes\/[a-f0-9]{24}\/convert$/.test(path)) {
+        const id = path.split('/')[5];
+        const qRow = db.prepare('SELECT * FROM crm_quotes WHERE id = ?').get(id);
+        if (!qRow) fail(404, 'Teklif bulunamadı.');
+        if (qRow.converted_pnr) fail(409, `Bu teklif zaten satışa dönüştürülmüş (PNR: ${qRow.converted_pnr}).`);
+        const surname = qRow.customer_name.trim().split(/\s+/).at(-1) || qRow.customer_name;
+        const booking = newDemoBooking(db, {
+          type: qRow.type,
+          title: qRow.title,
+          subtitle: qRow.details || `Teklif No: ${qRow.quote_no}`,
+          date: qRow.travel_date,
+          passenger: qRow.customer_name,
+          lookupSurname: surname,
+          price: qRow.price,
+        }, user);
+        const updatedQuote = db.prepare(`
+          UPDATE crm_quotes SET status = 'Onaylandı', converted_pnr = ? WHERE id = ? RETURNING *
+        `).get(booking.pnr, id);
+        writeAuditLog(db, { actorEmail: user.email, action: 'admin:quote_convert', target: `${qRow.quote_no}->${booking.pnr}`, ip });
+        send(res, 201, { quote: crmQuoteRecord(updatedQuote), booking });
+      } else if (method === 'DELETE' && /^\/api\/admin\/crm\/quotes\/[a-f0-9]{24}$/.test(path)) {
+        const id = path.split('/').at(-1);
+        db.prepare('DELETE FROM crm_quotes WHERE id = ?').run(id);
+        send(res, 200, { ok: true });
       } else if (method === 'GET' && path === '/api/admin/audit') {
-        const rows = db.prepare('SELECT id, actor_email, action, target, ip, created_at FROM audit_logs ORDER BY created_at DESC LIMIT 50').all();
+        const rows = db.prepare('SELECT id, actor_email, action, target, ip, created_at FROM audit_logs ORDER BY created_at DESC LIMIT 150').all();
         send(res, 200, { logs: rows });
       } else {
         fail(404, 'İşlem bulunamadı.');

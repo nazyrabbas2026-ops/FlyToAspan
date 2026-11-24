@@ -512,5 +512,31 @@ test('FlyToAspan API & Security Suite', async (t) => {
     const health = await call(env.origin, '/api/health');
     assert.equal(health.status, 200);
     assert.equal(health.json.ok, true);
+
+    // 7. CRM Quote creation & 1-click convert to live booking + PNR
+    const qCreate = await call(env.origin, '/api/admin/crm/quotes', {
+      method: 'POST',
+      cookie: adminCookie,
+      body: {
+        customerName: 'Mehmet Arslan',
+        customerPhone: '+905310002233',
+        type: 'Uçak',
+        title: 'İstanbul (IST) → Almatı (ALA)',
+        details: 'Air Astana · 2 Yetişkin',
+        travelDate: '2026-12-22',
+        price: 13800,
+      },
+    });
+    assert.equal(qCreate.status, 201);
+    assert.match(qCreate.json.quote.quoteNo, /^TKF-/);
+
+    const qConv = await call(env.origin, `/api/admin/crm/quotes/${qCreate.json.quote.id}/convert`, {
+      method: 'POST',
+      cookie: adminCookie,
+    });
+    assert.equal(qConv.status, 201);
+    assert.equal(qConv.json.quote.status, 'Onaylandı');
+    assert.ok(qConv.json.booking.pnr);
+    assert.equal(qConv.json.quote.convertedPnr, qConv.json.booking.pnr);
   });
 });

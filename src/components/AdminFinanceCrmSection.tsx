@@ -9,6 +9,11 @@ import {
   TrendingUp,
   AlertTriangle,
   Award,
+  FileText,
+  MessageCircle,
+  ShieldCheck,
+  Users,
+  Zap,
 } from 'lucide-react';
 import { formatDisplayDate, formatPrice } from '../data/mockData';
 import { addCalendarDays, toCalendarDate } from '../data/calendarDates';
@@ -16,11 +21,14 @@ import { api, apiMessage } from '../data/api';
 import { openBrandedEticketPdf } from '../utils/eticketPdf';
 import type {
   AdminMarkupConfig,
+  AuditLogEntry,
   BookingRecord,
+  CrmQuote,
   CrmTask,
   CurrencyCode,
   FinanceEntry,
   LangCode,
+  UserProfile,
 } from '../types';
 
 interface AdminFinanceCrmSectionProps {
@@ -28,12 +36,39 @@ interface AdminFinanceCrmSectionProps {
   currency: CurrencyCode;
   markup: AdminMarkupConfig;
   bookings: BookingRecord[];
+  siteUsers?: UserProfile[];
   onJumpToBookings: (status?: BookingRecord['status'] | 'ALL') => void;
   onFlash: (msg: string) => void;
   onError: (msg: string) => void;
 }
 
-type FinanceTab = 'finance' | 'ledger' | 'crm' | 'followup';
+type FinanceTab = 'finance' | 'ledger' | 'crm' | 'followup' | 'quotes' | 'customers' | 'audit';
+
+const AUDIT_LABELS: Record<string, string> = {
+  'admin:pricing_update': 'Komisyon / Fiyat Güncelleme',
+  'admin:fx_override': 'Manuel Döviz Kuru Ayarı',
+  'admin:fx_reset': 'Canlı Kura Dönüş',
+  'admin:booking_status': 'Rezervasyon Durum Değişikliği',
+  'admin:booking_delete': 'Rezervasyon Silme',
+  'admin:user_approve': 'Kurumsal Başvuru Onayı',
+  'admin:user_permissions': 'Yetki Güncelleme',
+  'admin:user_suspended': 'Hesap Askıya Alma',
+  'admin:user_active': 'Hesap Aktifleştirme',
+  'admin:user_role': 'Rol Değişikliği',
+  'admin:user_delete': 'Kullanıcı Silme',
+  'admin:org_create': 'Yeni Şirket / Acente',
+  'admin:org_update': 'Şirket Güncelleme',
+  'admin:org_payment': 'B2B Cari Tahsilat',
+  'admin:org_delete': 'Şirket Silme',
+  'admin:finance_income': 'Ek Gelir Kaydı',
+  'admin:finance_expense': 'Gider Kaydı',
+  'admin:finance_delete': 'Finans Kaydı Silme',
+  'admin:crm_task_create': 'CRM Görev Ekleme',
+  'admin:quote_create': 'Yeni Teklif Oluşturma',
+  'admin:quote_convert': 'Teklif → Satış / PNR Dönüşümü',
+  'auth:corporate_apply': 'Kurumsal Başvuru',
+  'auth:password_reset_request': 'Parola Sıfırlama Talebi',
+};
 
 function formatTrDateTime(value?: number | string): string {
   if (!value) return '-';
@@ -66,6 +101,7 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
   currency,
   markup,
   bookings,
+  siteUsers = [],
   onJumpToBookings,
   onFlash,
   onError,
@@ -73,7 +109,22 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
   const [subTab, setSubTab] = useState<FinanceTab>('finance');
   const [entries, setEntries] = useState<FinanceEntry[]>([]);
   const [tasks, setTasks] = useState<CrmTask[]>([]);
+  const [quotes, setQuotes] = useState<CrmQuote[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [busy, setBusy] = useState(false);
+
+  // Quote builder form
+  const [qCustomer, setQCustomer] = useState('');
+  const [qPhone, setQPhone] = useState('');
+  const [qType, setQType] = useState<CrmQuote['type']>('Uçak');
+  const [qTitle, setQTitle] = useState('');
+  const [qDetails, setQDetails] = useState('');
+  const [qDate, setQDate] = useState(() => addCalendarDays(toCalendarDate(new Date()), 14));
+  const [qPrice, setQPrice] = useState('');
+
+  // Customer 360 & Audit search
+  const [custSearch, setCustSearch] = useState('');
+  const [auditSearch, setAuditSearch] = useState('');
 
   // Finance entry form
   const [fType, setFType] = useState<'expense' | 'income'>('expense');
@@ -101,8 +152,63 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
     api.adminCrmTasks(controller.signal)
       .then(({ tasks: list }) => { if (!controller.signal.aborted) setTasks(list); })
       .catch(() => { /* ignore */ });
+    api.adminCrmQuotes(controller.signal)
+      .then(({ quotes: list }) => { if (!controller.signal.aborted) setQuotes(list); })
+      .catch(() => { /* ignore */ });
+    api.adminAuditLogs(controller.signal)
+      .then(({ logs }) => { if (!controller.signal.aborted) setAuditLogs(logs); })
+      .catch(() => { /* ignore */ });
     return () => controller.abort();
   }, []);
+
+  // Customer 360° Directory (aggregated from live bookings + siteUsers)
+  const customers360 = useMemo(() => {
+    const map = new Map<string, {
+      key: string;
+      name: string;
+      email: string;
+      phone: string;
+      company: string;
+      bookings: BookingRecord[];
+      totalSpendTRY: number;
+      lastDate: string;
+    }>();
+    siteUsers.forEach((u) => {
+      const name = `${u.firstName} ${u.lastName}`.trim();
+      const key = name.toLowerCase();
+      map.set(key, {
+        key,
+        name,
+        email: u.email,
+        phone: u.phone || '',
+        company: u.companyName || '',
+        bookings: [],
+        totalSpendTRY: 0,
+        lastDate: u.createdAt || '',
+      });
+    });
+    bookings.forEach((b) => {
+      const cleanName = b.passenger.replace(/\s*\(\+\d+\)$/, '').trim();
+      const key = cleanName.toLowerCase();
+      const existing = map.get(key) ?? {
+        key,
+        name: cleanName,
+        email: '',
+        phone: '',
+        company: b.organizationName || '',
+        bookings: [],
+        totalSpendTRY: 0,
+        lastDate: b.date,
+      };
+      existing.bookings.push(b);
+      if (b.status !== 'İptal Edildi' && b.status !== 'İade Edildi') {
+        existing.totalSpendTRY += b.price;
+      }
+      if (b.date > existing.lastDate) existing.lastDate = b.date;
+      map.set(key, existing);
+    });
+    return Array.from(map.values()).sort((a, b) => b.totalSpendTRY - a.totalSpendTRY || b.bookings.length - a.bookings.length);
+  }, [bookings, siteUsers]);
 
   // Zero-bug accounting metrics (cancelled & refunded excluded from gross/profit)
   const confirmedBookings = useMemo(
@@ -348,10 +454,13 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {(
             [
-              { id: 'finance', label: '1. Günlük Finans & Grafikler' },
-              { id: 'ledger', label: `2. 360° Satış & Uçuş Defteri (${bookings.length})` },
-              { id: 'crm', label: `3. Ekip & Şirket Liderlik (${leaderboard.length})` },
-              { id: 'followup', label: '4. CRM Takip Listesi', badge: followUpBadgeCount },
+              { id: 'finance', label: '1. Günlük Finans' },
+              { id: 'ledger', label: `2. 360° Satış (${bookings.length})` },
+              { id: 'crm', label: `3. Ekip Liderlik` },
+              { id: 'followup', label: '4. Takip Listesi', badge: followUpBadgeCount },
+              { id: 'quotes', label: `5. Teklifler (${quotes.length})` },
+              { id: 'customers', label: `6. Müşteri 360° (${customers360.length})` },
+              { id: 'audit', label: '7. Güvenlik & Log' },
             ] as { id: FinanceTab; label: string; badge?: number }[]
           ).map((tab) => {
             const active = subTab === tab.id;
@@ -870,6 +979,325 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
             )}
           </div>
         </>
+      )}
+
+      {/* ==================== TAB 5: CRM QUOTE BUILDER & 1-CLICK CONVERT TO PNR ==================== */}
+      {subTab === 'quotes' && (
+        <div className="panel-card">
+          <strong style={{ fontSize: 17.5, display: 'inline-flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
+            <FileText size={18} color="#00A8B5" /> Teklif Hazırlama &amp; Satışa Dönüştürme (Quote Builder)
+          </strong>
+          <p style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)', marginTop: 0, marginBottom: 14 }}>
+            Müşteriye hızlı fiyat teklifi oluşturun, tek tıkla WhatsApp&apos;tan gönderin; onaylandığında tek tıkla gerçek PNR&apos;lı satışa çevirin.
+          </p>
+
+          <form
+            className="panel-form-grid"
+            style={{ marginBottom: 18 }}
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (busy || !qCustomer.trim() || !qTitle.trim() || !Number(qPrice)) return;
+              setBusy(true);
+              onError('');
+              try {
+                const { quote } = await api.createCrmQuote({
+                  customerName: qCustomer.trim(),
+                  customerPhone: qPhone.trim(),
+                  type: qType,
+                  title: qTitle.trim(),
+                  details: qDetails.trim(),
+                  travelDate: qDate,
+                  price: Math.round(Number(qPrice)),
+                });
+                setQuotes((prev) => [quote, ...prev]);
+                setQCustomer('');
+                setQPhone('');
+                setQTitle('');
+                setQDetails('');
+                setQPrice('');
+                onFlash(`Teklif oluşturuldu: ${quote.quoteNo}`);
+              } catch (err) {
+                onError(apiMessage(err));
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <input required className="modal-input" placeholder="Müşteri Ad Soyad *" value={qCustomer} onChange={(e) => setQCustomer(e.target.value)} />
+            <input className="modal-input" placeholder="Telefon (+90 5xx...)" value={qPhone} onChange={(e) => setQPhone(e.target.value)} />
+            <select className="modal-input" value={qType} onChange={(e) => setQType(e.target.value as CrmQuote['type'])}>
+              <option value="Uçak">Uçak Bileti</option>
+              <option value="Otel">Otel</option>
+              <option value="Transfer">VIP Transfer</option>
+              <option value="Tur">Tur Paketi</option>
+            </select>
+            <input required className="modal-input" placeholder="Güzergâh / Paket Başlığı *" value={qTitle} onChange={(e) => setQTitle(e.target.value)} />
+            <input className="modal-input" placeholder="Detay (Örn: Air Astana · 2 Yetişkin · 30kg)" value={qDetails} onChange={(e) => setQDetails(e.target.value)} />
+            <input required type="date" className="modal-input" value={qDate} onChange={(e) => setQDate(e.target.value)} />
+            <input required type="number" min={1} className="modal-input" placeholder="Teklif Tutarı (TL) *" value={qPrice} onChange={(e) => setQPrice(e.target.value)} />
+            <button type="submit" className="btn-gold-nav" style={{ borderRadius: 12 }} disabled={busy}>
+              <Plus size={15} /> Teklif Oluştur
+            </button>
+          </form>
+
+          {quotes.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--aspan-text-muted)' }}>Henüz oluşturulmuş teklif yok.</div>
+          ) : (
+            quotes.map((q) => {
+              const cleanWaPhone = q.customerPhone.replace(/[^\d]/g, '');
+              const waText = encodeURIComponent(
+                `Merhaba ${q.customerName}, FlyToAspan özel teklifiniz hazırdır:\n` +
+                `• Teklif No: ${q.quoteNo}\n` +
+                `• Hizmet: ${q.type} — ${q.title}\n` +
+                (q.details ? `• Detay: ${q.details}\n` : '') +
+                `• Tarih: ${formatDisplayDate(q.travelDate, lang)}\n` +
+                `• Toplam Fiyat: ${formatPrice(q.price, currency)}\n` +
+                `Onaylamanız halinde hemen PNR biletinizi düzenleyebiliriz.`
+              );
+              const waHref = cleanWaPhone ? `https://wa.me/${cleanWaPhone}?text=${waText}` : `https://wa.me/?text=${waText}`;
+              return (
+                <div
+                  key={q.id}
+                  style={{
+                    padding: 14,
+                    borderRadius: 14,
+                    border: '1px solid var(--aspan-border)',
+                    marginBottom: 10,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 12,
+                  }}
+                >
+                  <div>
+                    <span className="uf-airport-code">{q.quoteNo}</span>{' '}
+                    <span className="pkg-pill">{q.type}</span>{' '}
+                    <span className={`status-badge ${q.status === 'Onaylandı' ? 'ok' : q.status === 'Kaybedildi' ? 'warn' : 'ok'}`}>
+                      {q.status}
+                    </span>
+                    {q.convertedPnr && (
+                      <span className="pkg-pill" style={{ marginLeft: 4, background: 'rgba(16,185,129,0.14)', color: '#047857' }}>
+                        ✓ PNR: {q.convertedPnr}
+                      </span>
+                    )}
+                    <div style={{ fontWeight: 800, fontSize: 15, marginTop: 4 }}>
+                      {q.customerName} · {q.title}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>
+                      {q.details ? `${q.details} · ` : ''}Tarih: {formatDisplayDate(q.travelDate, lang)} · Oluşturma: {formatTrDateTime(q.createdAt)}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                    <strong style={{ fontSize: 16, marginRight: 4 }}>{formatPrice(q.price, currency)}</strong>
+                    <a
+                      href={waHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="uf-quick-pill"
+                      style={{ textDecoration: 'none', color: '#047857', borderColor: '#10B981', background: 'rgba(16,185,129,0.1)' }}
+                      onClick={() => {
+                        if (q.status === 'Taslak') {
+                          void api.updateCrmQuoteStatus(q.id, 'Gönderildi').then(({ quote: upd }) =>
+                            setQuotes((prev) => prev.map((r) => (r.id === q.id ? upd : r)))
+                          );
+                        }
+                      }}
+                    >
+                      <MessageCircle size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                      WhatsApp Gönder
+                    </a>
+                    {!q.convertedPnr && (
+                      <button
+                        type="button"
+                        className="btn-gold-nav"
+                        style={{ height: 32, fontSize: 12 }}
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true);
+                          onError('');
+                          try {
+                            const { quote: upd, booking } = await api.convertCrmQuote(q.id);
+                            setQuotes((prev) => prev.map((r) => (r.id === q.id ? upd : r)));
+                            onFlash(`Teklif satışa dönüştürüldü! Yeni PNR: ${booking.pnr}`);
+                          } catch (err) {
+                            onError(apiMessage(err));
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                      >
+                        <Zap size={13} /> Satışa &amp; PNR&apos;a Dönüştür
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="drawer-close"
+                      disabled={busy}
+                      aria-label={`${q.quoteNo} sil`}
+                      onClick={async () => {
+                        setBusy(true);
+                        try {
+                          await api.deleteCrmQuote(q.id);
+                          setQuotes((prev) => prev.filter((r) => r.id !== q.id));
+                        } catch (err) {
+                          onError(apiMessage(err));
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* ==================== TAB 6: CUSTOMER 360° CRM DIRECTORY ==================== */}
+      {subTab === 'customers' && (
+        <div className="panel-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+            <div>
+              <strong style={{ fontSize: 17.5, display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                <Users size={18} color="#00A8B5" /> Müşteri 360° CRM Rehberi
+              </strong>
+              <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)' }}>
+                Her müşterinin toplam harcaması, VIP durumu, iletişim bilgileri ve geçmiş tüm rezervasyonları tek kartta.
+              </div>
+            </div>
+            <input
+              className="modal-input"
+              style={{ maxWidth: 250, height: 36, fontSize: 12.5 }}
+              placeholder="Müşteri adı, e-posta, şirket ara..."
+              value={custSearch}
+              onChange={(e) => setCustSearch(e.target.value)}
+            />
+          </div>
+
+          {customers360
+            .filter((c) => !custSearch.trim() || `${c.name} ${c.email} ${c.phone} ${c.company}`.toLowerCase().includes(custSearch.trim().toLowerCase()))
+            .map((c) => {
+              const isVip = c.totalSpendTRY >= 10000 || c.bookings.length >= 2;
+              const cleanPhone = c.phone.replace(/[^\d]/g, '');
+              return (
+                <div
+                  key={c.key}
+                  style={{
+                    padding: 14,
+                    borderRadius: 14,
+                    border: isVip ? '1.5px solid rgba(224,170,54,0.55)' : '1px solid var(--aspan-border)',
+                    marginBottom: 10,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                    <div>
+                      {isVip && (
+                        <span className="pkg-pill" style={{ background: 'rgba(224,170,54,0.18)', color: '#92400E', marginRight: 6 }}>
+                          ★ VIP Müşteri
+                        </span>
+                      )}
+                      {c.company && <span className="pkg-pill" style={{ marginRight: 6 }}>{c.company}</span>}
+                      <strong style={{ fontSize: 15.5 }}>{c.name}</strong>
+                      <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)', marginTop: 3 }}>
+                        {c.email || 'Misafir alıcı'}{c.phone ? ` · ${c.phone}` : ''} · {c.bookings.length} Rezervasyon
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 11, color: 'var(--aspan-text-muted)' }}>Toplam Harcama</div>
+                        <strong style={{ fontSize: 16, color: '#059669' }}>{formatPrice(c.totalSpendTRY, currency)}</strong>
+                      </div>
+                      {cleanPhone && (
+                        <a
+                          href={`https://wa.me/${cleanPhone}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="uf-quick-pill"
+                          style={{ textDecoration: 'none', color: '#047857', borderColor: '#10B981' }}
+                        >
+                          <MessageCircle size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                          WhatsApp
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  {c.bookings.length > 0 && (
+                    <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px dashed var(--aspan-border)', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {c.bookings.slice(0, 5).map((b) => (
+                        <span key={b.id} className="pkg-pill" style={{ fontSize: 11 }}>
+                          {b.pnr} · {b.title} ({formatDisplayDate(b.date, lang)})
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+        </div>
+      )}
+
+      {/* ==================== TAB 7: SECURITY & AUDIT LOG VIEWER ==================== */}
+      {subTab === 'audit' && (
+        <div className="panel-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+            <div>
+              <strong style={{ fontSize: 17.5, display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                <ShieldCheck size={18} color="#10B981" /> Canlı Güvenlik &amp; Yönetici İşlem Kayıtları (Audit Log)
+              </strong>
+              <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)' }}>
+                Kimin hangi saatte hangi IP adresinden fiyat, kur, onay, iptal veya cari tahsilat işlemi yaptığını şeffaf şekilde izleyin.
+              </div>
+            </div>
+            <input
+              className="modal-input"
+              style={{ maxWidth: 250, height: 36, fontSize: 12.5 }}
+              placeholder="E-posta, işlem veya IP ara..."
+              value={auditSearch}
+              onChange={(e) => setAuditSearch(e.target.value)}
+            />
+          </div>
+
+          {auditLogs.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--aspan-text-muted)' }}>Henüz güvenlik kaydı bulunmuyor.</div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--aspan-border)', color: 'var(--aspan-text-muted)' }}>
+                    <th style={{ padding: '8px 8px 8px 0' }}>Tarih / Saat</th>
+                    <th style={{ padding: '8px' }}>İşlemi Yapan</th>
+                    <th style={{ padding: '8px' }}>İşlem Türü</th>
+                    <th style={{ padding: '8px' }}>Hedef / Detay</th>
+                    <th style={{ padding: '8px 0 8px 8px', textAlign: 'right' }}>IP Adresi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditLogs
+                    .filter((l) => !auditSearch.trim() || `${l.actor_email} ${l.action} ${l.target} ${l.ip}`.toLowerCase().includes(auditSearch.trim().toLowerCase()))
+                    .map((l) => (
+                      <tr key={l.id} style={{ borderBottom: '1px solid var(--aspan-border)' }}>
+                        <td style={{ padding: '9px 8px 9px 0', whiteSpace: 'nowrap' }}>
+                          <strong>{formatTrDateTime(l.created_at)}</strong>
+                        </td>
+                        <td style={{ padding: '9px 8px' }}>{l.actor_email}</td>
+                        <td style={{ padding: '9px 8px' }}>
+                          <span className="pkg-pill">{AUDIT_LABELS[l.action] ?? l.action}</span>
+                        </td>
+                        <td style={{ padding: '9px 8px', color: 'var(--aspan-text-muted)' }}>{l.target}</td>
+                        <td style={{ padding: '9px 0 9px 8px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 11.5 }}>
+                          {l.ip}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
     </>
   );
