@@ -657,10 +657,12 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
   }, [isRoundTrip, outboundChoice, outboundFlights, inboundFlights]);
 
   const maxAvailablePrice = useMemo(
-    () => (allFlights.length > 0 ? Math.max(...allFlights.map((f) => f.basePrice)) : 10000),
+    () => (allFlights.length > 0 ? Math.ceil(Math.max(...allFlights.map((f) => f.basePrice)) / 50) * 50 : 10000),
     [allFlights]
   );
-  const minAvailablePrice = Math.min(maxAvailablePrice, ...allFlights.map((flight) => flight.basePrice));
+  const minAvailablePrice = allFlights.length > 0
+    ? Math.floor(Math.min(maxAvailablePrice, ...allFlights.map((flight) => flight.basePrice)) / 50) * 50
+    : 0;
   const [maxPrice, setMaxPrice] = useState<number>(maxAvailablePrice);
 
   useEffect(() => {
@@ -752,6 +754,11 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
     return filtered.reduce((best, cur) => (cur.basePrice < best.basePrice ? cur : best), filtered[0]);
   }, [filtered]);
 
+  const earliestFlight = useMemo(() => {
+    if (!filtered.length) return null;
+    return filtered.reduce((best, cur) => (cur.departMinutes < best.departMinutes ? cur : best), filtered[0]);
+  }, [filtered]);
+
   const flexDates = useMemo(() => {
     const todayIso = toCalendarDate(new Date());
     const activeIso = outboundChoice && isRoundTrip ? query.returnDate : query.departDate;
@@ -792,12 +799,15 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const [checkoutIdemKey, setCheckoutIdemKey] = useState<string>(() => crypto.randomUUID());
+
   const selectFare = (selection: FlightSelection) => {
     if (isRoundTrip && !outboundChoice) {
       changeLeg(selection);
       return;
     }
 
+    setCheckoutIdemKey(crypto.randomUUID());
     setBookingConfirmedPnr(null);
     setBookingError('');
     setBookingChoice(selection);
@@ -905,6 +915,7 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
             : `${firstName} ${lookupSurname}`,
           lookupSurname,
           price: bookingTotal,
+          idempotencyKey: checkoutIdemKey,
         });
         setBookingConfirmedPnr(booking.pnr);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1329,6 +1340,10 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                         </div>
                       </div>
                     {bookingError && <p className="form-action-error" role="alert">{bookingError}</p>}
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: 'var(--aspan-text-muted)', marginBottom: 12, cursor: 'pointer' }}>
+                      <input type="checkbox" required defaultChecked style={{ marginTop: 2 }} />
+                      <span>Kullanım Koşulları, Havayolu Taşıma Kuralları ve KVKK Aydınlatma Metni’ni onaylıyorum.</span>
+                    </label>
                     <button type="submit" className="uf-cc-pay-btn" disabled={bookingPending}>
                       <Check size={18} />
                       {bookingPending ? co.saving : ui.completeBtn}
@@ -1630,7 +1645,7 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                     onClick={() => setSortBy('earliestDep')}
                   >
                     <span className="smart-decision-lbl"><Calendar size={14} /> {ui.sortEarliestDep}</span>
-                    <strong>{filtered[0]?.departTime}</strong>
+                    <strong>{earliestFlight?.departTime ?? filtered[0]?.departTime}</strong>
                     <small>{filtered.length} {ui.flightsUnit}</small>
                   </button>
                 </div>

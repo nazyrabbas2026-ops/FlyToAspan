@@ -111,4 +111,5 @@ export const api = {
 
 export type BookingDraft = Pick<BookingRecord, 'type' | 'title' | 'subtitle' | 'date' | 'returnDate' | 'passenger' | 'price'> & {
   lookupSurname: string;
+  idempotencyKey?: string;
 };

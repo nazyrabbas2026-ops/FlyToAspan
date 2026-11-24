@@ -96,6 +96,41 @@ test('FlyToAspan API & Security Suite', async (t) => {
     assert.equal(bk.status, 201);
     bookingPnr = bk.json.booking.pnr;
     bookingId = bk.json.booking.id;
+    assert.match(bookingPnr, /^FT[2-9A-HJ-NP-Z]{6}$/);
+
+    // Duplicate click with same idempotencyKey returns exact same PNR (deduplicated)
+    const idem1 = await call(env.origin, '/api/bookings', {
+      method: 'POST',
+      cookie: memberACookie,
+      body: {
+        type: 'Uçak',
+        title: 'İstanbul (IST) → Antalya (AYT)',
+        subtitle: 'Turkish Airlines · TK2410',
+        date: '2026-12-12',
+        passenger: 'Aylin Karahan',
+        lookupSurname: 'Karahan',
+        price: 1900,
+        idempotencyKey: 'idem-key-double-click-001',
+      },
+    });
+    const idem2 = await call(env.origin, '/api/bookings', {
+      method: 'POST',
+      cookie: memberACookie,
+      body: {
+        type: 'Uçak',
+        title: 'İstanbul (IST) → Antalya (AYT)',
+        subtitle: 'Turkish Airlines · TK2410',
+        date: '2026-12-12',
+        passenger: 'Aylin Karahan',
+        lookupSurname: 'Karahan',
+        price: 1900,
+        idempotencyKey: 'idem-key-double-click-001',
+      },
+    });
+    assert.equal(idem1.status, 201);
+    assert.equal(idem2.status, 200);
+    assert.equal(idem2.json.deduplicated, true);
+    assert.equal(idem2.json.booking.pnr, idem1.json.booking.pnr);
 
     // Exact match -> 200
     const okLookup = await call(env.origin, '/api/bookings/lookup', {

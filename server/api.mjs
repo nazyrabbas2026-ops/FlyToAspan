@@ -142,6 +142,26 @@ function sessionToken(req, cookieName) {
   return /^[A-Za-z0-9_-]{43}$/.test(token ?? '') ? token : null;
 }
 
+const PNR_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+
+function generateIataPnr() {
+  const bytes = randomBytes(6);
+  let code = 'FT';
+  for (let i = 0; i < 6; i++) code += PNR_ALPHABET[bytes[i] % PNR_ALPHABET.length];
+  return code;
+}
+
+function resolveClientIp(req) {
+  const trustProxy = process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true';
+  if (trustProxy) {
+    const cf = req.headers['cf-connecting-ip'];
+    if (typeof cf === 'string' && cf.trim()) return cf.trim().slice(0, 64);
+    const xff = req.headers['x-forwarded-for'];
+    if (typeof xff === 'string' && xff.trim()) return xff.split(',')[0].trim().slice(0, 64);
+  }
+  return req.socket.remoteAddress ?? 'unknown';
+}
+
 function newDemoBooking(db, body, owner) {
   const type = text(body.type, 10);
   if (!['Uçak', 'Otel', 'Transfer'].includes(type)) fail(400, 'Rezervasyon türü geçersiz.');
@@ -159,16 +179,27 @@ function newDemoBooking(db, body, owner) {
     demo: true,
   };
   const id = randomBytes(16).toString('hex');
-  const pnr = 'FTA' + randomBytes(9).toString('hex').toUpperCase();
   const status = 'Onaylandı';
-  db.prepare(`
-    INSERT INTO bookings (id, pnr, owner_id, surname, status, details, created_at, organization_id, sold_by_user_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    id, pnr, owner?.id ?? null, surname, status, JSON.stringify(details), Date.now(),
-    owner?.organization_id ?? null, owner?.id ?? null
-  );
-  return { ...details, id, pnr, status, organizationId: owner?.organization_id ?? null, soldByUserId: owner?.id ?? null };
+  let pnr = generateIataPnr();
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      db.prepare(`
+        INSERT INTO bookings (id, pnr, owner_id, surname, status, details, created_at, organization_id, sold_by_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, pnr, owner?.id ?? null, surname, status, JSON.stringify(details), Date.now(),
+        owner?.organization_id ?? null, owner?.id ?? null
+      );
+      return { ...details, id, pnr, status, organizationId: owner?.organization_id ?? null, soldByUserId: owner?.id ?? null };
+    } catch (err) {
+      if (attempt < 4 && String(err?.message || '').includes('UNIQUE')) {
+        pnr = generateIataPnr();
+        continue;
+      }
+      throw err;
+    }
+  }
+  fail(500, 'PNR oluşturulamadı.');
 }
 
 function validateCatalogItems(section, items) {
@@ -211,12 +242,14 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
   }
   const cookieName = secureCookie ? '__Host-flytoaspan_session' : 'flytoaspan_session';
   const buckets = new Map();
+  const idempotencyCache = new Map();
   let nextSweep = 0;
 
   const throttle = (key, max, period = 15 * 60_000) => {
     const now = Date.now();
     if (now >= nextSweep) {
       for (const [id, bucket] of buckets) if (bucket.until <= now) buckets.delete(id);
+      for (const [ik, item] of idempotencyCache) if (item.until <= now) idempotencyCache.delete(ik);
       nextSweep = now + 60_000;
     }
     const bucket = buckets.get(key);
@@ -308,7 +341,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
     if (!url.pathname.startsWith('/api/')) return false;
     const method = req.method;
     const path = url.pathname;
-    const ip = req.socket.remoteAddress ?? 'unknown';
+    const ip = resolveClientIp(req);
     try {
       if (method !== 'GET' && req.headers.origin !== (origin?.origin ?? `http://${req.headers.host}`)) {
         fail(403, 'İstek kaynağı doğrulanamadı.');
@@ -413,8 +446,19 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const rows = db.prepare('SELECT * FROM bookings WHERE owner_id = ? ORDER BY created_at DESC, id DESC').all(user.id);
         send(res, 200, { bookings: rows.map(bookingRecord) });
       } else if (method === 'POST' && (path === '/api/bookings' || path === '/api/admin/bookings')) {
-        throttle(`create-booking:${user?.id ?? ip}`, 24);
-        const booking = newDemoBooking(db, await readJson(req), path === '/api/bookings' ? user : null);
+        throttle(`create-booking:${user?.id ?? ip}`, 120);
+        const body = await readJson(req);
+        const idemKey = typeof body.idempotencyKey === 'string' && /^[a-zA-Z0-9_-]{8,64}$/.test(body.idempotencyKey)
+          ? `${user?.id ?? ip}:${body.idempotencyKey}`
+          : null;
+        if (idemKey && idempotencyCache.has(idemKey)) {
+          send(res, 200, { booking: idempotencyCache.get(idemKey).booking, deduplicated: true });
+          return true;
+        }
+        const booking = newDemoBooking(db, body, path === '/api/bookings' ? user : null);
+        if (idemKey) {
+          idempotencyCache.set(idemKey, { booking, until: Date.now() + 10 * 60_000 });
+        }
         send(res, 201, { booking });
       } else if (method === 'POST' && /^\/api\/bookings\/[a-f0-9]{32}\/cancel$/.test(path)) {
         if (!user) fail(401, 'Oturum açın.');
@@ -426,6 +470,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         if (!row) fail(404, 'İptal talebine uygun bir rezervasyon bulunamadı.');
         send(res, 200, { booking: bookingRecord(row) });
       } else if (method === 'GET' && path === '/api/admin/bookings') {
+        const limitParam = Math.min(2000, Math.max(1, Number(url.searchParams.get('limit')) || 500));
         const selectJoin = `
           SELECT b.*, u.email AS seller_email, u.profile AS seller_profile, o.name AS organization_name
           FROM bookings b
@@ -434,11 +479,11 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         `;
         let rows;
         if (user.role === 'admin') {
-          rows = db.prepare(`${selectJoin} ORDER BY b.created_at DESC, b.id DESC`).all();
+          rows = db.prepare(`${selectJoin} ORDER BY b.created_at DESC, b.id DESC LIMIT ?`).all(limitParam);
         } else if (hasPerm(user, 'bookings.view_org') && user.organization_id) {
-          rows = db.prepare(`${selectJoin} WHERE b.organization_id = ? ORDER BY b.created_at DESC, b.id DESC`).all(user.organization_id);
+          rows = db.prepare(`${selectJoin} WHERE b.organization_id = ? ORDER BY b.created_at DESC, b.id DESC LIMIT ?`).all(user.organization_id, limitParam);
         } else {
-          rows = db.prepare(`${selectJoin} WHERE b.owner_id = ? OR b.sold_by_user_id = ? ORDER BY b.created_at DESC, b.id DESC`).all(user.id, user.id);
+          rows = db.prepare(`${selectJoin} WHERE b.owner_id = ? OR b.sold_by_user_id = ? ORDER BY b.created_at DESC, b.id DESC LIMIT ?`).all(user.id, user.id, limitParam);
         }
         send(res, 200, { bookings: rows.map(bookingRecord) });
       } else if (method === 'GET' && path === '/api/admin/catalog') {

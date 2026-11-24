@@ -3801,9 +3801,13 @@ img {
 
 .results-grid {
   display: grid;
-  grid-template-columns: 276px 1fr;
+  grid-template-columns: 276px minmax(0, 1fr);
   gap: 24px;
   align-items: start;
+}
+
+.results-grid > * {
+  min-width: 0;
 }
 
 .filter-card {
@@ -4723,7 +4727,7 @@ img {
   .hotels-split,
   .faq-grid,
   .results-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .about-grid {
     grid-template-columns: minmax(0, 1fr);

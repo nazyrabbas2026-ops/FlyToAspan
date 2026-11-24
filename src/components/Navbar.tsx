@@ -164,7 +164,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                       className={`lang-dropdown-menu ${userMenuOpen ? 'is-open' : ''}`}
                       style={{ width: 224 }}
                       role="menu"
-                      aria-hidden={!userMenuOpen}
                     >
                       <div
                         style={{
@@ -278,7 +277,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                   className={`lang-dropdown-menu ${curMenuOpen ? 'is-open' : ''}`}
                   style={{ width: 215 }}
                   role="menu"
-                  aria-hidden={!curMenuOpen}
                 >
                   {CURRENCIES.map((c) => (
                     <button
@@ -315,7 +313,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <div
                   className={`lang-dropdown-menu ${langMenuOpen ? 'is-open' : ''}`}
                   role="menu"
-                  aria-hidden={!langMenuOpen}
                 >
                   {LANGUAGES.map((opt) => (
                     <button
