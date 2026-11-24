@@ -352,7 +352,9 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
     const path = url.pathname;
     const ip = resolveClientIp(req);
     try {
-      if (method !== 'GET' && req.headers.origin !== (origin?.origin ?? `http://${req.headers.host}`)) {
+      const trustProxy = process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true';
+      const reqProto = trustProxy && req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+      if (method !== 'GET' && req.headers.origin !== (origin?.origin ?? `${reqProto}://${req.headers.host}`)) {
         fail(403, 'İstek kaynağı doğrulanamadı.');
       }
       const token = sessionToken(req, cookieName);

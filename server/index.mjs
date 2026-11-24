@@ -2,14 +2,40 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { extname, resolve } from 'node:path';
-import { createApi } from './api.mjs';
+import { createApi, normalizeEmail, checkPassword } from './api.mjs';
+import { createAccount, openDatabase } from './store.mjs';
 
 const buildDirectory = resolve(process.env.FLYTOASPAN_DIST || 'dist');
-const api = createApi();
+const db = openDatabase();
+const api = createApi({ db });
+
+// Optional zero-shell initial admin bootstrap for Docker / Render Free Tier
+if (process.env.FLYTOASPAN_ADMIN_EMAIL && process.env.FLYTOASPAN_ADMIN_PASSWORD) {
+  try {
+    const email = normalizeEmail(process.env.FLYTOASPAN_ADMIN_EMAIL);
+    const password = checkPassword(process.env.FLYTOASPAN_ADMIN_PASSWORD, 12);
+    const created = await createAccount(db, {
+      email,
+      password,
+      role: 'admin',
+      firstName: 'FlyToAspan',
+      lastName: 'Yönetici',
+      phone: '',
+      accountType: 'individual',
+    });
+    if (created) console.log(`FlyToAspan: Initial admin created (${email})`);
+  } catch (err) {
+    console.error('Admin bootstrap skipped:', err.message);
+  }
+}
+
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -25,7 +51,7 @@ const server = createServer({ requestTimeout: 20_000, headersTimeout: 10_000 }, 
       res.writeHead(405, { Allow: 'GET, HEAD' }).end();
       return;
     }
-    const isAsset = /^\/(?:assets|images)\/[A-Za-z0-9._-]+$/.test(path) && !path.endsWith('/..');
+    const isAsset = (/^\/(?:assets|images)\/[A-Za-z0-9._-]+$/.test(path) || ['/manifest.json', '/robots.txt', '/sitemap.xml'].includes(path)) && !path.endsWith('/..');
     const isPage = /^\/(?:[a-z0-9-]+\/?)*$/.test(path) && !/^\/(api|assets|images)(\/|$)/.test(path);
     if (!isAsset && !isPage) {
       res.writeHead(404).end();
@@ -54,6 +80,7 @@ const server = createServer({ requestTimeout: 20_000, headersTimeout: 10_000 }, 
 });
 
 const port = Number(process.env.PORT || 4178);
-server.listen(port, '127.0.0.1', () => {
-  console.log(`FlyToAspan: http://127.0.0.1:${port}`);
+const host = process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1');
+server.listen(port, host, () => {
+  console.log(`FlyToAspan: http://${host}:${port}`);
 });
