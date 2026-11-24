@@ -29,6 +29,7 @@ import {
 } from '../data/mockData';
 import { addCalendarDays, toCalendarDate } from '../data/calendarDates';
 import { apiMessage, type BookingDraft } from '../data/api';
+import { openBrandedEticketPdf } from '../utils/eticketPdf';
 import {
   AdminMarkupConfig,
   BookingRecord,
@@ -624,6 +625,8 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
   const [outboundChoice, setOutboundChoice] = useState<FlightSelection | null>(null);
   const [bookingChoice, setBookingChoice] = useState<FlightSelection | null>(null);
   const [bookingConfirmedPnr, setBookingConfirmedPnr] = useState<string | null>(null);
+  const [confirmedBooking, setConfirmedBooking] = useState<BookingRecord | null>(null);
+  const [pnrCopied, setPnrCopied] = useState(false);
   const [bookingError, setBookingError] = useState('');
   const [bookingPending, setBookingPending] = useState(false);
   const [couponInput, setCouponInput] = useState('');
@@ -917,7 +920,9 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
           price: bookingTotal,
           idempotencyKey: checkoutIdemKey,
         });
+        setConfirmedBooking(booking);
         setBookingConfirmedPnr(booking.pnr);
+        setPnrCopied(false);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } catch (error) {
         setBookingError(apiMessage(error));
@@ -977,9 +982,32 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
               <div className="uf-co-card" role="status">
                 <h2 className="uf-co-card-title">{bookingTitle}</h2>
                 <p className="uf-co-card-sub">{ui.demoNote}</p>
-                <p>{co.pnrLabel} <strong>{bookingConfirmedPnr}</strong></p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '12px 0' }}>
+                  <span>{co.pnrLabel} <strong style={{ fontSize: 18, letterSpacing: 1.5 }}>{bookingConfirmedPnr}</strong></span>
+                  <button
+                    type="button"
+                    className="uf-quick-pill"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(bookingConfirmedPnr);
+                      setPnrCopied(true);
+                    }}
+                  >
+                    {pnrCopied ? '✓ Kopyalandı' : 'PNR Kopyala'}
+                  </button>
+                </div>
                 <p>{co.lookupHint}</p>
-                <button type="button" className="uf-quick-pill" onClick={onBackHome}>{co.backHome}</button>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+                  {confirmedBooking && (
+                    <button
+                      type="button"
+                      className="btn-gold-nav"
+                      onClick={() => openBrandedEticketPdf(confirmedBooking, { currency, lang })}
+                    >
+                      📄 PDF E-Bilet / Voucher İndir
+                    </button>
+                  )}
+                  <button type="button" className="uf-quick-pill" onClick={onBackHome}>{co.backHome}</button>
+                </div>
               </div>
             ) : (
               <form className="uf-checkout-grid" onSubmit={submitBooking}>

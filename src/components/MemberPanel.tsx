@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   LayoutDashboard,
   Ticket,
@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { formatDisplayDate, formatTRY } from '../data/mockData';
 import { apiMessage } from '../data/api';
+import { openBrandedEticketPdf } from '../utils/eticketPdf';
 import { toCalendarDate } from '../data/calendarDates';
 import { PanelNavigation } from './PanelNavigation';
 import {
@@ -249,10 +250,18 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
   ]);
 
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
+  const noticeTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current);
+  }, []);
 
   const flash = (msg: string) => {
+    if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current);
     setSavedNotice(msg);
-    setTimeout(() => setSavedNotice(null), 2600);
+    noticeTimerRef.current = window.setTimeout(() => {
+      setSavedNotice(null);
+      noticeTimerRef.current = null;
+    }, 3000);
   };
 
   const handleAddPassenger = (e: React.FormEvent) => {
@@ -556,6 +565,14 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
                       </div>
                       <div className="panel-record-actions">
                         <strong style={{ fontSize: 18 }}>₺{formatTRY(b.price)}</strong>
+                        <button
+                          type="button"
+                          className="uf-quick-pill"
+                          onClick={() => openBrandedEticketPdf(b, { lang })}
+                        >
+                          <Download size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                          PDF E-Bilet
+                        </button>
                         {b.status === 'Onaylandı' && (
                           <button
                             type="button"

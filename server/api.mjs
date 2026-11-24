@@ -11,6 +11,11 @@ import {
   verifyPassword,
   writeAuditLog,
 } from './store.mjs';
+import {
+  sendBookingConfirmationEmail,
+  sendCorporateApprovedEmail,
+  sendPasswordResetEmail,
+} from './mailer.mjs';
 
 const VALID_PERMISSIONS = new Set([
   'flights.sell',
@@ -356,7 +361,9 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         }
       }
 
-      if (method === 'GET' && path === '/api/session') {
+      if (method === 'GET' && path === '/api/health') {
+        send(res, 200, { ok: true, status: 'healthy', timestamp: new Date().toISOString() });
+      } else if (method === 'GET' && path === '/api/session') {
         send(res, 200, { user: user ? accountProfile(user) : null });
       } else if (method === 'POST' && path === '/api/auth/register') {
         throttle(`register:${ip}`, 10);
@@ -424,6 +431,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const body = await readJson(req);
         const email = normalizeEmail(body.email);
         writeAuditLog(db, { actorEmail: email, action: 'auth:password_reset_request', target: email, ip });
+        void sendPasswordResetEmail({ to: email });
         send(res, 200, {
           ok: true,
           message: 'E-posta adresiniz sistemde kayıtlıysa parola sıfırlama bağlantısı gönderilecektir.',
@@ -458,6 +466,16 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const booking = newDemoBooking(db, body, path === '/api/bookings' ? user : null);
         if (idemKey) {
           idempotencyCache.set(idemKey, { booking, until: Date.now() + 10 * 60_000 });
+        }
+        if (user?.email) {
+          void sendBookingConfirmationEmail({
+            to: user.email,
+            passenger: booking.passenger,
+            pnr: booking.pnr,
+            title: booking.title,
+            date: booking.date,
+            price: booking.price,
+          });
         }
         send(res, 201, { booking });
       } else if (method === 'POST' && /^\/api\/bookings\/[a-f0-9]{32}\/cancel$/.test(path)) {
@@ -588,7 +606,15 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           WHERE id = ? RETURNING id, email, role, profile, status, organization_id, permissions
         `).get(orgId, JSON.stringify(permissions), targetId);
         writeAuditLog(db, { actorEmail: user.email, action: 'admin:user_approve', target: `${row.email}:${permissions.join(',')}`, ip });
-        send(res, 200, { user: accountProfile(row) });
+        const approvedProfile = accountProfile(row);
+        void sendCorporateApprovedEmail({
+          to: approvedProfile.email,
+          firstName: approvedProfile.firstName,
+          companyName: approvedProfile.companyName,
+          password,
+          loginUrl: origin ? `${origin.origin}/yonetim` : 'https://flytoaspan.com/yonetim',
+        });
+        send(res, 200, { user: approvedProfile });
       } else if (method === 'PATCH' && /^\/api\/admin\/users\/[a-f0-9]{32}\/permissions$/.test(path)) {
         const targetId = path.split('/')[4];
         const body = await readJson(req);

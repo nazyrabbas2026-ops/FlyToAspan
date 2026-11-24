@@ -9,6 +9,7 @@
     "preview": "node --env-file-if-exists=.env node_modules/vite/bin/vite.js preview",
     "start": "node --env-file-if-exists=.env server/index.mjs",
     "admin:create": "node --env-file-if-exists=.env server/create-admin.mjs",
+    "backup:db": "node --env-file-if-exists=.env server/backup-db.mjs",
     "test:api": "node --test server/test-api.mjs"
   },
   "dependencies": {

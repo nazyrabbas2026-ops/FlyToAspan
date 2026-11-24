@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /yonetim
+Disallow: /panel
+Disallow: /api/
+
+Sitemap: https://flytoaspan.com/sitemap.xml

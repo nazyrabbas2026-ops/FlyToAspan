@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Sliders,
   TrendingUp,
@@ -53,6 +53,7 @@ import {
 import { addCalendarDays, toCalendarDate } from '../data/calendarDates';
 import { PanelNavigation } from './PanelNavigation';
 import { AdminFinanceCrmSection } from './AdminFinanceCrmSection';
+import { openBrandedEticketPdf } from '../utils/eticketPdf';
 import { api, apiMessage, type AdminCatalog, type AdminCatalogState, type BookingDraft } from '../data/api';
 
 const PERMISSION_OPTIONS: { id: StaffPermission; label: string }[] = [
@@ -436,7 +437,17 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
         .then(({ organizations: orgs }) => { if (!controller.signal.aborted) setOrganizations(orgs); })
         .catch(() => { /* ignore if not ready */ });
     }
-    return () => controller.abort();
+    const refreshBadges = () => {
+      if (!isSuperAdmin || document.visibilityState !== 'visible') return;
+      api.adminUsers(controller.signal)
+        .then(({ users }) => { if (!controller.signal.aborted) setSiteUsers(users); })
+        .catch(() => { /* ignore transient network blip */ });
+    };
+    const pollId = isSuperAdmin ? window.setInterval(refreshBadges, 15_000) : null;
+    return () => {
+      controller.abort();
+      if (pollId !== null) window.clearInterval(pollId);
+    };
   }, [isSuperAdmin]);
 
   const pendingUsers = useMemo(
@@ -518,9 +529,18 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
     });
   }, []);
 
+  const toastTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
+  }, []);
+
   const flash = (msg: string) => {
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
     setSavedToast(msg);
-    setTimeout(() => setSavedToast(null), 3200);
+    toastTimerRef.current = window.setTimeout(() => {
+      setSavedToast(null);
+      toastTimerRef.current = null;
+    }, 3500);
   };
 
   const handleRefreshRates = async () => {
@@ -1477,6 +1497,14 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                   ✓ Yapıldı
                                 </button>
                               )}
+                              <button
+                                type="button"
+                                className="uf-quick-pill"
+                                onClick={() => openBrandedEticketPdf(b, { currency, lang })}
+                              >
+                                <Download size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                                PDF E-Bilet
+                              </button>
                               {b.status !== 'İptal Edildi' && (
                                 <button
                                   type="button"

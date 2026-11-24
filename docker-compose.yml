@@ -1,0 +1,17 @@
+services:
+  flytoaspan:
+    build: .
+    container_name: flytoaspan-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      TRUST_PROXY: "1"
+      FLYTOASPAN_DB: /app/.data/flytoaspan.sqlite
+    volumes:
+      - ./data:/app/.data
+      - ./backups:/app/backups

@@ -13,6 +13,7 @@ import {
 import { formatDisplayDate, formatPrice } from '../data/mockData';
 import { addCalendarDays, toCalendarDate } from '../data/calendarDates';
 import { api, apiMessage } from '../data/api';
+import { openBrandedEticketPdf } from '../utils/eticketPdf';
 import type {
   AdminMarkupConfig,
   BookingRecord,
@@ -651,10 +652,18 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
                             {profit > 0 ? `+${formatPrice(profit, currency)} kâr` : 'Kâr yok'}
                           </div>
                         </td>
-                        <td style={{ padding: '10px 0 10px 8px', textAlign: 'right' }}>
+                        <td style={{ padding: '10px 0 10px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                           <span className={`status-badge ${b.status === 'Onaylandı' || b.status === 'Tamamlandı' ? 'ok' : 'warn'}`}>
                             {b.status}
-                          </span>
+                          </span>{' '}
+                          <button
+                            type="button"
+                            className="uf-quick-pill"
+                            style={{ padding: '3px 8px', fontSize: 11 }}
+                            onClick={() => openBrandedEticketPdf(b, { currency, lang })}
+                          >
+                            PDF
+                          </button>
                         </td>
                       </tr>
                     );
