@@ -14,14 +14,17 @@ import {
   Plane,
   Award,
   Download,
-  Lock,
+  CalendarDays,
+  ChevronDown,
 } from 'lucide-react';
 import { formatDisplayDate, formatTRY } from '../data/mockData';
+import { apiMessage } from '../data/api';
+import { toCalendarDate } from '../data/calendarDates';
+import { PanelNavigation } from './PanelNavigation';
 import {
   BookingRecord,
   CorpApproval,
   LangCode,
-  SavedPassenger,
   UserProfile,
 } from '../types';
 
@@ -29,8 +32,7 @@ interface MemberPanelProps {
   lang?: LangCode;
   user: UserProfile;
   bookings: BookingRecord[];
-  onCancelBooking: (id: string) => void;
-  onUpdateUser: (next: UserProfile) => void;
+  onCancelBooking: (id: string) => Promise<void>;
   onLogout: () => void;
   onGoSearch: () => void;
 }
@@ -55,8 +57,7 @@ const PANEL_I18N: Record<
     statMiles: string;
     statMilesSub: (amt: string) => string;
     statSecurity: string;
-    stat2faOn: string;
-    stat2faStd: string;
+    passwordLogin: string;
     statSecSub: string;
     recentBookings: string;
     viewAll: string;
@@ -80,9 +81,8 @@ const PANEL_I18N: Record<
     statMiles: 'Aspan Mil Bakiyesi',
     statMilesSub: (amt) => `≈ ₺${amt} uçuş indirimi`,
     statSecurity: 'Hesap Güvenliği',
-    stat2faOn: '2FA Aktif',
-    stat2faStd: 'Standart',
-    statSecSub: '256-Bit SSL & KVKK Korumalı',
+    passwordLogin: 'Parolalı giriş',
+    statSecSub: 'Deneme hesabı tercihi',
     recentBookings: 'Son Rezervasyonlarınız',
     viewAll: 'Tümünü gör →',
   },
@@ -104,9 +104,8 @@ const PANEL_I18N: Record<
     statMiles: 'Aspan Miles Balance',
     statMilesSub: (amt) => `≈ ₺${amt} flight discount`,
     statSecurity: 'Account Security',
-    stat2faOn: '2FA Enabled',
-    stat2faStd: 'Standard',
-    statSecSub: '256-Bit SSL & GDPR Protected',
+    passwordLogin: 'Password sign-in',
+    statSecSub: 'Demo account preference',
     recentBookings: 'Your Recent Bookings',
     viewAll: 'View all →',
   },
@@ -128,9 +127,8 @@ const PANEL_I18N: Record<
     statMiles: 'Баланс миль Aspan',
     statMilesSub: (amt) => `≈ ₺${amt} скидка на перелёт`,
     statSecurity: 'Защита аккаунта',
-    stat2faOn: '2FA Активна',
-    stat2faStd: 'Стандарт',
-    statSecSub: '256-Bit SSL и защита KVKK',
+    passwordLogin: 'Вход с паролем',
+    statSecSub: 'Настройка демо-аккаунта',
     recentBookings: 'Последние бронирования',
     viewAll: 'Все бронирования →',
   },
@@ -152,9 +150,8 @@ const PANEL_I18N: Record<
     statMiles: 'Aspan Миль балансы',
     statMilesSub: (amt) => `≈ ₺${amt} ұшу жеңілдігі`,
     statSecurity: 'Аккаунт қауіпсіздігі',
-    stat2faOn: '2FA Қосулы',
-    stat2faStd: 'Стандартты',
-    statSecSub: '256-Бит SSL & KVKK қорғалған',
+    passwordLogin: 'Құпиясөзбен кіру',
+    statSecSub: 'Демо аккаунт баптауы',
     recentBookings: 'Соңғы брондауларыңыз',
     viewAll: 'Барлығын көру →',
   },
@@ -162,38 +159,55 @@ const PANEL_I18N: Record<
 
 type PanelTab = 'overview' | 'bookings' | 'passengers' | 'corporate' | 'alerts' | 'security';
 
+const BOOKING_COPY = {
+  TR: {
+    section: 'Üye bölümü', next: 'Yaklaşan seyahat', search: 'Kod veya rotayla ara',
+    scope: 'Rezervasyon türü', all: 'Tümü', flight: 'Uçak', hotel: 'Otel', transfer: 'Transfer',
+    empty: 'Aramaya uygun rezervasyon bulunamadı.', details: 'Rezervasyon detayı',
+    demo: 'Deneme rezervasyonları', cancel: 'İptal talebi', confirm: 'Talebi oluştur', back: 'Vazgeç',
+    cancellationNote: 'Bu işlem deneme rezervasyonuna iptal talebi ekler.',
+  },
+  EN: {
+    section: 'Member section', next: 'Upcoming trip', search: 'Search by code or route',
+    scope: 'Booking type', all: 'All', flight: 'Flight', hotel: 'Hotel', transfer: 'Transfer',
+    empty: 'No bookings match your search.', details: 'Booking details',
+    demo: 'Demo bookings', cancel: 'Request cancellation', confirm: 'Create request', back: 'Go back',
+    cancellationNote: 'This submits a cancellation request for the demo booking.',
+  },
+  RU: {
+    section: 'Раздел кабинета', next: 'Предстоящая поездка', search: 'Поиск по коду или маршруту',
+    scope: 'Тип бронирования', all: 'Все', flight: 'Рейс', hotel: 'Отель', transfer: 'Трансфер',
+    empty: 'Бронирования не найдены.', details: 'Данные бронирования',
+    demo: 'Демо-бронирования', cancel: 'Запросить отмену', confirm: 'Создать запрос', back: 'Назад',
+    cancellationNote: 'Будет создан запрос на отмену демо-брони.',
+  },
+  KK: {
+    section: 'Мүше бөлімі', next: 'Алдағы сапар', search: 'Код немесе бағыт бойынша іздеу',
+    scope: 'Брондау түрі', all: 'Барлығы', flight: 'Ұшақ', hotel: 'Қонақ үй', transfer: 'Трансфер',
+    empty: 'Іздеуге сәйкес брондау табылмады.', details: 'Брондау мәліметтері',
+    demo: 'Демо брондаулар', cancel: 'Бас тарту өтініші', confirm: 'Өтініш жасау', back: 'Артқа',
+    cancellationNote: 'Демо брондаудан бас тарту өтініші жіберіледі.',
+  },
+};
+
 export const MemberPanel: React.FC<MemberPanelProps> = ({
   lang = 'TR',
   user,
   bookings,
   onCancelBooking,
-  onUpdateUser,
   onLogout,
   onGoSearch,
 }) => {
   const ui = PANEL_I18N[lang];
   const [tab, setTab] = useState<PanelTab>('overview');
+  const [bookingSearch, setBookingSearch] = useState('');
+  const [bookingType, setBookingType] = useState<BookingRecord['type'] | 'ALL'>('ALL');
+  const [pendingCancel, setPendingCancel] = useState<string | null>(null);
 
-  // Saved Passengers state
-  const [passengers, setPassengers] = useState<SavedPassenger[]>([
-    {
-      id: 'pax-1',
-      fullName: `${user.firstName} ${user.lastName}`,
-      docNumber: 'U24901842',
-      birthDate: '1994-05-14',
-      nationality: 'Türkiye (TR)',
-    },
-    {
-      id: 'pax-2',
-      fullName: 'Aylin Karahan',
-      docNumber: 'U18743920',
-      birthDate: '1996-09-22',
-      nationality: 'Kazakistan (KZ)',
-    },
-  ]);
+  const [passengers, setPassengers] = useState<{ id: string; fullName: string }[]>([]);
   const [newPaxName, setNewPaxName] = useState('');
-  const [newPaxDoc, setNewPaxDoc] = useState('');
-  const [newPaxBirth, setNewPaxBirth] = useState('');
+  const [cancelPending, setCancelPending] = useState(false);
+  const [cancelError, setCancelError] = useState('');
 
   // Price Alerts state
   const [alerts, setAlerts] = useState([
@@ -243,21 +257,21 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
 
   const handleAddPassenger = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPaxName.trim() || !newPaxDoc.trim()) return;
+    if (!newPaxName.trim()) return;
     setPassengers((prev) => [
       ...prev,
       {
         id: `pax-${Date.now()}`,
         fullName: newPaxName.trim(),
-        docNumber: newPaxDoc.trim().toUpperCase(),
-        birthDate: newPaxBirth || '1992-01-01',
-        nationality: 'Türkiye (TR)',
+
+
+
       },
     ]);
     setNewPaxName('');
-    setNewPaxDoc('');
-    setNewPaxBirth('');
-    flash('Yeni yolcu profili kaydedildi.');
+
+
+    flash('Yolcu geçici listeye eklendi.');
   };
 
   const handleAddAlert = (e: React.FormEvent) => {
@@ -272,16 +286,51 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
         current: (Number(newAlertTarget) || 5000) + 640,
       },
     ]);
-    flash('Fiyat alarmı oluşturuldu! Fiyat düştüğünde WhatsApp ve e-posta ile haber vereceğiz.');
+    flash('Fiyat takibi deneme listesine eklendi.');
   };
 
   const activeBookingsCount = bookings.filter((b) => b.status === 'Onaylandı').length;
+  const bookingUi = BOOKING_COPY[lang];
+  const memberSections: { id: PanelTab; label: string; icon: React.ReactNode; count?: number }[] = [
+    { id: 'overview', label: ui.tabOverview, icon: <LayoutDashboard size={18} /> },
+    { id: 'bookings', label: ui.tabBookings, icon: <Ticket size={18} />, count: bookings.length },
+    { id: 'passengers', label: ui.tabPassengers, icon: <Users size={18} />, count: passengers.length },
+    ...(user.accountType === 'corporate'
+      ? [{ id: 'corporate' as PanelTab, label: ui.tabCorporate, icon: <Briefcase size={18} /> }]
+      : []),
+    { id: 'alerts', label: ui.tabAlerts, icon: <Bell size={18} />, count: alerts.length },
+    { id: 'security', label: ui.tabSecurity, icon: <Shield size={18} /> },
+  ];
+  const currentSection = memberSections.find(({ id }) => id === tab) ?? memberSections[0];
+  const today = toCalendarDate(new Date());
+  const upcomingBooking = bookings
+    .filter((booking) => booking.status === 'Onaylandı' && booking.date >= today)
+    .sort((first, second) => first.date.localeCompare(second.date))[0];
+  const search = bookingSearch.trim().toLowerCase();
+  const filteredBookings = bookings.filter((booking) =>
+    (bookingType === 'ALL' || booking.type === bookingType) &&
+    `${booking.pnr} ${booking.title} ${booking.subtitle}`.toLowerCase().includes(search)
+  );
+  const bookingTypes = {
+    Uçak: bookingUi.flight,
+    Otel: bookingUi.hotel,
+    Transfer: bookingUi.transfer,
+  };
+  const dates = (booking: BookingRecord) =>
+    formatDisplayDate(booking.date, lang) +
+    (booking.returnDate ? ` → ${formatDisplayDate(booking.returnDate, lang)}` : '');
+
+  const openBookings = (code = '') => {
+    setBookingSearch(code);
+    setBookingType('ALL');
+    setTab('bookings');
+  };
 
   return (
     <>
-      <div className="inner-hero">
+      <div className="inner-hero panel-hero">
         <div className="container">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16 }}>
+          <div className="panel-hero-row">
             <div>
               <div className="section-eyebrow on-dark">
                 {user.accountType === 'corporate' ? ui.corpEye : ui.indEye}
@@ -291,6 +340,12 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
               </h1>
               <div className="route-pills">
                 <span className="route-pill">{user.email}</span>
+                {user.createdAt && (
+                  <span className="route-pill">
+                    <CalendarDays size={13} />
+                    {formatDisplayDate(user.createdAt, lang)}
+                  </span>
+                )}
                 <span className="route-pill">
                   <Award size={14} color="#F5CD5E" />
                   {formatTRY(user.miles)} {ui.milesLbl}
@@ -312,10 +367,10 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
         </div>
       </div>
 
-      <section className="results-workspace">
+      <section className="results-workspace panel-workspace">
         <div className="container">
           {savedNotice && (
-            <div
+            <div role="status"
               style={{
                 marginBottom: 18,
                 padding: '12px 18px',
@@ -336,74 +391,42 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
           )}
 
           <div className="panel-layout">
-            {/* Sidebar Navigation */}
-            <aside className="panel-sidebar">
-              <button
-                type="button"
-                className={`panel-nav-btn ${tab === 'overview' ? 'active' : ''}`}
-                onClick={() => setTab('overview')}
-              >
-                <LayoutDashboard size={17} />
-                {ui.tabOverview}
-              </button>
-              <button
-                type="button"
-                className={`panel-nav-btn ${tab === 'bookings' ? 'active' : ''}`}
-                onClick={() => setTab('bookings')}
-              >
-                <Ticket size={17} />
-                {ui.tabBookings} ({bookings.length})
-              </button>
-              <button
-                type="button"
-                className={`panel-nav-btn ${tab === 'passengers' ? 'active' : ''}`}
-                onClick={() => setTab('passengers')}
-              >
-                <Users size={17} />
-                {ui.tabPassengers} ({passengers.length})
-              </button>
-              <button
-                type="button"
-                className={`panel-nav-btn ${tab === 'corporate' ? 'active' : ''}`}
-                onClick={() => setTab('corporate')}
-              >
-                <Briefcase size={17} />
-                {ui.tabCorporate}
-              </button>
-              <button
-                type="button"
-                className={`panel-nav-btn ${tab === 'alerts' ? 'active' : ''}`}
-                onClick={() => setTab('alerts')}
-              >
-                <Bell size={17} />
-                {ui.tabAlerts} ({alerts.length})
-              </button>
-              <button
-                type="button"
-                className={`panel-nav-btn ${tab === 'security' ? 'active' : ''}`}
-                onClick={() => setTab('security')}
-              >
-                <Shield size={17} />
-                {ui.tabSecurity}
-              </button>
+            <PanelNavigation
+              label={bookingUi.section}
+              current={tab}
+              items={memberSections}
+              onSelect={setTab}
+              action={
+                <button type="button" className="panel-nav-btn panel-danger-action" onClick={onLogout}>
+                  <LogOut size={17} />
+                  <span>{ui.logoutBtn}</span>
+                </button>
+              }
+            />
 
-              <div style={{ borderTop: '1px solid var(--aspan-border)', margin: '12px 0' }} />
-              <button
-                type="button"
-                className="panel-nav-btn"
-                style={{ color: '#be123c' }}
-                onClick={onLogout}
-              >
-                <LogOut size={17} />
-                {ui.logoutBtn}
-              </button>
-            </aside>
-
-            {/* Main Panel Workspace */}
-            <div>
+            <div className="panel-content">
+              <header className="panel-section-heading">
+                <span className="panel-section-icon">{currentSection.icon}</span>
+                <h2>{currentSection.label}</h2>
+              </header>
               {/* 1. OVERVIEW */}
               {tab === 'overview' && (
                 <>
+                  {upcomingBooking && (
+                    <div className="panel-highlight">
+                      <div className="panel-highlight-main">
+                        <span className="panel-section-icon"><CalendarDays size={20} /></span>
+                        <div>
+                          <h3>{bookingUi.next}</h3>
+                          <strong>{upcomingBooking.title}</strong>
+                          <p>{dates(upcomingBooking)} · {upcomingBooking.pnr}</p>
+                        </div>
+                      </div>
+                      <button type="button" className="uf-quick-pill" onClick={() => openBookings(upcomingBooking.pnr)}>
+                        {bookingUi.details}
+                      </button>
+                    </div>
+                  )}
                   <div className="panel-stat-grid">
                     <div className="panel-stat-card">
                       <div className="filter-label">{ui.statActive}</div>
@@ -426,7 +449,7 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
                     <div className="panel-stat-card">
                       <div className="filter-label">{ui.statSecurity}</div>
                       <div style={{ fontSize: 22, fontWeight: 800, color: '#059669', marginTop: 4 }}>
-                        {user.twoFactorEnabled ? ui.stat2faOn : ui.stat2faStd}
+                        {ui.passwordLogin}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>
                         {ui.statSecSub}
@@ -439,7 +462,7 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
                       <strong style={{ fontSize: 17 }}>{ui.recentBookings}</strong>
                       <button
                         type="button"
-                        onClick={() => setTab('bookings')}
+                        onClick={() => openBookings()}
                         style={{
                           border: 'none',
                           background: 'none',
@@ -453,6 +476,7 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
                       </button>
                     </div>
 
+                    {bookings.length === 0 && <p className="panel-empty">{bookingUi.empty}</p>}
                     {bookings.slice(0, 3).map((b) => (
                       <div
                         key={b.id}
@@ -467,12 +491,12 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
                         }}
                       >
                         <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div className="panel-actions">
                             <span className="uf-airport-code">{b.pnr}</span>
                             <strong>{b.title}</strong>
                           </div>
                           <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)', marginTop: 3 }}>
-                            {b.type} · {b.subtitle} · {formatDisplayDate(b.date, lang)}
+                            {bookingTypes[b.type]} · {b.subtitle} · {dates(b)}
                           </div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
@@ -492,63 +516,93 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
               {/* 2. BOOKINGS */}
               {tab === 'bookings' && (
                 <div className="panel-card">
-                  <strong style={{ fontSize: 18, display: 'block', marginBottom: 16 }}>
-                    Biletlerim &amp; Rezervasyonlarım
-                  </strong>
-                  {bookings.map((b) => (
-                    <div
-                      key={b.id}
-                      style={{
-                        padding: 16,
-                        borderRadius: 16,
-                        border: '1px solid var(--aspan-border)',
-                        marginBottom: 12,
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: 16,
-                        flexWrap: 'wrap',
-                      }}
-                    >
+                  <div className="panel-form-grid panel-list-filters">
+                    <label className="panel-field">
+                      <span>{bookingUi.search}</span>
+                      <input
+                        className="modal-input"
+                        type="search"
+                        value={bookingSearch}
+                        onChange={(event) => setBookingSearch(event.target.value)}
+                      />
+                    </label>
+                    <label className="panel-field">
+                      <span>{bookingUi.scope}</span>
+                      <select
+                        className="modal-input"
+                        value={bookingType}
+                        onChange={(event) => setBookingType(event.target.value as typeof bookingType)}
+                      >
+                        <option value="ALL">{bookingUi.all}</option>
+                        {(Object.keys(bookingTypes) as BookingRecord['type'][]).map((type) => (
+                          <option value={type} key={type}>{bookingTypes[type]}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  {filteredBookings.length === 0 && <p className="panel-empty" role="status">{bookingUi.empty}</p>}
+                  {filteredBookings.map((b) => (
+                    <article key={b.id} className="panel-booking-card">
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <div className="panel-actions" style={{ marginBottom: 6 }}>
                           <span className="uf-airport-code">{b.pnr}</span>
-                          <span className="pkg-pill">{b.type}</span>
-                          <span className={`status-badge ${b.status === 'Onaylandı' ? 'ok' : 'warn'}`}>
+                          <span className="pkg-pill">{bookingTypes[b.type]}</span>
+                          <span className={`status-badge ${b.status === 'Onaylandı' || b.status === 'Tamamlandı' ? 'ok' : 'warn'}`}>
                             {b.status}
                           </span>
                         </div>
                         <strong style={{ fontSize: 16 }}>{b.title}</strong>
-                        <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)', marginTop: 3 }}>
-                          {b.subtitle} · {formatDisplayDate(b.date, lang)} · {b.passenger}
-                        </div>
+                        <p className="panel-record-meta">{dates(b)} · {b.passenger}</p>
                       </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div className="panel-record-actions">
                         <strong style={{ fontSize: 18 }}>₺{formatTRY(b.price)}</strong>
-                        <button
-                          type="button"
-                          className="uf-quick-pill"
-                          onClick={() => flash(`${b.pnr} e-bilet PDF olarak indiriliyor...`)}
-                        >
-                          <Download size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-                          E-Bilet
-                        </button>
                         {b.status === 'Onaylandı' && (
                           <button
                             type="button"
-                            className="uf-quick-pill"
-                            style={{ color: '#be123c', borderColor: 'rgba(225,29,72,0.3)' }}
-                            onClick={() => {
-                              onCancelBooking(b.id);
-                              flash(`${b.pnr} için iptal / iade talebiniz işleme alındı.`);
-                            }}
+                            className="uf-quick-pill panel-danger-action"
+                            disabled={cancelPending} onClick={() => { setPendingCancel(b.id); setCancelError(''); }}
                           >
-                            İptal Talebi
+                            {bookingUi.cancel}
                           </button>
                         )}
                       </div>
-                    </div>
+                      <details className="panel-disclosure" open={bookingSearch.trim() === b.pnr}>
+                        <summary><ChevronDown size={16} /> {bookingUi.details}</summary>
+                        <p className="panel-record-meta">{b.subtitle}</p>
+                        {b.eticketNumber && <p className="panel-record-meta">E-Bilet · {b.eticketNumber}</p>}
+                      </details>
+                      {pendingCancel === b.id && b.status === 'Onaylandı' && (
+                        <div className="panel-delete-confirm">
+                          <span>{bookingUi.cancellationNote}</span>
+                          {cancelError && <p className="form-action-error" role="alert">{cancelError}</p>}
+                          <div className="panel-actions">
+                            <button type="button" className="uf-quick-pill" disabled={cancelPending} onClick={() => setPendingCancel(null)}>
+                              {bookingUi.back}
+                            </button>
+                            <button
+                              type="button"
+                              className="uf-quick-pill panel-danger-action"
+                              disabled={cancelPending}
+                              onClick={async () => {
+                                setCancelPending(true);
+                                setCancelError('');
+                                try {
+                                  await onCancelBooking(b.id);
+                                  setPendingCancel(null);
+                                  flash('İptal talebi kaydedildi.');
+                                } catch (error) {
+                                  setCancelError(apiMessage(error));
+                                } finally {
+                                  setCancelPending(false);
+                                }
+                              }}
+                            >
+                              {bookingUi.confirm}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </article>
                   ))}
                 </div>
               )}
@@ -573,9 +627,6 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
                       >
                         <div>
                           <strong>{p.fullName}</strong>
-                          <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)' }}>
-                            Pasaport / TCKN: {p.docNumber} · Doğum: {p.birthDate} · {p.nationality}
-                          </div>
                         </div>
                         <button
                           type="button"
@@ -593,26 +644,14 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
                     <strong style={{ fontSize: 15.5, display: 'block', marginBottom: 12 }}>
                       Yeni Yolcu Ekle
                     </strong>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 10 }}>
+                    <p>Bu listeyi bu ziyaret sırasında kullanabilirsiniz.</p>
+                    <div className="panel-form-grid">
                       <input
                         required
                         className="modal-input"
-                        placeholder="Ad Soyad"
+                        aria-label="Yolcu adı ve soyadı" placeholder="Ad Soyad"
                         value={newPaxName}
                         onChange={(e) => setNewPaxName(e.target.value)}
-                      />
-                      <input
-                        required
-                        className="modal-input"
-                        placeholder="Pasaport veya TCKN"
-                        value={newPaxDoc}
-                        onChange={(e) => setNewPaxDoc(e.target.value)}
-                      />
-                      <input
-                        type="date"
-                        className="modal-input"
-                        value={newPaxBirth}
-                        onChange={(e) => setNewPaxBirth(e.target.value)}
                       />
                       <button type="submit" className="btn-gold-nav" style={{ borderRadius: 12 }}>
                         <Plus size={16} /> Ekle
@@ -639,7 +678,7 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
                       <button
                         type="button"
                         className="uf-quick-pill"
-                        onClick={() => flash('Aylık departman bazlı kurumsal masraf raporu (Excel/PDF) indiriliyor...')}
+                        onClick={() => flash('Kurumsal rapor indirme, sunucu bağlantısı ile açılacak.')}
                       >
                         <Download size={14} style={{ verticalAlign: 'middle', marginRight: 5 }} />
                         Aylık E-Fatura &amp; Rapor
@@ -706,7 +745,7 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
                                   setApprovals((prev) =>
                                     prev.map((x) => (x.id === ap.id ? { ...x, status: 'Onaylandı' } : x))
                                   );
-                                  flash(`${ap.employee} seyahat talebi onaylandı ve biletlemeye aktarıldı.`);
+                                  flash(`${ap.employee} deneme seyahat talebi onaylandı.`);
                                 }}
                               >
                                 <CheckCircle2 size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
@@ -781,17 +820,17 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
                     <strong style={{ fontSize: 15.5, display: 'block', marginBottom: 12 }}>
                       Yeni Fiyat Alarmı Kur
                     </strong>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr auto', gap: 10 }}>
+                    <div className="panel-form-grid">
                       <input
                         className="modal-input"
-                        value={newAlertRoute}
+                        aria-label="Fiyat takibi rotası" value={newAlertRoute}
                         onChange={(e) => setNewAlertRoute(e.target.value)}
                         placeholder="Örn: İstanbul (IST) → Astana (NQZ)"
                       />
                       <input
                         type="number"
                         className="modal-input"
-                        value={newAlertTarget}
+                        aria-label="Hedef fiyat" value={newAlertTarget}
                         onChange={(e) => setNewAlertTarget(e.target.value)}
                         placeholder="Hedef Fiyat (TL)"
                       />
@@ -803,64 +842,11 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
                 </>
               )}
 
-              {/* 6. SECURITY & KVKK */}
               {tab === 'security' && (
                 <div className="panel-card">
-                  <strong style={{ fontSize: 18, display: 'block', marginBottom: 14 }}>
-                    Hesap Güvenliği, 2FA &amp; KVKK Veri Yönetimi
-                  </strong>
-
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: 16,
-                      borderRadius: 14,
-                      background: 'var(--aspan-bg-soft)',
-                      marginBottom: 14,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <Lock size={20} color="#00A8B5" />
-                      <div>
-                        <strong>İki Aşamalı Doğrulama (SMS / OTP 2FA)</strong>
-                        <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)' }}>
-                          Giriş ve bilet iptal işlemlerinde telefonunuza doğrulama kodu gönderilir.
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn-gold-nav"
-                      style={{ height: 38, fontSize: 12.5 }}
-                      onClick={() => {
-                        const nextVal = !user.twoFactorEnabled;
-                        onUpdateUser({ ...user, twoFactorEnabled: nextVal });
-                        flash(nextVal ? '2FA başarıyla etkinleştirildi.' : '2FA devre dışı bırakıldı.');
-                      }}
-                    >
-                      {user.twoFactorEnabled ? 'Kapat' : 'Etkinleştir'}
-                    </button>
-                  </div>
-
-                  <div style={{ fontSize: 13, color: 'var(--aspan-text-body)', lineHeight: 1.7 }}>
-                    • <strong>KVKK &amp; GDPR Haklarınız:</strong> Kayıtlı kişisel verilerinizi JSON/PDF
-                    olarak indirebilir veya hesap silme talebi oluşturabilirsiniz.
-                    <br />• <strong>Ödeme Kartı Güvenliği:</strong> Kart bilgileriniz PCI-DSS Level 1
-                    sertifikalı ödeme altyapısında token olarak korunur, sunucularımızda saklanmaz.
-                  </div>
-
-                  <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      className="uf-quick-pill"
-                      onClick={() => flash('KVKK kişisel veri raporunuz hazırlanarak e-posta adresinize gönderildi.')}
-                    >
-                      <Download size={14} style={{ verticalAlign: 'middle', marginRight: 5 }} />
-                      Verilerimi İndir (KVKK)
-                    </button>
-                  </div>
+                  <h3>Hesap güvenliği</h3>
+                  <p>Oturumunuz sunucuda doğrulanır. Ortak cihazlarda işiniz bitince çıkış yapın.</p>
+                  <p>İki aşamalı doğrulama ve parola sıfırlama henüz kullanıma açık değil.</p>
                 </div>
               )}
             </div>

@@ -19,17 +19,82 @@ interface LegalPagesProps {
   onBackHome: () => void;
 }
 
+const LEGAL_UI: Record<
+  LangCode,
+  {
+    back: string;
+    eyebrow: string;
+    title: string;
+    tabs: Record<LegalDocKey, string>;
+    langNotice?: string;
+  }
+> = {
+  TR: {
+    back: 'Ana Sayfaya Dön',
+    eyebrow: 'FLYTOASPAN BY INFINITIVE TRAVEL · RESMİ SÖZLEŞMELER & KVKK',
+    title: 'Yasal Bilgilendirme, KVKK ve Satış Sözleşmeleri',
+    tabs: {
+      terms: 'Kullanım Koşulları & Mesafeli Satış',
+      kvkk: 'KVKK & Gizlilik Aydınlatma Metni',
+      refund: 'İptal, İade ve Değişiklik Koşulları',
+      commercial: 'Ticari Elektronik İleti Onayı',
+      cookies: 'Çerez (Cookie) Politikası',
+    },
+  },
+  EN: {
+    back: 'Back to Homepage',
+    eyebrow: 'FLYTOASPAN BY INFINITIVE TRAVEL · LEGAL POLICIES & PRIVACY',
+    title: 'Legal Notice, Privacy (KVKK/GDPR) & Terms',
+    tabs: {
+      terms: 'Terms of Use & Distance Sales',
+      kvkk: 'Privacy & Data Protection (KVKK / GDPR)',
+      refund: 'Cancellation, Refund & Change Policy',
+      commercial: 'Commercial Electronic Message Consent',
+      cookies: 'Cookie Policy',
+    },
+    langNotice: 'Official statutory agreements under Turkish Law No. 6502 and 6698 (KVKK) are displayed below in their binding Turkish legal text. For English assistance, contact info@flytoaspan.com.',
+  },
+  RU: {
+    back: 'На главную',
+    eyebrow: 'FLYTOASPAN BY INFINITIVE TRAVEL · ПРАВОВАЯ ИНФОРМАЦИЯ',
+    title: 'Правовая информация, защита данных и условия',
+    tabs: {
+      terms: 'Условия использования',
+      kvkk: 'Защита персональных данных (KVKK / GDPR)',
+      refund: 'Отмена, возврат и обмен билетов',
+      commercial: 'Согласие на рассылку',
+      cookies: 'Политика файлов Cookie',
+    },
+    langNotice: 'Официальные юридические тексты в соответствии с законодательством Турции (KVKK) приведены ниже на турецком языке. По вопросам на русском пишите на info@flytoaspan.com.',
+  },
+  KK: {
+    back: 'Басты бетке оралу',
+    eyebrow: 'FLYTOASPAN BY INFINITIVE TRAVEL · РЕСМИ ШАРТТАР МЕН ҚҰПИЯЛЫЛЫҚ',
+    title: 'Құқықтық ақпарат, деректерді қорғау және шарттар',
+    tabs: {
+      terms: 'Пайдалану шарттары',
+      kvkk: 'Дербес деректерді қорғау (KVKK / GDPR)',
+      refund: 'Бас тарту, қайтару және өзгерту',
+      commercial: 'Хабарлама келісімі',
+      cookies: 'Cookie саясаты',
+    },
+    langNotice: 'Түркия заңнамасына (KVKK) сәйкес ресми заңды мәтіндер төменде берілген. Қазақ тілінде кеңес алу үшін info@flytoaspan.com поштасына жазыңыз.',
+  },
+};
+
 export const LegalPages: React.FC<LegalPagesProps> = ({
+  lang = 'TR',
   activeDoc,
   onSelectDoc,
   onBackHome,
 }) => {
+  const lu = LEGAL_UI[lang];
   const tabs: Array<{ key: LegalDocKey; title: string; icon: React.ReactNode }> = [
-    { key: 'terms', title: 'Kullanım Koşulları & Mesafeli Satış', icon: <FileText size={16} /> },
-    { key: 'kvkk', title: 'KVKK & Gizlilik Aydınlatma Metni', icon: <Lock size={16} /> },
-    { key: 'refund', title: 'İptal, İade ve Değişiklik Koşulları', icon: <RotateCcw size={16} /> },
-    { key: 'commercial', title: 'Ticari Elektronik İleti Onayı', icon: <MailCheck size={16} /> },
-    { key: 'cookies', title: 'Çerez (Cookie) Politikası', icon: <Cookie size={16} /> },
+    { key: 'terms', title: lu.tabs.terms, icon: <FileText size={16} /> },
+    { key: 'kvkk', title: lu.tabs.kvkk, icon: <Lock size={16} /> },
+    { key: 'refund', title: lu.tabs.refund, icon: <RotateCcw size={16} /> },
+    { key: 'commercial', title: lu.tabs.commercial, icon: <MailCheck size={16} /> },
+    { key: 'cookies', title: lu.tabs.cookies, icon: <Cookie size={16} /> },
   ];
 
   return (
@@ -38,12 +103,10 @@ export const LegalPages: React.FC<LegalPagesProps> = ({
         <div className="container">
           <button type="button" className="inner-back-btn" onClick={onBackHome}>
             <ArrowLeft size={15} />
-            Ana Sayfaya Dön
+            {lu.back}
           </button>
-          <div className="section-eyebrow on-dark">
-            FLYTOASPAN BY INFINITIVE TRAVEL · RESMİ SÖZLEŞMELER &amp; KVKK
-          </div>
-          <h1 className="inner-h1">Yasal Bilgilendirme, KVKK ve Satış Sözleşmeleri</h1>
+          <div className="section-eyebrow on-dark">{lu.eyebrow}</div>
+          <h1 className="inner-h1">{lu.title}</h1>
           <div className="route-pills" style={{ marginTop: 14 }}>
             {tabs.map((t) => (
               <button
@@ -67,6 +130,21 @@ export const LegalPages: React.FC<LegalPagesProps> = ({
       <section className="results-workspace">
         <div className="container" style={{ maxWidth: 920 }}>
           <div className="panel-card" style={{ lineHeight: 1.75, fontSize: 14.5 }}>
+            {lu.langNotice && (
+              <div
+                style={{
+                  marginBottom: 16,
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  background: 'var(--aspan-teal-soft)',
+                  color: 'var(--aspan-teal-deep)',
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                }}
+              >
+                {lu.langNotice}
+              </div>
+            )}
             {activeDoc === 'terms' && (
               <>
                 <h2 style={{ marginTop: 0 }}>
@@ -236,6 +314,9 @@ export const LegalPages: React.FC<LegalPagesProps> = ({
                   <strong>FlyToAspan by Infinitive Travel — Hukuk &amp; Müşteri İlişkileri</strong>
                   <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)' }}>
                     İstanbul, Türkiye &amp; Almatı, Kazakistan · info@flytoaspan.com
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--aspan-text-muted)', marginTop: 4 }}>
+                    TÜRSAB Belge No: Bilgi bekleniyor · MERSİS / Vergi No: Bilgi bekleniyor · Açık Adres: Bilgi bekleniyor
                   </div>
                 </div>
               </div>

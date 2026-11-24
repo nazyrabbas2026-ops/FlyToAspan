@@ -13,7 +13,8 @@ import {
 } from 'lucide-react';
 import { CAMPAIGNS, CHECKIN_AIRLINES, FAQ_ITEMS, formatDisplayDate } from '../data/mockData';
 import { PHONE_DISPLAY, PHONE_HREF, WA_HREF } from '../i18n/translations';
-import { BookingRecord, LangCode, SearchTab } from '../types';
+import { LangCode, SearchTab } from '../types';
+import { api, ApiError, apiMessage, type BookingLookup } from '../data/api';
 
 const SUBPAGES_I18N: Record<
   LangCode,
@@ -48,9 +49,7 @@ const SUBPAGES_I18N: Record<
     surnamePh: string;
     queryBtn: string;
     foundTitle: (pnr: string) => string;
-    paxLabel: string;
     statusLabel: string;
-    activeTicket: string;
     supportHint: string;
     notFoundErr: string;
   }
@@ -82,7 +81,7 @@ const SUBPAGES_I18N: Record<
     emailSupport: 'E-Posta Destek',
     opsEye: 'REZERVASYON YÖNETİMİ',
     opsTitle: 'Bilet İşlemleri & İptal',
-    opsSub: 'PNR kodunuz ve yolcu soyadınızla biletinizi görüntüleyebilir, değişiklik veya iptal talebi oluşturabilirsiniz.',
+    opsSub: 'Rezervasyonunuzu PNR kodu ve yolcu soyadıyla sorgulayın.',
     opsCardTitle: 'PNR ile Bilet Sorgula',
     pnrLabel: 'PNR / Rezervasyon Kodu *',
     pnrPh: 'Örn: FTA8K4',
@@ -90,11 +89,9 @@ const SUBPAGES_I18N: Record<
     surnamePh: 'Örn: YILMAZ',
     queryBtn: 'Biletimi Sorgula',
     foundTitle: (p) => `Rezervasyon Bulundu (${p})`,
-    paxLabel: 'Yolcu',
     statusLabel: 'Durum',
-    activeTicket: 'Aktif Bilet',
     supportHint: 'İptal veya tarih değişikliği için 7/24 hattımızdan anında işlem yapabilirsiniz:',
-    notFoundErr: 'Lütfen en az 5 karakterli geçerli bir PNR kodu ve soyad girin.',
+    notFoundErr: 'Bu kod ve soyadla eşleşen rezervasyon bulunamadı.',
   },
   EN: {
     campEye: 'FLYTOASPAN OFFERS',
@@ -123,7 +120,7 @@ const SUBPAGES_I18N: Record<
     emailSupport: 'E-Mail Support',
     opsEye: 'BOOKING MANAGEMENT',
     opsTitle: 'Manage Booking & Cancellation',
-    opsSub: 'View your ticket, request date changes or submit a cancellation with your PNR code and passenger last name.',
+    opsSub: 'Look up your reservation with its booking code and the passenger’s surname.',
     opsCardTitle: 'Find Ticket by PNR',
     pnrLabel: 'PNR / Booking Code *',
     pnrPh: 'e.g. FTA8K4',
@@ -131,11 +128,9 @@ const SUBPAGES_I18N: Record<
     surnamePh: 'e.g. YILMAZ',
     queryBtn: 'Find My Booking',
     foundTitle: (p) => `Booking Found (${p})`,
-    paxLabel: 'Passenger',
     statusLabel: 'Status',
-    activeTicket: 'Confirmed Ticket',
     supportHint: 'For instant date changes or refunds, contact our 24/7 support desk:',
-    notFoundErr: 'Please enter a valid PNR code (min 5 characters) and surname.',
+    notFoundErr: 'No reservation matches this booking code and surname.',
   },
   RU: {
     campEye: 'СПЕЦПРЕДЛОЖЕНИЯ FLYTOASPAN',
@@ -164,7 +159,7 @@ const SUBPAGES_I18N: Record<
     emailSupport: 'Поддержка по E-Mail',
     opsEye: 'УПРАВЛЕНИЕ БРОНИРОВАНИЕМ',
     opsTitle: 'Мои Билеты и Возврат',
-    opsSub: 'Проверьте статус билета, оформите обмен или возврат по коду бронирования PNR и фамилии.',
+    opsSub: 'Найдите бронирование по коду PNR и фамилии пассажира.',
     opsCardTitle: 'Поиск билета по PNR',
     pnrLabel: 'Код бронирования (PNR) *',
     pnrPh: 'Напр.: FTA8K4',
@@ -172,11 +167,9 @@ const SUBPAGES_I18N: Record<
     surnamePh: 'Напр.: YILMAZ',
     queryBtn: 'Найти билет',
     foundTitle: (p) => `Бронирование найдено (${p})`,
-    paxLabel: 'Пассажир',
     statusLabel: 'Статус',
-    activeTicket: 'Активный билет',
     supportHint: 'Для возврата или обмена свяжитесь с нашей круглосуточной линией:',
-    notFoundErr: 'Пожалуйста, введите корректный код PNR (не менее 5 символов) и фамилию.',
+    notFoundErr: 'Бронирование с таким кодом и фамилией не найдено.',
   },
   KK: {
     campEye: 'FLYTOASPAN НАУҚАНДАРЫ',
@@ -205,7 +198,7 @@ const SUBPAGES_I18N: Record<
     emailSupport: 'E-Mail Қолдау',
     opsEye: 'БРОНДАУДЫ БАСҚАРУ',
     opsTitle: 'Билет Операциялары және Бас Тарту',
-    opsSub: 'PNR кодыңыз бен жолаушы тегі арқылы билетті тексеріп, өзгерту немесе қайтару өтінімін жасай аласыз.',
+    opsSub: 'Брондауды PNR коды және жолаушының тегі арқылы іздеңіз.',
     opsCardTitle: 'PNR арқылы билет тексеру',
     pnrLabel: 'PNR / Брондау коды *',
     pnrPh: 'Мыс: FTA8K4',
@@ -213,11 +206,9 @@ const SUBPAGES_I18N: Record<
     surnamePh: 'Мыс: YILMAZ',
     queryBtn: 'Билетімді тексеру',
     foundTitle: (p) => `Брондау табылды (${p})`,
-    paxLabel: 'Жолаушы',
     statusLabel: 'Күйі',
-    activeTicket: 'Белсенді билет',
     supportHint: 'Қайтару немесе күнді өзгерту үшін 24/7 желімізге хабарласыңыз:',
-    notFoundErr: 'Кемінде 5 таңбадан тұратын жарамды PNR коды мен тегіңізді енгізіңіз.',
+    notFoundErr: 'Бұл код пен текке сәйкес брондау табылмады.',
   },
 };
 
@@ -258,7 +249,7 @@ export const CampaignsPage: React.FC<{
 
       <section className="results-workspace">
         <div className="container">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(460px, 1fr))', gap: 22 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 340px), 1fr))', gap: 22 }}>
             {list.map((c) => (
               <div key={c.id} className="ufc-banner" style={{ background: c.gradient, minHeight: 280 }}>
                 <img src={c.image} alt={c.title} className="ufc-banner-img" />
@@ -515,26 +506,27 @@ export const HelpPage: React.FC<{ lang?: LangCode }> = ({ lang = 'TR' }) => {
   );
 };
 
-export const BookingOpsPage: React.FC<{ lang?: LangCode; bookings?: BookingRecord[] }> = ({
-  lang = 'TR',
-  bookings = [],
-}) => {
+export const BookingOpsPage: React.FC<{ lang?: LangCode }> = ({ lang = 'TR' }) => {
   const [pnr, setPnr] = useState('');
   const [surname, setSurname] = useState('');
-  const [result, setResult] = useState<null | 'found' | 'notfound'>(null);
-  const [matchedBooking, setMatchedBooking] = useState<BookingRecord | null>(null);
+  const [matchedBooking, setMatchedBooking] = useState<BookingLookup | null>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
   const ui = SUBPAGES_I18N[lang];
 
-  const handleLookup = (e: React.FormEvent) => {
+  const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanPnr = pnr.trim().toUpperCase();
-    const found = bookings.find((b) => b.pnr.toUpperCase() === cleanPnr) || null;
-    if (found || (cleanPnr.length >= 5 && surname.trim().length >= 2)) {
-      setMatchedBooking(found);
-      setResult('found');
-    } else {
-      setMatchedBooking(null);
-      setResult('notfound');
+    if (pending) return;
+    setPending(true);
+    setMatchedBooking(null);
+    setError('');
+    try {
+      const { booking } = await api.lookup(pnr, surname);
+      setMatchedBooking(booking);
+    } catch (cause) {
+      setError(cause instanceof ApiError && cause.status === 404 ? ui.notFoundErr : apiMessage(cause));
+    } finally {
+      setPending(false);
     }
   };
 
@@ -558,7 +550,7 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; bookings?: BookingRecor
               <strong style={{ fontSize: 18 }}>{ui.opsCardTitle}</strong>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 18 }}>
+            <div className="panel-form-grid" style={{ marginBottom: 18 }}>
               <div>
                 <label
                   htmlFor="pnr-lookup-code"
@@ -570,10 +562,17 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; bookings?: BookingRecor
                   id="pnr-lookup-code"
                   name="pnr"
                   required
+                  disabled={pending}
+                  minLength={5}
+                  maxLength={24}
                   className="modal-input"
                   placeholder={ui.pnrPh}
                   value={pnr}
-                  onChange={(e) => setPnr(e.target.value.toUpperCase())}
+                  onChange={(e) => {
+                    setPnr(e.target.value.toUpperCase());
+                    setMatchedBooking(null);
+                    setError('');
+                  }}
                 />
               </div>
               <div>
@@ -588,20 +587,27 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; bookings?: BookingRecor
                   name="surname"
                   autoComplete="family-name"
                   required
+                  disabled={pending}
+                  maxLength={80}
                   className="modal-input"
                   placeholder={ui.surnamePh}
                   value={surname}
-                  onChange={(e) => setSurname(e.target.value)}
+                  onChange={(e) => {
+                    setSurname(e.target.value);
+                    setMatchedBooking(null);
+                    setError('');
+                  }}
                 />
               </div>
             </div>
 
-            <button type="submit" className="u4-submit-btn" style={{ width: '100%' }}>
+            <button type="submit" disabled={pending} className="u4-submit-btn" style={{ width: '100%' }}>
               {ui.queryBtn}
             </button>
 
-            {result === 'found' && (
+            {matchedBooking && (
               <div
+                role="status"
                 style={{
                   marginTop: 18,
                   padding: 16,
@@ -612,21 +618,20 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; bookings?: BookingRecor
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#047857' }}>
                   <CheckCircle2 size={18} />
-                  {ui.foundTitle(pnr)}
+                  {ui.foundTitle(matchedBooking.pnr)}
                 </div>
                 <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--aspan-text-body)' }}>
-                  {ui.paxLabel}: <strong>{matchedBooking ? matchedBooking.passenger : surname.toUpperCase()}</strong> ·{' '}
-                  {matchedBooking
-                    ? `${matchedBooking.title} (${formatDisplayDate(matchedBooking.date, lang)})`
-                    : 'İstanbul (IST) → Almatı (ALA)'}{' '}
-                  · {ui.statusLabel}: <strong>{matchedBooking ? matchedBooking.status : ui.activeTicket}</strong>.{' '}
+                  {matchedBooking.title} ({formatDisplayDate(matchedBooking.date, lang)}
+                  {matchedBooking.returnDate && ` → ${formatDisplayDate(matchedBooking.returnDate, lang)}`}) ·{' '}
+                  {ui.statusLabel}: <strong>{matchedBooking.demo ? 'Deneme kaydı · ' : ''}{matchedBooking.status}</strong>.{' '}
                   {ui.supportHint} <strong>{PHONE_DISPLAY}</strong>
                 </p>
               </div>
             )}
 
-            {result === 'notfound' && (
+            {error && (
               <div
+                role="alert"
                 style={{
                   marginTop: 18,
                   padding: 14,
@@ -640,7 +645,7 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; bookings?: BookingRecor
                 }}
               >
                 <AlertCircle size={17} />
-                {ui.notFoundErr}
+                {error}
               </div>
             )}
           </form>

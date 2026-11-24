@@ -10,18 +10,18 @@ export interface CurrencyInfo {
 
 export const CURRENCIES: CurrencyInfo[] = [
   { code: 'TRY', symbol: '₺', label: 'TRY ₺ — Türk Lirası', rateFromTRY: 1 },
-  { code: 'USD', symbol: '$', label: 'USD $ — US Dollar', rateFromTRY: 1 / 34.45 },
-  { code: 'EUR', symbol: '€', label: 'EUR € — Euro', rateFromTRY: 1 / 36.85 },
-  { code: 'KZT', symbol: '₸', label: 'KZT ₸ — Қазақстан теңгесі', rateFromTRY: 14.48 },
-  { code: 'RUB', symbol: '₽', label: 'RUB ₽ — Российский рубль', rateFromTRY: 2.86 },
+  { code: 'USD', symbol: '$', label: 'USD $ — US Dollar', rateFromTRY: 0.019754 },
+  { code: 'EUR', symbol: '€', label: 'EUR € — Euro', rateFromTRY: 0.018109 },
+  { code: 'KZT', symbol: '₸', label: 'KZT ₸ — Қазақстан теңгесі', rateFromTRY: 8.988027 },
+  { code: 'RUB', symbol: '₽', label: 'RUB ₽ — Российский рубль', rateFromTRY: 1.618745 },
 ];
 
 let liveRatesMap: Record<CurrencyCode, number> = {
   TRY: 1,
-  USD: 1 / 34.45,
-  EUR: 1 / 36.85,
-  KZT: 14.48,
-  RUB: 2.86,
+  USD: 0.019754,
+  EUR: 0.018109,
+  KZT: 8.988027,
+  RUB: 1.618745,
 };
 
 let liveRatesUpdatedAt: string | null = null;
@@ -37,33 +37,45 @@ export async function refreshLiveExchangeRates(): Promise<{
   rates: Record<CurrencyCode, number>;
   updatedAt: string;
 }> {
+  const applyRates = (rates?: Record<string, number>) => {
+    if (!rates) return false;
+    liveRatesMap = {
+      TRY: 1,
+      USD: typeof rates.USD === 'number' ? rates.USD : liveRatesMap.USD,
+      EUR: typeof rates.EUR === 'number' ? rates.EUR : liveRatesMap.EUR,
+      KZT: typeof rates.KZT === 'number' ? rates.KZT : liveRatesMap.KZT,
+      RUB: typeof rates.RUB === 'number' ? rates.RUB : liveRatesMap.RUB,
+    };
+    CURRENCIES.forEach((c) => {
+      c.rateFromTRY = liveRatesMap[c.code];
+    });
+    liveRatesUpdatedAt = new Date().toLocaleTimeString('tr-TR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    return true;
+  };
+
   try {
-    const res = await fetch('https://open.er-api.com/v6/latest/TRY');
-    if (res.ok) {
-      const data = (await res.json()) as {
-        result?: string;
-        time_last_update_utc?: string;
-        rates?: Record<string, number>;
-      };
-      if (data?.rates) {
-        liveRatesMap = {
-          TRY: 1,
-          USD: typeof data.rates.USD === 'number' ? data.rates.USD : liveRatesMap.USD,
-          EUR: typeof data.rates.EUR === 'number' ? data.rates.EUR : liveRatesMap.EUR,
-          KZT: typeof data.rates.KZT === 'number' ? data.rates.KZT : liveRatesMap.KZT,
-          RUB: typeof data.rates.RUB === 'number' ? data.rates.RUB : liveRatesMap.RUB,
-        };
-        CURRENCIES.forEach((c) => {
-          c.rateFromTRY = liveRatesMap[c.code];
-        });
-        liveRatesUpdatedAt = new Date().toLocaleTimeString('tr-TR', {
-          hour: '2-digit',
-          minute: '2-digit',
-        });
+    const localRes = await fetch('/api/fx', { credentials: 'same-origin' });
+    if (localRes.ok) {
+      const localData = (await localRes.json()) as { rates?: Record<string, number> };
+      if (applyRates(localData?.rates)) {
+        return { rates: { ...liveRatesMap }, updatedAt: liveRatesUpdatedAt || 'Güncel Merkez Kuru' };
       }
     }
   } catch {
-    /* keep fallback rates if offline */
+    /* fallback to direct public feed if /api/fx unavailable */
+  }
+
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/TRY');
+    if (res.ok) {
+      const data = (await res.json()) as { rates?: Record<string, number> };
+      applyRates(data?.rates);
+    }
+  } catch {
+    /* keep current fallback rates if offline */
   }
   return {
     rates: { ...liveRatesMap },
@@ -78,18 +90,6 @@ export const DEFAULT_MARKUP: AdminMarkupConfig = {
   hotelPercent: 8,
   transferAddTRY: 150,
 };
-
-export function getSavedMarkup(): AdminMarkupConfig {
-  try {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem('flytoaspan_markup') : null;
-    if (raw) {
-      return { ...DEFAULT_MARKUP, ...(JSON.parse(raw) as Partial<AdminMarkupConfig>) };
-    }
-  } catch {
-    /* ignore */
-  }
-  return DEFAULT_MARKUP;
-}
 
 export function formatPrice(amountTRY: number, currency: CurrencyCode = 'TRY'): string {
   const rate = liveRatesMap[currency] ?? (CURRENCIES.find((c) => c.code === currency)?.rateFromTRY || 1);
@@ -108,6 +108,7 @@ export interface Airport {
   airport: string;
   country: string;
   domestic?: boolean;
+  aliases?: string[];
 }
 
 export interface FlightDeal {
@@ -216,38 +217,38 @@ export interface FlightResult {
 }
 
 export const AIRPORTS: Airport[] = [
-  { code: 'IST', city: 'İstanbul', airport: 'İstanbul Havalimanı', country: 'Türkiye', domestic: true },
-  { code: 'SAW', city: 'İstanbul', airport: 'Sabiha Gökçen Havalimanı', country: 'Türkiye', domestic: true },
-  { code: 'ESB', city: 'Ankara', airport: 'Esenboğa Havalimanı', country: 'Türkiye', domestic: true },
-  { code: 'ADB', city: 'İzmir', airport: 'Adnan Menderes Havalimanı', country: 'Türkiye', domestic: true },
-  { code: 'AYT', city: 'Antalya', airport: 'Antalya Havalimanı', country: 'Türkiye', domestic: true },
-  { code: 'TZX', city: 'Trabzon', airport: 'Trabzon Havalimanı', country: 'Türkiye', domestic: true },
-  { code: 'BJV', city: 'Bodrum', airport: 'Milas-Bodrum Havalimanı', country: 'Türkiye', domestic: true },
-  { code: 'DLM', city: 'Dalaman', airport: 'Dalaman Havalimanı', country: 'Türkiye', domestic: true },
-  { code: 'ADA', city: 'Adana', airport: 'Çukurova Uluslararası Havalimanı', country: 'Türkiye', domestic: true },
-  { code: 'GZT', city: 'Gaziantep', airport: 'Gaziantep Havalimanı', country: 'Türkiye', domestic: true },
-  { code: 'KYA', city: 'Konya', airport: 'Konya Havalimanı', country: 'Türkiye', domestic: true },
-  { code: 'ERZ', city: 'Erzurum', airport: 'Erzurum Havalimanı', country: 'Türkiye', domestic: true },
-  { code: 'GNY', city: 'Şanlıurfa', airport: 'GAP Havalimanı', country: 'Türkiye', domestic: true },
-  { code: 'VAN', city: 'Van', airport: 'Ferit Melen Havalimanı', country: 'Türkiye', domestic: true },
-  { code: 'ALA', city: 'Almatı', airport: 'Almatı Uluslararası Havalimanı', country: 'Kazakistan' },
-  { code: 'NQZ', city: 'Astana', airport: 'Nursultan Nazarbayev Havalimanı', country: 'Kazakistan' },
-  { code: 'TAS', city: 'Taşkent', airport: 'Taşkent Uluslararası Havalimanı', country: 'Özbekistan' },
-  { code: 'GYD', city: 'Bakü', airport: 'Haydar Aliyev Havalimanı', country: 'Azerbaycan' },
-  { code: 'TBS', city: 'Tiflis', airport: 'Tiflis Uluslararası Havalimanı', country: 'Gürcistan' },
-  { code: 'LHR', city: 'Londra', airport: 'Heathrow Havalimanı', country: 'Birleşik Krallık' },
-  { code: 'CDG', city: 'Paris', airport: 'Charles de Gaulle Havalimanı', country: 'Fransa' },
-  { code: 'AMS', city: 'Amsterdam', airport: 'Schiphol Havalimanı', country: 'Hollanda' },
-  { code: 'BER', city: 'Berlin', airport: 'Brandenburg Havalimanı', country: 'Almanya' },
-  { code: 'FRA', city: 'Frankfurt', airport: 'Frankfurt Havalimanı', country: 'Almanya' },
-  { code: 'FCO', city: 'Roma', airport: 'Fiumicino Havalimanı', country: 'İtalya' },
-  { code: 'BCN', city: 'Barselona', airport: 'El Prat Havalimanı', country: 'İspanya' },
-  { code: 'VIE', city: 'Viyana', airport: 'Schwechat Havalimanı', country: 'Avusturya' },
-  { code: 'PRG', city: 'Prag', airport: 'Václav Havel Havalimanı', country: 'Çekya' },
-  { code: 'DXB', city: 'Dubai', airport: 'Dubai Uluslararası Havalimanı', country: 'BAE' },
-  { code: 'JFK', city: 'New York', airport: 'John F. Kennedy Havalimanı', country: 'ABD' },
-  { code: 'ICN', city: 'Seul', airport: 'Incheon Uluslararası Havalimanı', country: 'Güney Kore' },
-  { code: 'HND', city: 'Tokyo', airport: 'Haneda Havalimanı', country: 'Japonya' },
+  { code: 'IST', city: 'İstanbul', airport: 'İstanbul Havalimanı', country: 'Türkiye', domestic: true, aliases: ['Istanbul', 'Стамбул', 'Ыстамбұл', 'Turkey', 'Турция', 'Түркия'] },
+  { code: 'SAW', city: 'İstanbul', airport: 'Sabiha Gökçen Havalimanı', country: 'Türkiye', domestic: true, aliases: ['Istanbul', 'Sabiha Gokcen', 'Стамбул', 'Сабиха Гёкчен', 'Ыстамбұл'] },
+  { code: 'ESB', city: 'Ankara', airport: 'Esenboğa Havalimanı', country: 'Türkiye', domestic: true, aliases: ['Анкара', 'Эсенбога', 'Esenboga'] },
+  { code: 'ADB', city: 'İzmir', airport: 'Adnan Menderes Havalimanı', country: 'Türkiye', domestic: true, aliases: ['Izmir', 'Измир'] },
+  { code: 'AYT', city: 'Antalya', airport: 'Antalya Havalimanı', country: 'Türkiye', domestic: true, aliases: ['Анталья', 'Анталия'] },
+  { code: 'TZX', city: 'Trabzon', airport: 'Trabzon Havalimanı', country: 'Türkiye', domestic: true, aliases: ['Трабзон'] },
+  { code: 'BJV', city: 'Bodrum', airport: 'Milas-Bodrum Havalimanı', country: 'Türkiye', domestic: true, aliases: ['Бодрум', 'Милас'] },
+  { code: 'DLM', city: 'Dalaman', airport: 'Dalaman Havalimanı', country: 'Türkiye', domestic: true, aliases: ['Даламан'] },
+  { code: 'ADA', city: 'Adana', airport: 'Çukurova Uluslararası Havalimanı', country: 'Türkiye', domestic: true, aliases: ['Адана', 'Cukurova'] },
+  { code: 'GZT', city: 'Gaziantep', airport: 'Gaziantep Havalimanı', country: 'Türkiye', domestic: true, aliases: ['Газиантеп'] },
+  { code: 'KYA', city: 'Konya', airport: 'Konya Havalimanı', country: 'Türkiye', domestic: true, aliases: ['Конья'] },
+  { code: 'ERZ', city: 'Erzurum', airport: 'Erzurum Havalimanı', country: 'Türkiye', domestic: true, aliases: ['Эрзурум'] },
+  { code: 'GNY', city: 'Şanlıurfa', airport: 'GAP Havalimanı', country: 'Türkiye', domestic: true, aliases: ['Sanliurfa', 'Шанлыурфа'] },
+  { code: 'VAN', city: 'Van', airport: 'Ferit Melen Havalimanı', country: 'Türkiye', domestic: true, aliases: ['Ван'] },
+  { code: 'ALA', city: 'Almatı', airport: 'Almatı Uluslararası Havalimanı', country: 'Kazakistan', aliases: ['Almaty', 'Алматы', 'Kazakhstan', 'Казахстан', 'Қазақстан'] },
+  { code: 'NQZ', city: 'Astana', airport: 'Nursultan Nazarbayev Havalimanı', country: 'Kazakistan', aliases: ['Астана', 'Nur-Sultan', 'Нур-Султан', 'Kazakhstan', 'Қазақстан'] },
+  { code: 'TAS', city: 'Taşkent', airport: 'Taşkent Uluslararası Havalimanı', country: 'Özbekistan', aliases: ['Tashkent', 'Ташкент', 'Uzbekistan', 'Узбекистан'] },
+  { code: 'GYD', city: 'Bakü', airport: 'Haydar Aliyev Havalimanı', country: 'Azerbaycan', aliases: ['Baku', 'Баку', 'Azerbaijan', 'Азербайджан'] },
+  { code: 'TBS', city: 'Tiflis', airport: 'Tiflis Uluslararası Havalimanı', country: 'Gürcistan', aliases: ['Tbilisi', 'Тбилиси', 'Georgia', 'Грузия'] },
+  { code: 'LHR', city: 'Londra', airport: 'Heathrow Havalimanı', country: 'Birleşik Krallık', aliases: ['London', 'Лондон', 'UK', 'Великобритания'] },
+  { code: 'CDG', city: 'Paris', airport: 'Charles de Gaulle Havalimanı', country: 'Fransa', aliases: ['Париж', 'France', 'Франция'] },
+  { code: 'AMS', city: 'Amsterdam', airport: 'Schiphol Havalimanı', country: 'Hollanda', aliases: ['Амстердам', 'Netherlands', 'Нидерланды'] },
+  { code: 'BER', city: 'Berlin', airport: 'Brandenburg Havalimanı', country: 'Almanya', aliases: ['Берлин', 'Germany', 'Германия'] },
+  { code: 'FRA', city: 'Frankfurt', airport: 'Frankfurt Havalimanı', country: 'Almanya', aliases: ['Франкфурт', 'Germany', 'Германия'] },
+  { code: 'FCO', city: 'Roma', airport: 'Fiumicino Havalimanı', country: 'İtalya', aliases: ['Rome', 'Рим', 'Italy', 'Италия'] },
+  { code: 'BCN', city: 'Barselona', airport: 'El Prat Havalimanı', country: 'İspanya', aliases: ['Barcelona', 'Барселона', 'Spain', 'Испания'] },
+  { code: 'VIE', city: 'Viyana', airport: 'Schwechat Havalimanı', country: 'Avusturya', aliases: ['Vienna', 'Вена', 'Austria', 'Австрия'] },
+  { code: 'PRG', city: 'Prag', airport: 'Václav Havel Havalimanı', country: 'Çekya', aliases: ['Prague', 'Прага', 'Czechia'] },
+  { code: 'DXB', city: 'Dubai', airport: 'Dubai Uluslararası Havalimanı', country: 'BAE', aliases: ['Дубай', 'UAE', 'ОАЭ'] },
+  { code: 'JFK', city: 'New York', airport: 'John F. Kennedy Havalimanı', country: 'ABD', aliases: ['Нью-Йорк', 'USA', 'США'] },
+  { code: 'ICN', city: 'Seul', airport: 'Incheon Uluslararası Havalimanı', country: 'Güney Kore', aliases: ['Seoul', 'Сеул', 'Korea'] },
+  { code: 'HND', city: 'Tokyo', airport: 'Haneda Havalimanı', country: 'Japonya', aliases: ['Токио', 'Japan', 'Япония'] },
 ];
 
 export const AIRLINE_MARQUEE = [
@@ -467,7 +468,7 @@ export function formatDisplayDate(
 
 export function getFlightDeals(
   lang: 'TR' | 'EN' | 'RU' | 'KK' = 'TR',
-  markup: AdminMarkupConfig = getSavedMarkup()
+  markup: AdminMarkupConfig = DEFAULT_MARKUP
 ): FlightDeal[] {
   const today = toCalendarDate(new Date());
 
@@ -710,7 +711,7 @@ const FARE_PACKAGES_BASE: FarePackage[] = [
     refundText: 'İade yok',
     changeable: false,
     changeText: 'Ücretli değişiklik',
-    meal: 'Ücretsiz ikram',
+    meal: 'İkram satın alınabilir',
     seat: 'Standart koltuk',
     priceDelta: 0,
   },
@@ -771,7 +772,7 @@ const FARE_PACKAGES_I18N: Record<'TR' | 'EN' | 'RU' | 'KK', FarePackage[]> = {
       refundText: 'Non-refundable',
       changeable: false,
       changeText: 'Changes with fee',
-      meal: 'Complimentary snack',
+      meal: 'Snacks for purchase',
       seat: 'Standard seat',
       priceDelta: 0,
     },
@@ -829,7 +830,7 @@ const FARE_PACKAGES_I18N: Record<'TR' | 'EN' | 'RU' | 'KK', FarePackage[]> = {
       refundText: 'Без возврата',
       changeable: false,
       changeText: 'Обмен с доплатой',
-      meal: 'Лёгкий перекус',
+      meal: 'Питание за доплату',
       seat: 'Стандартное место',
       priceDelta: 0,
     },
@@ -887,7 +888,7 @@ const FARE_PACKAGES_I18N: Record<'TR' | 'EN' | 'RU' | 'KK', FarePackage[]> = {
       refundText: 'Қайтарылмайды',
       changeable: false,
       changeText: 'Ақылы өзгерту',
-      meal: 'Тегін жеңіл тағам',
+      meal: 'Тағам ақылы',
       seat: 'Стандартты орын',
       priceDelta: 0,
     },
@@ -936,13 +937,139 @@ const FARE_PACKAGES_I18N: Record<'TR' | 'EN' | 'RU' | 'KK', FarePackage[]> = {
   ],
 };
 
+const BUSINESS_PACKAGES_I18N: Record<'TR' | 'EN' | 'RU' | 'KK', FarePackage[]> = {
+  TR: [
+    {
+      id: 'biz-standard',
+      name: 'Business Class',
+      cabin: 'BUSINESS',
+      cabinBag: '2 × 8 kg kabin bagajı',
+      checkedBag: '32 kg uçak altı bagaj',
+      refundable: true,
+      refundText: 'Kesintili iade',
+      changeable: true,
+      changeText: 'Ücretsiz tarih değişikliği',
+      meal: 'Lounge + Business menü',
+      seat: 'Geniş Business koltuk',
+      priceDelta: 0,
+    },
+    {
+      id: 'biz-flex',
+      name: 'Business Flex',
+      cabin: 'BUSINESS',
+      cabinBag: '2 × 8 kg kabin bagajı',
+      checkedBag: '40 kg uçak altı bagaj',
+      refundable: true,
+      refundText: 'Tam kesintisiz iade',
+      changeable: true,
+      changeText: 'Sınırsız ücretsiz değişiklik',
+      meal: 'VIP Lounge + Özel şef menüsü',
+      seat: 'Öncelikli Business koltuk + Fast Track',
+      priceDelta: 1450,
+    },
+  ],
+  EN: [
+    {
+      id: 'biz-standard',
+      name: 'Business Class',
+      cabin: 'BUSINESS',
+      cabinBag: '2 × 8 kg cabin baggage',
+      checkedBag: '32 kg checked baggage',
+      refundable: true,
+      refundText: 'Partial refund',
+      changeable: true,
+      changeText: 'Free date change',
+      meal: 'Lounge + Business dining',
+      seat: 'Lie-flat Business seat',
+      priceDelta: 0,
+    },
+    {
+      id: 'biz-flex',
+      name: 'Business Flex',
+      cabin: 'BUSINESS',
+      cabinBag: '2 × 8 kg cabin baggage',
+      checkedBag: '40 kg checked baggage',
+      refundable: true,
+      refundText: 'Full free refund',
+      changeable: true,
+      changeText: 'Unlimited free changes',
+      meal: 'VIP Lounge + Signature dining',
+      seat: 'Priority Business seat + Fast Track',
+      priceDelta: 1450,
+    },
+  ],
+  RU: [
+    {
+      id: 'biz-standard',
+      name: 'Business Class',
+      cabin: 'BUSINESS',
+      cabinBag: '2 × 8 кг ручная кладь',
+      checkedBag: '32 кг багаж',
+      refundable: true,
+      refundText: 'Возврат с удержанием',
+      changeable: true,
+      changeText: 'Бесплатный обмен даты',
+      meal: 'Бизнес-зал + Бизнес-меню',
+      seat: 'Широкое кресло Business',
+      priceDelta: 0,
+    },
+    {
+      id: 'biz-flex',
+      name: 'Business Flex',
+      cabin: 'BUSINESS',
+      cabinBag: '2 × 8 кг ручная кладь',
+      checkedBag: '40 кг багаж',
+      refundable: true,
+      refundText: 'Полный возврат без штрафа',
+      changeable: true,
+      changeText: 'Гибкий бесплатный обмен',
+      meal: 'VIP-зал + Авторское меню',
+      seat: 'Приоритетное кресло + Fast Track',
+      priceDelta: 1450,
+    },
+  ],
+  KK: [
+    {
+      id: 'biz-standard',
+      name: 'Business Class',
+      cabin: 'BUSINESS',
+      cabinBag: '2 × 8 кг қол жүгі',
+      checkedBag: '32 кг жолжүк',
+      refundable: true,
+      refundText: 'Ішінара қайтару',
+      changeable: true,
+      changeText: 'Күнді тегін өзгерту',
+      meal: 'Бизнес-зал + Бизнес мәзір',
+      seat: 'Кең Business креслосы',
+      priceDelta: 0,
+    },
+    {
+      id: 'biz-flex',
+      name: 'Business Flex',
+      cabin: 'BUSINESS',
+      cabinBag: '2 × 8 кг қол жүгі',
+      checkedBag: '40 кг жолжүк',
+      refundable: true,
+      refundText: 'Толық айыппұлсыз қайтару',
+      changeable: true,
+      changeText: 'Шексіз тегін өзгерту',
+      meal: 'VIP Lounge + Арнайы мәзір',
+      seat: 'Басым Business орны + Fast Track',
+      priceDelta: 1450,
+    },
+  ],
+};
+
+const LCC_CODES = new Set(['PC', 'VF', 'XQ']);
+
 export function generateFlights(
   fromCode: string,
   toCode: string,
   departureDate: string,
   cabin: 'Ekonomi' | 'Business',
   lang: 'TR' | 'EN' | 'RU' | 'KK' = 'TR',
-  markup: AdminMarkupConfig = getSavedMarkup()
+  markup: AdminMarkupConfig = DEFAULT_MARKUP,
+  currency: CurrencyCode = 'TRY'
 ): FlightResult[] {
   const fromObj = AIRPORTS.find((a) => a.code === fromCode) || AIRPORTS[0];
   const toObj = AIRPORTS.find((a) => a.code === toCode) || AIRPORTS[4];
@@ -959,7 +1086,7 @@ export function generateFlights(
   const isReverseDirection = fromCode.localeCompare(toCode) > 0;
   const routeShiftMinutes = isReverseDirection ? 35 : 0;
 
-  const templates = isDomestic
+  const rawTemplates = isDomestic
     ? [
         { airline: 'Turkish Airlines', code: 'TK', color: '#C8102E', numBase: 2410, dep: '06:35', dur: 80, stops: 0, mult: 1.0 },
         { airline: 'Pegasus Airlines', code: 'PC', color: '#D97706', numBase: 2014, dep: '08:15', dur: 85, stops: 0, mult: 0.96 },
@@ -978,6 +1105,20 @@ export function generateFlights(
         { airline: 'Turkish Airlines', code: 'TK', color: '#C8102E', numBase: 354, dep: '21:10', dur: 305, stops: 0, mult: 1.16 },
         { airline: 'Emirates', code: 'EK', color: '#D71921', numBase: 122, dep: '23:30', dur: 530, stops: 1, stopCity: 'DXB', mult: 1.32 },
       ];
+
+  const templates = cabin === 'Business'
+    ? rawTemplates.filter((t) => !LCC_CODES.has(t.code))
+    : rawTemplates;
+
+  const feeFormatted = formatPrice(450, currency);
+  const basePackages = (
+    cabin === 'Business'
+      ? BUSINESS_PACKAGES_I18N[lang] || BUSINESS_PACKAGES_I18N.TR
+      : FARE_PACKAGES_I18N[lang] || FARE_PACKAGES_BASE
+  ).map((pkg) => ({
+    ...pkg,
+    refundText: pkg.refundText.replace('₺450', feeFormatted),
+  }));
 
   const durUnits: Record<'TR' | 'EN' | 'RU' | 'KK', [string, string]> = {
     TR: ['sa', 'dk'],
@@ -1005,6 +1146,10 @@ export function generateFlights(
     const price = Math.round((baseFare * priceFactor * cabinMult) / 10) * 10;
     const flightNum = `${t.code}${String(t.numBase + (isReverseDirection ? 1 : 0)).padStart(t.numBase < 100 ? 3 : 0, '0')}`;
 
+    const packages = cabin === 'Business' || !LCC_CODES.has(t.code)
+      ? basePackages
+      : basePackages.filter((pkg) => pkg.cabin !== 'BUSINESS');
+
     return {
       id: `flt-${idx}-${fromCode}-${toCode}-${departureDate}`,
       airline: t.airline,
@@ -1027,7 +1172,7 @@ export function generateFlights(
       stopCity: t.stopCity,
       basePrice: price,
       seatsLeft: 2 + ((idx * 3 + (isReverseDirection ? 2 : 0)) % 7),
-      packages: FARE_PACKAGES_I18N[lang] || FARE_PACKAGES_BASE,
+      packages,
     };
   });
 }

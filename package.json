@@ -4,9 +4,12 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node --env-file-if-exists=.env node_modules/vite/bin/vite.js",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "node --env-file-if-exists=.env node_modules/vite/bin/vite.js preview",
+    "start": "node --env-file-if-exists=.env server/index.mjs",
+    "admin:create": "node --env-file-if-exists=.env server/create-admin.mjs",
+    "test:api": "node --test server/test-api.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.460.0",

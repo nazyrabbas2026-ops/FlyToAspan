@@ -2,6 +2,13 @@
 
 Bu doküman, bir uçak bileti / otel / VIP transfer satış platformunu canlı ortamda güvenli, yasalara uyumlu ve kesintisiz işletmek için gereken tüm teknik ve hukuki bileşenleri özetler.
 
+## Yerel sunucuyu çalıştırma
+
+- Node.js 24 veya üzeriyle `npm install` ve `npm run dev` çalıştırın. Derlenmiş sürüm için `npm run build` ve `npm start` kullanın. Ana sayfa ve paylaşılabilir adresler aynı sunucudan açılır.
+- Üye hesabı sitedeki **Kayıt Ol** ekranından açılır. Yönetici hesabını sunucunun terminalinde `npm run admin:create` komutuyla oluşturun ve `/yonetim` adresinden giriş yapın. Parola yazılırken ekranda görünmez.
+- Hesaplar, rezervasyonlar ve fiyat kuralları varsayılan olarak `.data/flytoaspan.sqlite` dosyasında saklanır. İsteğe bağlı `FLYTOASPAN_DB` değişkeni kalıcı veritabanının konumunu belirler. Dış erişimde HTTPS sağlayan vekil sunucu kullanın ve `FLYTOASPAN_ORIGIN` değerini sitenin tam HTTPS adresi olarak ayarlayın.
+- Uçuş, otel ve transfer kayıtları şu aşamada denemedir. Anlaşmalı sağlayıcının test erişimi geldiğinde İstanbul–Antalya gidiş-dönüş fiyatı, ödeme, biletleme ve iptal uçtan uca doğrulanacaktır. Parola sıfırlama, e-posta doğrulaması ve iki aşamalı giriş henüz bağlı değildir.
+
 ---
 
 ## 1. Sunucu, Reverse Proxy ve Ağ Güvenliği

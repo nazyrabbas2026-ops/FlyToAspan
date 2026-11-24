@@ -4,13 +4,10 @@ import {
   Calendar,
   Users,
   MapPin,
-  CheckCircle2,
   Star,
   CarTaxiFront,
   X,
-  Printer,
   Tag,
-  Plane,
   Building2,
 } from 'lucide-react';
 import {
@@ -22,6 +19,7 @@ import {
   formatDisplayDate,
   formatPrice,
 } from '../data/mockData';
+import { apiMessage, type BookingDraft } from '../data/api';
 import {
   AdminMarkupConfig,
   BookingRecord,
@@ -43,13 +41,11 @@ const HT_I18N: Record<
     nights: string;
     totalPrice: string;
     selectRoom: string;
-    hotelReqTitle: string;
     okBtn: string;
     vipTitle: string;
     paxUnit: string;
     fixedVehiclePrice: string;
     bookTransfer: string;
-    transferReqTitle: string;
   }
 > = {
   TR: {
@@ -62,13 +58,11 @@ const HT_I18N: Record<
     nights: 'Gece',
     totalPrice: 'TOPLAM FİYAT',
     selectRoom: 'Odayı Seç',
-    hotelReqTitle: 'Otel Konaklama Voucher Belgesi',
     okBtn: 'Tamam',
     vipTitle: 'VIP Havalimanı Transfer Seçenekleri',
     paxUnit: 'Yolcu',
     fixedVehiclePrice: 'SABİT ARAÇ FİYATI',
     bookTransfer: 'Transferi Ayırt',
-    transferReqTitle: 'VIP Transfer & Karşılama Voucher Belgesi',
   },
   EN: {
     changeSearch: 'Change search',
@@ -80,13 +74,11 @@ const HT_I18N: Record<
     nights: 'Nights',
     totalPrice: 'TOTAL PRICE',
     selectRoom: 'Select Room',
-    hotelReqTitle: 'Hotel Accommodation Voucher',
     okBtn: 'Done',
     vipTitle: 'VIP Airport Transfer Options',
     paxUnit: 'Passengers',
     fixedVehiclePrice: 'FIXED VEHICLE FARE',
     bookTransfer: 'Book Transfer',
-    transferReqTitle: 'VIP Transfer & Meet-and-Greet Voucher',
   },
   RU: {
     changeSearch: 'Изменить поиск',
@@ -98,13 +90,11 @@ const HT_I18N: Record<
     nights: 'ночи',
     totalPrice: 'ИТОГОВАЯ ЦЕНА',
     selectRoom: 'Выбрать номер',
-    hotelReqTitle: 'Официальный Ваучер Отеля',
     okBtn: 'Готово',
     vipTitle: 'VIP Трансфер из Аэропорта',
     paxUnit: 'пасс.',
     fixedVehiclePrice: 'ФИКСИРОВАННАЯ ЦЕНА ЗА АВТО',
     bookTransfer: 'Забронировать',
-    transferReqTitle: 'Ваучер VIP-Трансфера',
   },
   KK: {
     changeSearch: 'Іздеуді өзгерту',
@@ -116,13 +106,91 @@ const HT_I18N: Record<
     nights: 'түн',
     totalPrice: 'ЖАЛПЫ БАҒА',
     selectRoom: 'Бөлмені таңдау',
-    hotelReqTitle: 'Қонақ үй Ваучері (Hotel Voucher)',
     okBtn: 'Дайын',
     vipTitle: 'VIP Әуежай Трансфері Опциялары',
     paxUnit: 'жолаушы',
     fixedVehiclePrice: 'ТҰРАҚТЫ КӨЛІК БАҒАСЫ',
     bookTransfer: 'Трансферді брондау',
-    transferReqTitle: 'VIP Трансфер Ваучері',
+  },
+};
+
+const HT_MODAL_I18N: Record<
+  LangCode,
+  {
+    savedTitle: string;
+    closeLbl: string;
+    pnrLbl: string;
+    lookupHint: string;
+    nameErr: string;
+    demoNote: string;
+    firstName: string;
+    surname: string;
+    hotelCouponLbl: string;
+    applied: string;
+    applyCode: (code: string) => string;
+    saving: string;
+    saveBtn: string;
+  }
+> = {
+  TR: {
+    savedTitle: 'Deneme rezervasyonu kaydedildi',
+    closeLbl: 'Kapat',
+    pnrLbl: 'Rezervasyon kodu (PNR)',
+    lookupHint: 'Bilet İşlemleri sayfasında bu kodu ve girdiğiniz soyadını kullanın.',
+    nameErr: 'Adınızı ve soyadınızı girin.',
+    demoNote: 'Deneme fiyatıdır. Ödeme alınmaz ve sağlayıcıya rezervasyon gönderilmez.',
+    firstName: 'Ad',
+    surname: 'Soyadı',
+    hotelCouponLbl: 'Otel Kuponu:',
+    applied: '✓ Uygulandı',
+    applyCode: (c) => `${c} Uygula`,
+    saving: 'Kaydediliyor…',
+    saveBtn: 'Deneme rezervasyonunu kaydet',
+  },
+  EN: {
+    savedTitle: 'Demo booking saved',
+    closeLbl: 'Close',
+    pnrLbl: 'Booking code (PNR)',
+    lookupHint: 'Use this code and the surname you entered on the Manage Booking page.',
+    nameErr: 'Please enter your first and last name.',
+    demoNote: 'Sample price only. No payment is charged and no booking is sent to a supplier.',
+    firstName: 'First name',
+    surname: 'Last name',
+    hotelCouponLbl: 'Hotel Promo:',
+    applied: '✓ Applied',
+    applyCode: (c) => `Apply ${c}`,
+    saving: 'Saving…',
+    saveBtn: 'Save demo booking',
+  },
+  RU: {
+    savedTitle: 'Пробное бронирование сохранено',
+    closeLbl: 'Закрыть',
+    pnrLbl: 'Код бронирования (PNR)',
+    lookupHint: 'Используйте этот код и фамилию на странице «Мои билеты».',
+    nameErr: 'Введите имя и фамилию.',
+    demoNote: 'Примерная цена. Оплата не списывается, бронь поставщику не отправляется.',
+    firstName: 'Имя',
+    surname: 'Фамилия',
+    hotelCouponLbl: 'Промокод отеля:',
+    applied: '✓ Применено',
+    applyCode: (c) => `Применить ${c}`,
+    saving: 'Сохранение…',
+    saveBtn: 'Сохранить пробную бронь',
+  },
+  KK: {
+    savedTitle: 'Сынақ брондауы сақталды',
+    closeLbl: 'Жабу',
+    pnrLbl: 'Брондау коды (PNR)',
+    lookupHint: '«Билеттер» бетінде осы код пен енгізген тегіңізді пайдаланыңыз.',
+    nameErr: 'Атыңыз бен тегіңізді енгізіңіз.',
+    demoNote: 'Үлгі баға. Төлем алынбайды және жеткізушіге брондау жіберілмейді.',
+    firstName: 'Аты',
+    surname: 'Тегі',
+    hotelCouponLbl: 'Қонақүй купоны:',
+    applied: '✓ Қолданылды',
+    applyCode: (c) => `${c} қолдану`,
+    saving: 'Сақталуда…',
+    saveBtn: 'Сынақ брондауын сақтау',
   },
 };
 
@@ -132,24 +200,40 @@ export const HotelResultsPage: React.FC<{
   markup?: AdminMarkupConfig;
   query: HotelSearchQuery;
   onBackHome: () => void;
-  onAddBooking?: (record: BookingRecord) => void;
+  onAddBooking: (draft: BookingDraft) => Promise<BookingRecord>;
 }> = ({ lang = 'TR', currency = 'TRY', markup = DEFAULT_MARKUP, query, onBackHome, onAddBooking }) => {
   const [selectedHotel, setSelectedHotel] = useState<HotelDeal | null>(null);
-  const [guestName, setGuestName] = useState('Mert Yılmaz');
-  const [guestDoc, setGuestDoc] = useState('U24901842');
-  const [guestPhone, setGuestPhone] = useState('+90 531 460 61 75');
-  const [guestEmail, setGuestEmail] = useState('yolcu@flytoaspan.com');
   const [couponCode, setCouponCode] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState(0);
   const [confirmedPnr, setConfirmedPnr] = useState<string | null>(null);
-  const [confirmedVoucher, setConfirmedVoucher] = useState<string>('');
+  const [bookingError, setBookingError] = useState('');
+  const [bookingPending, setBookingPending] = useState(false);
 
   const ui = HT_I18N[lang];
+  const mu = HT_MODAL_I18N[lang];
   const hotelMult = 1 + (markup.hotelPercent - DEFAULT_MARKUP.hotelPercent) / 100;
+
+  const normalizeCity = (val: string) =>
+    val.toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  const destToken = normalizeCity(query.destination.split(',')[0] || '');
+  const matchedHotels = destToken
+    ? HOTEL_DEALS.filter(
+        (h) => normalizeCity(h.city).includes(destToken) || normalizeCity(h.name).includes(destToken)
+      )
+    : HOTEL_DEALS;
+  const displayedHotels = matchedHotels.length > 0 ? matchedHotels : HOTEL_DEALS;
+  const isFallbackHotels = Boolean(destToken) && matchedHotels.length === 0;
+  const fallbackNote: Record<LangCode, string> = {
+    TR: `"${query.destination}" için birebir otel bulunamadı; öne çıkan diğer seçkin otellerimiz listeleniyor.`,
+    EN: `No exact hotel match found for "${query.destination}"; showing our other featured hotels.`,
+    RU: `Точных совпадений для «${query.destination}» не найдено — показаны другие популярные отели.`,
+    KK: `«${query.destination}» бойынша дәл сәйкестік табылмады; басқа таңдаулы қонақүйлер көрсетілуде.`,
+  };
 
   const openHotelModal = (h: HotelDeal) => {
     setSelectedHotel(h);
     setConfirmedPnr(null);
+    setBookingError('');
     setAppliedDiscount(0);
     setCouponCode('');
   };
@@ -186,8 +270,24 @@ export const HotelResultsPage: React.FC<{
 
       <section className="results-workspace">
         <div className="container">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 20 }}>
-            {HOTEL_DEALS.map((h) => {
+          {isFallbackHotels && (
+            <div
+              role="status"
+              style={{
+                marginBottom: 18,
+                padding: '12px 16px',
+                borderRadius: 12,
+                background: 'var(--aspan-teal-soft)',
+                color: 'var(--aspan-teal-deep)',
+                fontSize: 13.5,
+                fontWeight: 700,
+              }}
+            >
+              {fallbackNote[lang]}
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 340px), 1fr))', gap: 20 }}>
+            {displayedHotels.map((h) => {
               const adjPrice = Math.max(990, Math.round(h.price * hotelMult));
               return (
                 <div key={h.id} className="flight-card" style={{ marginBottom: 0 }}>
@@ -249,7 +349,7 @@ export const HotelResultsPage: React.FC<{
       </section>
 
       {selectedHotel && (
-        <div className="modal-overlay" onClick={() => setSelectedHotel(null)} role="dialog" aria-modal="true">
+        <div className="modal-overlay" onClick={() => { if (!bookingPending) setSelectedHotel(null); }} role="dialog" aria-modal="true">
           <div
             className="modal-card"
             style={{ maxWidth: 560, maxHeight: '92vh', overflowY: 'auto' }}
@@ -257,139 +357,50 @@ export const HotelResultsPage: React.FC<{
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <strong style={{ fontSize: 18 }}>
-                {confirmedPnr ? ui.hotelReqTitle : `${selectedHotel.name} — Rezervasyon`}
+                {confirmedPnr ? mu.savedTitle : selectedHotel.name}
               </strong>
-              <button type="button" className="drawer-close" onClick={() => setSelectedHotel(null)}>
+              <button type="button" className="drawer-close" aria-label={mu.closeLbl} disabled={bookingPending} onClick={() => setSelectedHotel(null)}>
                 <X size={16} />
               </button>
             </div>
 
             {confirmedPnr ? (
-              <div>
-                <div
-                  style={{
-                    borderRadius: 16,
-                    border: '2px solid var(--aspan-border)',
-                    overflow: 'hidden',
-                    marginBottom: 14,
-                  }}
-                >
-                  <div
-                    style={{
-                      background: 'linear-gradient(135deg, #041926 0%, #0A3147 100%)',
-                      color: '#ffffff',
-                      padding: '15px 18px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: 10, color: '#7DD3FC', fontWeight: 800 }}>
-                        FLYTOASPAN HOTEL VOUCHER · KONAKLAMA BELGESİ
-                      </div>
-                      <div style={{ fontSize: 17, fontWeight: 800 }}>{selectedHotel.name}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.75)' }}>PNR KODU</div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: '#F5CD5E' }}>{confirmedPnr}</div>
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px 18px', fontSize: 12.5 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
-                      <div>
-                        <div style={{ fontSize: 11, color: 'var(--aspan-text-muted)' }}>VOUCHER NO</div>
-                        <strong>{confirmedVoucher}</strong>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 11, color: 'var(--aspan-text-muted)' }}>GİRİŞ / ÇIKIŞ</div>
-                        <strong>
-                          {formatDisplayDate(query.checkIn, lang)} → {formatDisplayDate(query.checkOut, lang)}
-                        </strong>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 11, color: 'var(--aspan-text-muted)' }}>ÖDENEN TUTAR</div>
-                        <strong style={{ color: '#059669' }}>{formatPrice(finalHotelPrice, currency)}</strong>
-                      </div>
-                    </div>
-
-                    <div style={{ padding: '8px 0', borderTop: '1px dashed var(--aspan-border)' }}>
-                      <strong>Misafir:</strong> {guestName} ({guestDoc}) · {query.adults} {ui.adults} ·{' '}
-                      {selectedHotel.boardType}
-                    </div>
-
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        paddingTop: 10,
-                        borderTop: '1px dashed var(--aspan-border)',
-                        marginTop: 8,
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <svg width="48" height="48" viewBox="0 0 56 56" aria-label="Otel Voucher QR">
-                          <rect width="56" height="56" rx="6" fill="#041926" />
-                          <rect x="6" y="6" width="16" height="16" fill="none" stroke="#F5CD5E" strokeWidth="3" />
-                          <rect x="34" y="6" width="16" height="16" fill="none" stroke="#19D3E0" strokeWidth="3" />
-                          <rect x="6" y="34" width="16" height="16" fill="none" stroke="#19D3E0" strokeWidth="3" />
-                          <rect x="26" y="26" width="8" height="8" fill="#F5CD5E" />
-                        </svg>
-                        <div style={{ fontSize: 11.5 }}>
-                          <strong>Resepsiyon Hızlı Giriş QR Kodu</strong>
-                          <div>7/24 Acente Destek: +90 531 460 61 75</div>
-                        </div>
-                      </div>
-                      <span className="status-badge ok">ONAYLANDI</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <button
-                    type="button"
-                    className="u4-submit-btn"
-                    style={{ height: 42, fontSize: 13 }}
-                    onClick={() => window.print()}
-                  >
-                    <Printer size={15} />
-                    PDF Voucher Yazdır
-                  </button>
-                  <button
-                    type="button"
-                    className="uf-pop-done"
-                    style={{ marginTop: 0, height: 42 }}
-                    onClick={() => setSelectedHotel(null)}
-                  >
-                    {ui.okBtn}
-                  </button>
-                </div>
+              <div className="flight-booking-summary" role="status">
+                <p>{mu.pnrLbl} <strong>{confirmedPnr}</strong></p>
+                <p>{mu.lookupHint}</p>
+                <button type="button" className="uf-pop-done" onClick={() => setSelectedHotel(null)}>{ui.okBtn}</button>
               </div>
             ) : (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const pnr = 'FTAH' + Math.floor(10 + Math.random() * 89);
-                  const vch = `HTL-${Math.floor(100000 + Math.random() * 899999)}`;
-                  onAddBooking?.({
-                    id: `bk-htl-${Date.now()}`,
-                    pnr,
-                    eticketNumber: vch,
-                    type: 'Otel',
-                    title: `${selectedHotel.name} (${selectedHotel.city})`,
-                    subtitle: `${selectedHotel.nights} Gece · ${selectedHotel.boardType} · ${query.adults} Yetişkin`,
-                    date: query.checkIn,
-                    returnDate: query.checkOut,
-                    passenger: guestName.trim() || 'Değerli Misafir',
-                    price: finalHotelPrice,
-                    status: 'Onaylandı',
+              <form onSubmit={async (event) => {
+                event.preventDefault();
+                if (bookingPending) return;
+                const fields = new FormData(event.currentTarget);
+                const firstName = String(fields.get('firstName')).trim();
+                const lookupSurname = String(fields.get('surname')).trim();
+                if (!firstName || !lookupSurname) {
+                  setBookingError(mu.nameErr);
+                  return;
+                }
+                setBookingPending(true);
+                setBookingError('');
+                try {
+                  const { pnr } = await onAddBooking({
+                  type: 'Otel',
+                  title: selectedHotel.name,
+                  subtitle: selectedHotel.city,
+                  date: query.checkIn,
+                  returnDate: query.checkOut,
+                  price: finalHotelPrice,
+                    passenger: firstName + ' ' + lookupSurname,
+                    lookupSurname,
                   });
-                  setConfirmedVoucher(vch);
                   setConfirmedPnr(pnr);
-                }}
-              >
+                } catch (error) {
+                  setBookingError(apiMessage(error));
+                } finally {
+                  setBookingPending(false);
+                }
+              }}>
                 <div className="flight-booking-summary" style={{ marginBottom: 12 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
@@ -408,59 +419,14 @@ export const HotelResultsPage: React.FC<{
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 10, marginBottom: 10 }}>
-                  <div>
-                    <label htmlFor="htl-guest-name" style={{ fontSize: 11.5, fontWeight: 700, display: 'block', marginBottom: 4 }}>
-                      Konaklayacak Misafir Adı Soyadı *
-                    </label>
-                    <input
-                      id="htl-guest-name"
-                      required
-                      className="modal-input"
-                      value={guestName}
-                      onChange={(e) => setGuestName(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="htl-guest-doc" style={{ fontSize: 11.5, fontWeight: 700, display: 'block', marginBottom: 4 }}>
-                      TCKN / Pasaport No *
-                    </label>
-                    <input
-                      id="htl-guest-doc"
-                      required
-                      className="modal-input"
-                      value={guestDoc}
-                      onChange={(e) => setGuestDoc(e.target.value.toUpperCase())}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-                  <div>
-                    <label htmlFor="htl-guest-email" style={{ fontSize: 11.5, fontWeight: 700, display: 'block', marginBottom: 4 }}>
-                      E-Posta Adresi *
-                    </label>
-                    <input
-                      id="htl-guest-email"
-                      type="email"
-                      required
-                      className="modal-input"
-                      value={guestEmail}
-                      onChange={(e) => setGuestEmail(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="htl-guest-phone" style={{ fontSize: 11.5, fontWeight: 700, display: 'block', marginBottom: 4 }}>
-                      Telefon Numarası *
-                    </label>
-                    <input
-                      id="htl-guest-phone"
-                      required
-                      className="modal-input"
-                      value={guestPhone}
-                      onChange={(e) => setGuestPhone(e.target.value)}
-                    />
-                  </div>
+                <p>{mu.demoNote}</p>
+                <div className="uf-co-form-grid-2" style={{ marginBottom: 12 }}>
+                  <label className="uf-co-label">{mu.firstName}
+                    <input name="firstName" autoComplete="given-name" className="modal-input" required maxLength={64} />
+                  </label>
+                  <label className="uf-co-label">{mu.surname}
+                    <input name="surname" autoComplete="family-name" className="modal-input" required maxLength={64} />
+                  </label>
                 </div>
 
                 <div
@@ -477,7 +443,7 @@ export const HotelResultsPage: React.FC<{
                 >
                   <span style={{ fontSize: 12, fontWeight: 700 }}>
                     <Tag size={13} color="#00A8B5" style={{ verticalAlign: 'middle', marginRight: 5 }} />
-                    Otel Kuponu: <strong>OTEL30</strong> (−{formatPrice(300, currency)})
+                    {mu.hotelCouponLbl} <strong>OTEL30</strong> (−{formatPrice(300, currency)})
                   </span>
                   <button
                     type="button"
@@ -487,12 +453,13 @@ export const HotelResultsPage: React.FC<{
                       setAppliedDiscount(300);
                     }}
                   >
-                    {couponCode === 'OTEL30' ? '✓ Uygulandı' : 'OTEL30 Uygula'}
+                    {couponCode === 'OTEL30' ? mu.applied : mu.applyCode('OTEL30')}
                   </button>
                 </div>
 
-                <button type="submit" className="uf-pop-done" style={{ height: 46, marginTop: 0 }}>
-                  Otel Rezervasyonunu Tamamla · {formatPrice(finalHotelPrice, currency)}
+                {bookingError && <p className="form-action-error" role="alert">{bookingError}</p>}
+                <button type="submit" className="uf-pop-done" disabled={bookingPending} style={{ height: 46, marginTop: 0 }}>
+                  {bookingPending ? mu.saving : mu.saveBtn}
                 </button>
               </form>
             )}
@@ -509,22 +476,22 @@ export const TransferResultsPage: React.FC<{
   markup?: AdminMarkupConfig;
   query: TransferSearchQuery;
   onBackHome: () => void;
-  onAddBooking?: (record: BookingRecord) => void;
+  onAddBooking: (draft: BookingDraft) => Promise<BookingRecord>;
 }> = ({ lang = 'TR', currency = 'TRY', markup = DEFAULT_MARKUP, query, onBackHome, onAddBooking }) => {
   const [selectedTr, setSelectedTr] = useState<TransferDeal | null>(null);
-  const [paxName, setPaxName] = useState('Mert Yılmaz');
-  const [flightCode, setFlightCode] = useState('KC912');
-  const [paxPhone, setPaxPhone] = useState('+90 531 460 61 75');
   const [appliedDiscount, setAppliedDiscount] = useState(0);
   const [confirmedPnr, setConfirmedPnr] = useState<string | null>(null);
-  const [confirmedVoucher, setConfirmedVoucher] = useState<string>('');
+  const [bookingError, setBookingError] = useState('');
+  const [bookingPending, setBookingPending] = useState(false);
 
   const ui = HT_I18N[lang];
+  const mu = HT_MODAL_I18N[lang];
   const transferDiff = markup.transferAddTRY - DEFAULT_MARKUP.transferAddTRY;
 
   const openTransferModal = (tr: TransferDeal) => {
     setSelectedTr(tr);
     setConfirmedPnr(null);
+    setBookingError('');
     setAppliedDiscount(0);
   };
 
@@ -608,7 +575,7 @@ export const TransferResultsPage: React.FC<{
       </section>
 
       {selectedTr && (
-        <div className="modal-overlay" onClick={() => setSelectedTr(null)} role="dialog" aria-modal="true">
+        <div className="modal-overlay" onClick={() => { if (!bookingPending) setSelectedTr(null); }} role="dialog" aria-modal="true">
           <div
             className="modal-card"
             style={{ maxWidth: 560, maxHeight: '92vh', overflowY: 'auto' }}
@@ -616,138 +583,49 @@ export const TransferResultsPage: React.FC<{
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <strong style={{ fontSize: 18 }}>
-                {confirmedPnr ? ui.transferReqTitle : `${selectedTr.vehicle} — VIP Karşılama`}
+                {confirmedPnr ? mu.savedTitle : selectedTr.vehicle}
               </strong>
-              <button type="button" className="drawer-close" onClick={() => setSelectedTr(null)}>
+              <button type="button" className="drawer-close" aria-label={mu.closeLbl} disabled={bookingPending} onClick={() => setSelectedTr(null)}>
                 <X size={16} />
               </button>
             </div>
 
             {confirmedPnr ? (
-              <div>
-                <div
-                  style={{
-                    borderRadius: 16,
-                    border: '2px solid var(--aspan-border)',
-                    overflow: 'hidden',
-                    marginBottom: 14,
-                  }}
-                >
-                  <div
-                    style={{
-                      background: 'linear-gradient(135deg, #041926 0%, #0A3147 100%)',
-                      color: '#ffffff',
-                      padding: '15px 18px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: 10, color: '#7DD3FC', fontWeight: 800 }}>
-                        FLYTOASPAN VIP TRANSFER &amp; MEET-AND-GREET VOUCHER
-                      </div>
-                      <div style={{ fontSize: 17, fontWeight: 800 }}>{selectedTr.vehicle}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.75)' }}>PNR KODU</div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: '#F5CD5E' }}>{confirmedPnr}</div>
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '14px 18px', fontSize: 12.5 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
-                      <div>
-                        <div style={{ fontSize: 11, color: 'var(--aspan-text-muted)' }}>VOUCHER NO</div>
-                        <strong>{confirmedVoucher}</strong>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 11, color: 'var(--aspan-text-muted)' }}>TARİH &amp; SAAT</div>
-                        <strong>
-                          {formatDisplayDate(query.date, lang)} · {query.time}
-                        </strong>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 11, color: 'var(--aspan-text-muted)' }}>SABİT TUTAR</div>
-                        <strong style={{ color: '#059669' }}>{formatPrice(finalTrPrice, currency)}</strong>
-                      </div>
-                    </div>
-
-                    <div style={{ padding: '8px 0', borderTop: '1px dashed var(--aspan-border)' }}>
-                      <strong>Karşılama Tabelası:</strong> {paxName} · <strong>Uçuş Takip Kodu:</strong> {flightCode} ·{' '}
-                      <strong>Güzergâh:</strong> {query.from} → {query.to}
-                    </div>
-
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        paddingTop: 10,
-                        borderTop: '1px dashed var(--aspan-border)',
-                        marginTop: 8,
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <svg width="48" height="48" viewBox="0 0 56 56" aria-label="VIP Transfer QR">
-                          <rect width="56" height="56" rx="6" fill="#041926" />
-                          <rect x="6" y="6" width="16" height="16" fill="none" stroke="#F5CD5E" strokeWidth="3" />
-                          <rect x="34" y="6" width="16" height="16" fill="none" stroke="#19D3E0" strokeWidth="3" />
-                          <rect x="6" y="34" width="16" height="16" fill="none" stroke="#19D3E0" strokeWidth="3" />
-                          <rect x="26" y="26" width="8" height="8" fill="#19D3E0" />
-                        </svg>
-                        <div style={{ fontSize: 11.5 }}>
-                          <strong>Şoför &amp; Terminal Çıkışı Karşılama QR</strong>
-                          <div>7/24 Operasyon: +90 531 460 61 75</div>
-                        </div>
-                      </div>
-                      <span className="status-badge ok">ONAYLANDI</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <button
-                    type="button"
-                    className="u4-submit-btn"
-                    style={{ height: 42, fontSize: 13 }}
-                    onClick={() => window.print()}
-                  >
-                    <Printer size={15} />
-                    PDF Voucher Yazdır
-                  </button>
-                  <button
-                    type="button"
-                    className="uf-pop-done"
-                    style={{ marginTop: 0, height: 42 }}
-                    onClick={() => setSelectedTr(null)}
-                  >
-                    {ui.okBtn}
-                  </button>
-                </div>
+              <div className="flight-booking-summary" role="status">
+                <p>{mu.pnrLbl} <strong>{confirmedPnr}</strong></p>
+                <p>{mu.lookupHint}</p>
+                <button type="button" className="uf-pop-done" onClick={() => setSelectedTr(null)}>{ui.okBtn}</button>
               </div>
             ) : (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const pnr = 'FTAT' + Math.floor(10 + Math.random() * 89);
-                  const vch = `VIP-${Math.floor(100000 + Math.random() * 899999)}`;
-                  onAddBooking?.({
-                    id: `bk-trf-${Date.now()}`,
-                    pnr,
-                    eticketNumber: vch,
-                    type: 'Transfer',
-                    title: `${query.from} → ${query.to}`,
-                    subtitle: `${selectedTr.vehicle} · Uçuş Kodu: ${flightCode || 'TK2410'} · Saat: ${query.time}`,
-                    date: query.date,
-                    passenger: paxName.trim() || 'VIP Yolcu',
-                    price: finalTrPrice,
-                    status: 'Onaylandı',
+              <form onSubmit={async (event) => {
+                event.preventDefault();
+                if (bookingPending) return;
+                const fields = new FormData(event.currentTarget);
+                const firstName = String(fields.get('firstName')).trim();
+                const lookupSurname = String(fields.get('surname')).trim();
+                if (!firstName || !lookupSurname) {
+                  setBookingError(mu.nameErr);
+                  return;
+                }
+                setBookingPending(true);
+                setBookingError('');
+                try {
+                  const { pnr } = await onAddBooking({
+                  type: 'Transfer',
+                  title: query.from + ' → ' + query.to,
+                  subtitle: selectedTr.vehicle + ' · ' + query.time,
+                  date: query.date,
+                  price: finalTrPrice,
+                    passenger: firstName + ' ' + lookupSurname,
+                    lookupSurname,
                   });
-                  setConfirmedVoucher(vch);
                   setConfirmedPnr(pnr);
-                }}
-              >
+                } catch (error) {
+                  setBookingError(apiMessage(error));
+                } finally {
+                  setBookingPending(false);
+                }
+              }}>
                 <div className="flight-booking-summary" style={{ marginBottom: 12 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
@@ -765,46 +643,14 @@ export const TransferResultsPage: React.FC<{
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 10, marginBottom: 10 }}>
-                  <div>
-                    <label htmlFor="trf-pax-name" style={{ fontSize: 11.5, fontWeight: 700, display: 'block', marginBottom: 4 }}>
-                      Karşılama Tabelası Yolcu Adı Soyadı *
-                    </label>
-                    <input
-                      id="trf-pax-name"
-                      required
-                      className="modal-input"
-                      value={paxName}
-                      onChange={(e) => setPaxName(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="trf-flight-code" style={{ fontSize: 11.5, fontWeight: 700, display: 'block', marginBottom: 4 }}>
-                      <Plane size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-                      Uçuş Kodu (Canlı Rötar Takibi) *
-                    </label>
-                    <input
-                      id="trf-flight-code"
-                      required
-                      className="modal-input"
-                      placeholder="Örn: KC912 veya TK2410"
-                      value={flightCode}
-                      onChange={(e) => setFlightCode(e.target.value.toUpperCase())}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: 12 }}>
-                  <label htmlFor="trf-pax-phone" style={{ fontSize: 11.5, fontWeight: 700, display: 'block', marginBottom: 4 }}>
-                    Yolcu WhatsApp / Cep Telefonu (Şoför İletişimi İçin) *
+                <p>{mu.demoNote}</p>
+                <div className="uf-co-form-grid-2" style={{ marginBottom: 12 }}>
+                  <label className="uf-co-label">{mu.firstName}
+                    <input name="firstName" autoComplete="given-name" className="modal-input" required maxLength={64} />
                   </label>
-                  <input
-                    id="trf-pax-phone"
-                    required
-                    className="modal-input"
-                    value={paxPhone}
-                    onChange={(e) => setPaxPhone(e.target.value)}
-                  />
+                  <label className="uf-co-label">{mu.surname}
+                    <input name="surname" autoComplete="family-name" className="modal-input" required maxLength={64} />
+                  </label>
                 </div>
 
                 <div
@@ -821,19 +667,20 @@ export const TransferResultsPage: React.FC<{
                 >
                   <span style={{ fontSize: 12, fontWeight: 700 }}>
                     <Tag size={13} color="#00A8B5" style={{ verticalAlign: 'middle', marginRight: 5 }} />
-                    VIP Transfer Kuponu: <strong>VIP25</strong> (−{formatPrice(250, currency)})
+                    VIP Transfer: <strong>VIP25</strong> (−{formatPrice(250, currency)})
                   </span>
                   <button
                     type="button"
                     className="uf-quick-pill"
                     onClick={() => setAppliedDiscount(250)}
                   >
-                    {appliedDiscount > 0 ? '✓ Uygulandı' : 'VIP25 Uygula'}
+                    {appliedDiscount > 0 ? mu.applied : mu.applyCode('VIP25')}
                   </button>
                 </div>
 
-                <button type="submit" className="uf-pop-done" style={{ height: 46, marginTop: 0 }}>
-                  VIP Transferi Onayla &amp; Voucher Al · {formatPrice(finalTrPrice, currency)}
+                {bookingError && <p className="form-action-error" role="alert">{bookingError}</p>}
+                <button type="submit" className="uf-pop-done" disabled={bookingPending} style={{ height: 46, marginTop: 0 }}>
+                  {bookingPending ? mu.saving : mu.saveBtn}
                 </button>
               </form>
             )}

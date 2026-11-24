@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { Navbar } from './components/Navbar';
 import { HeroSearch } from './components/HeroSearch';
 import { HomeSections } from './components/HomeSections';
@@ -12,11 +12,20 @@ import {
   OnlineCheckInPage,
 } from './components/SubPages';
 import { AuthModals } from './components/AuthModals';
-import { MemberPanel } from './components/MemberPanel';
-import { AdminPanelPage } from './components/AdminPanelPage';
-import { LegalPages } from './components/LegalPages';
-import { FlightDeal, getSavedMarkup, refreshLiveExchangeRates } from './data/mockData';
+import { DEFAULT_MARKUP, FlightDeal, refreshLiveExchangeRates } from './data/mockData';
 import { addCalendarDays, toCalendarDate } from './data/calendarDates';
+import { api, apiMessage, type BookingDraft } from './data/api';
+import { flightSearchHref, hrefForPage, parseFlightSearch, readSiteRoute } from './data/routes';
+
+const MemberPanel = lazy(() =>
+  import('./components/MemberPanel').then((m) => ({ default: m.MemberPanel }))
+);
+const AdminPanelPage = lazy(() =>
+  import('./components/AdminPanelPage').then((m) => ({ default: m.AdminPanelPage }))
+);
+const LegalPages = lazy(() =>
+  import('./components/LegalPages').then((m) => ({ default: m.LegalPages }))
+);
 import {
   AdminMarkupConfig,
   BookingRecord,
@@ -31,92 +40,41 @@ import {
   UserProfile,
 } from './types';
 
-const INITIAL_BOOKINGS: BookingRecord[] = [
-  {
-    id: 'bk-seed-1',
-    pnr: 'FTA8K4',
-    eticketNumber: '235-8492014811',
-    type: 'Uçak',
-    title: 'İstanbul (IST) → Almatı (ALA)',
-    subtitle: 'Air Astana · KC912 · Prime Fly',
-    date: '2026-12-14',
-    passenger: 'Mert Yılmaz',
-    price: 8180,
-    status: 'Onaylandı',
-  },
-  {
-    id: 'bk-seed-2',
-    pnr: 'FTAH29',
-    eticketNumber: 'HTL-902184',
-    type: 'Otel',
-    title: 'Tien Shan Grand Palace (Almatı)',
-    subtitle: '2 Gece · Kahvaltı Dahil · Deluxe Oda',
-    date: '2026-12-14',
-    passenger: 'Mert Yılmaz',
-    price: 3420,
-    status: 'Onaylandı',
-  },
-  {
-    id: 'bk-seed-3',
-    pnr: 'FTAT51',
-    eticketNumber: 'VIP-304912',
-    type: 'Transfer',
-    title: 'ALA Havalimanı → Şehir Merkezi VIP',
-    subtitle: 'Mercedes-Benz Luxury VIP · Uçuş Takipli',
-    date: '2026-11-18',
-    passenger: 'Aylin Karahan',
-    price: 1890,
-    status: 'Tamamlandı',
-  },
-  {
-    id: 'bk-seed-4',
-    pnr: 'FTA4M9',
-    eticketNumber: '235-8492019920',
-    type: 'Uçak',
-    title: 'İstanbul (IST) → Londra (LHR)',
-    subtitle: 'Turkish Airlines · TK1985 · Extra Fly',
-    date: '2026-12-21',
-    passenger: 'Emre Demir',
-    price: 6120,
-    status: 'İptal Talebi',
-  },
-  {
-    id: 'bk-seed-5',
-    pnr: 'FTA2R7',
-    eticketNumber: '235-8492011104',
-    type: 'Uçak',
-    title: 'İstanbul (SAW) → Antalya (AYT)',
-    subtitle: 'Pegasus Airlines · PC2014 · Eco Fly',
-    date: '2026-11-15',
-    passenger: 'Kerem Aydın',
-    price: 1640,
-    status: 'İade Edildi',
-  },
-];
-
 export const App: React.FC = () => {
-  const [page, setPage] = useState<PageView>('home');
+  const [page, updatePage] = useState(() => readSiteRoute(window.location.pathname).page);
   const [lang, setLang] = useState<LangCode>('TR');
   const [currency, setCurrency] = useState<CurrencyCode>('TRY');
   const [, setFxVersion] = useState(0);
-  const [legalDoc, setLegalDoc] = useState<LegalDocKey>('terms');
-  const [markup, setMarkup] = useState<AdminMarkupConfig>(() => getSavedMarkup());
+  const [legalDoc, updateLegalDoc] = useState(() => readSiteRoute(window.location.pathname).legalDoc);
+  const [markup, setMarkup] = useState<AdminMarkupConfig>(DEFAULT_MARKUP);
   const [authMode, setAuthMode] = useState<'login' | 'register' | null>(null);
   const [activeTab, setActiveTab] = useState<SearchTab>('flight');
   const [initialDate] = useState(() => toCalendarDate(new Date()));
   const [splashProgress, setSplashProgress] = useState(0);
   const [splashFloat, setSplashFloat] = useState(0);
-  const [splashStage, setSplashStage] = useState<'playing' | 'exiting' | 'done'>('playing');
+  const [splashStage, setSplashStage] = useState<'playing' | 'exiting' | 'done'>(() => {
+    try {
+      return sessionStorage.getItem('flytoaspan_splash_seen') === '1' ? 'done' : 'playing';
+    } catch {
+      return 'playing';
+    }
+  });
 
   useEffect(() => {
     refreshLiveExchangeRates().then(() => setFxVersion((v) => v + 1));
   }, []);
 
   useEffect(() => {
-    // 3-second 0-100% eased preloader: logo reveals sequentially from head (left) to full logo (right)
-    const DURATION_MS = 2500;
-    const HOLD_MS = 220;
-    const EXIT_MS = 620;
+    if (splashStage === 'done') return;
+    try {
+      sessionStorage.setItem('flytoaspan_splash_seen', '1');
+    } catch {
+      /* ignore */
+    }
+    // 1.5-second 0-100% eased preloader: plays once per browser session, skippable on click/tap
+    const DURATION_MS = 1450;
+    const HOLD_MS = 140;
+    const EXIT_MS = 480;
     const startTime = performance.now();
     let rafId = 0;
     let holdTimer: number | undefined;
@@ -157,64 +115,85 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  const [user, setUser] = useState<UserProfile | null>(() => {
-    try {
-      const raw = localStorage.getItem('flytoaspan_user');
-      return raw ? (JSON.parse(raw) as UserProfile) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const [notice, setNotice] = useState('');
+  const [bookingView, setBookingView] = useState<{ key: string; records: BookingRecord[] } | null>(null);
+  const canManage = user?.role === 'admin' || Boolean(user?.permissions && user.permissions.length > 0);
+  const bookingKey = user && (page === 'panel' || (page === 'admin' && canManage)) ? user.id + ':' + page : '';
+  const bookings = bookingView && bookingView.key === bookingKey ? bookingView.records : [];
 
-  const [bookings, setBookings] = useState<BookingRecord[]>(() => {
-    try {
-      const raw = localStorage.getItem('flytoaspan_bookings');
-      return raw ? (JSON.parse(raw) as BookingRecord[]) : INITIAL_BOOKINGS;
-    } catch {
-      return INITIAL_BOOKINGS;
-    }
-  });
+  useEffect(() => {
+    const controller = new AbortController();
+    api.session(controller.signal)
+      .then(({ user }) => setUser(user))
+      .catch((error) => { if (!controller.signal.aborted) setNotice(apiMessage(error)); })
+      .finally(() => { if (!controller.signal.aborted) setSessionLoading(false); });
+    api.pricing(controller.signal)
+      .then(({ markup }) => setMarkup(markup ?? DEFAULT_MARKUP))
+      .catch((error) => { if (!controller.signal.aborted) setNotice(apiMessage(error)); });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!bookingKey) return;
+    const controller = new AbortController();
+    api.bookings(page === 'admin', controller.signal)
+      .then(({ bookings }) => {
+        if (!controller.signal.aborted) setBookingView({ key: bookingKey, records: bookings });
+      })
+      .catch((error) => { if (!controller.signal.aborted) setNotice(apiMessage(error)); });
+    return () => controller.abort();
+  }, [bookingKey, page]);
 
   useEffect(() => {
     document.documentElement.lang = lang === 'KK' ? 'kk' : lang.toLowerCase();
   }, [lang]);
 
   useEffect(() => {
-    try {
-      if (user) localStorage.setItem('flytoaspan_user', JSON.stringify(user));
-      else localStorage.removeItem('flytoaspan_user');
-    } catch {
-      /* ignore storage quota errors */
-    }
-  }, [user]);
+    const followHistory = () => {
+      const route = readSiteRoute(window.location.pathname);
+      updatePage(route.page);
+      updateLegalDoc(route.legalDoc);
+      setNotice('');
+    };
+    window.addEventListener('popstate', followHistory);
+    return () => window.removeEventListener('popstate', followHistory);
+  }, []);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('flytoaspan_bookings', JSON.stringify(bookings));
-    } catch {
-      /* ignore */
-    }
-  }, [bookings]);
+  const setPage = (next: PageView, doc: LegalDocKey = legalDoc) => {
+    const path = hrefForPage(next, doc);
+    if (window.location.pathname !== path) window.history.pushState(null, '', path);
+    if (next === 'legal') updateLegalDoc(doc);
+    setNotice('');
+    updatePage(next);
+  };
 
-  useEffect(() => {
+  const signOut = async () => {
     try {
-      localStorage.setItem('flytoaspan_markup', JSON.stringify(markup));
-    } catch {
-      /* ignore */
+      await api.logout();
+      setUser(null);
+      setBookingView(null);
+      setPage('home');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (error) {
+      setNotice(apiMessage(error));
     }
-  }, [markup]);
+  };
 
-  const [flightQuery, setFlightQuery] = useState<FlightSearchQuery>({
-    tripType: 'oneway',
-    fromCode: 'IST',
-    toCode: 'AYT',
-    departDate: addCalendarDays(initialDate, 15),
-    returnDate: addCalendarDays(initialDate, 22),
-    adults: 1,
-    children: 0,
-    infants: 0,
-    cabin: 'Ekonomi',
-  });
+  const [flightQuery, setFlightQuery] = useState<FlightSearchQuery>(() =>
+    parseFlightSearch(window.location.search, {
+      tripType: 'oneway',
+      fromCode: 'IST',
+      toCode: 'AYT',
+      departDate: addCalendarDays(initialDate, 15),
+      returnDate: addCalendarDays(initialDate, 22),
+      adults: 1,
+      children: 0,
+      infants: 0,
+      cabin: 'Ekonomi',
+    })
+  );
 
   const [hotelQuery, setHotelQuery] = useState<HotelSearchQuery>({
     destination: 'Bodrum',
@@ -233,16 +212,25 @@ export const App: React.FC = () => {
     children: 0,
   });
 
+  const openFlightSearch = (q: FlightSearchQuery) => {
+    setFlightQuery(q);
+    const targetHref = flightSearchHref(q);
+    if (window.location.pathname + window.location.search !== targetHref) {
+      window.history.pushState(null, '', targetHref);
+    }
+    setNotice('');
+    updatePage('flight-results');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleSelectDeal = (deal: FlightDeal) => {
-    setFlightQuery((prev) => ({
-      ...prev,
+    openFlightSearch({
+      ...flightQuery,
       fromCode: deal.fromCode,
       toCode: deal.toCode,
       departDate: deal.isoDate,
       tripType: 'oneway',
-    }));
-    setPage('flight-results');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
   };
 
   const handleSelectDestinationCode = (code: string) => {
@@ -260,25 +248,28 @@ export const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleAddBooking = (record: BookingRecord) => {
-    setBookings((prev) => [record, ...prev]);
-    if (user) {
-      setUser({ ...user, miles: user.miles + Math.round(record.price * 0.15) });
-    }
+  const changeRecords = (update: (records: BookingRecord[]) => BookingRecord[]) =>
+    setBookingView((view) => view?.key === bookingKey ? { ...view, records: update(view.records) } : view);
+
+  const handleAddBooking = async (draft: BookingDraft, admin = false) => {
+    const { booking } = await api.createBooking(draft, admin);
+    if (admin) changeRecords((records) => [booking, ...records]);
+    return booking;
   };
 
-  const handleCancelBooking = (id: string) => {
-    setBookings((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, status: 'İptal Talebi' } : b))
-    );
+  const handleCancelBooking = async (id: string) => {
+    const { booking } = await api.cancel(id);
+    changeRecords((records) => records.map((record) => record.id === id ? booking : record));
   };
 
-  const handleUpdateBookingStatus = (id: string, status: BookingRecord['status']) => {
-    setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, status } : b)));
+  const handleUpdateBookingStatus = async (id: string, status: BookingRecord['status']) => {
+    const { booking } = await api.setStatus(id, status);
+    changeRecords((records) => records.map((record) => record.id === id ? booking : record));
   };
 
-  const handleDeleteBooking = (id: string) => {
-    setBookings((prev) => prev.filter((b) => b.id !== id));
+  const handleDeleteBooking = async (id: string) => {
+    await api.deleteBooking(id);
+    changeRecords((records) => records.filter((record) => record.id !== id));
   };
 
   return (
@@ -298,6 +289,12 @@ export const App: React.FC = () => {
             role="status"
             aria-live="polite"
             aria-label="FlyToAspan Yükleniyor"
+            onClick={() => {
+              document.body.style.overflow = '';
+              setSplashStage('done');
+            }}
+            style={{ cursor: 'pointer' }}
+            title="Geçmek için dokunun / Click to skip"
           >
             {/* Centered Sequential Logo Reveal (No background glow/lines, pure start-to-finish logo reveal) */}
             <div
@@ -346,14 +343,24 @@ export const App: React.FC = () => {
         currency={currency}
         onSelectCurrency={setCurrency}
         user={user}
-        onLogout={() => {
-          setUser(null);
-          setPage('home');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
+        onLogout={signOut}
       />
 
       <main>
+        {notice && <p className="site-action-notice" role="alert">{notice}</p>}
+        {((page === 'panel' && !user) || (page === 'admin' && !canManage)) && (
+          <section className="inner-hero">
+            <div className="container">
+              <h1 className="inner-h1">{page === 'admin' ? 'Yönetici paneli' : 'Hesabım'}</h1>
+              {sessionLoading ? <p role="status">Oturum kontrol ediliyor…</p> : (
+                <>
+                  <p>{page === 'admin' ? 'Bu bölüme yönetici hesabıyla girebilirsiniz.' : 'Rezervasyonlarınızı görmek için giriş yapın.'}</p>
+                  <button type="button" className="btn-gold-nav" onClick={() => setAuthMode('login')}>Giriş Yap</button>
+                </>
+              )}
+            </div>
+          </section>
+        )}
         {page === 'home' && (
           <>
             <HeroSearch
@@ -362,11 +369,7 @@ export const App: React.FC = () => {
               onTabChange={setActiveTab}
               flightQuery={flightQuery}
               onFlightQueryChange={setFlightQuery}
-              onSearchFlight={(q) => {
-                setFlightQuery(q);
-                setPage('flight-results');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
+              onSearchFlight={openFlightSearch}
               onSearchHotel={(q) => {
                 setHotelQuery(q);
                 setPage('hotel-results');
@@ -420,6 +423,10 @@ export const App: React.FC = () => {
             currency={currency}
             markup={markup}
             query={flightQuery}
+            onChangeQuery={(next) => {
+              setFlightQuery(next);
+              window.history.replaceState(null, '', flightSearchHref(next));
+            }}
             onBackHome={() => {
               setPage('home');
               window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -461,79 +468,81 @@ export const App: React.FC = () => {
         {page === 'campaigns' && <CampaignsPage lang={lang} onUseCampaign={handleJumpToTab} />}
         {page === 'checkin' && <OnlineCheckInPage lang={lang} />}
         {page === 'help' && <HelpPage lang={lang} />}
-        {page === 'booking-ops' && <BookingOpsPage lang={lang} bookings={bookings} />}
+        {page === 'booking-ops' && <BookingOpsPage lang={lang} />}
 
-        {page === 'admin' && (
-          <AdminPanelPage
-            lang={lang}
-            currency={currency}
-            markup={markup}
-            onUpdateMarkup={setMarkup}
-            bookings={bookings}
-            onAddBooking={handleAddBooking}
-            onUpdateBookingStatus={handleUpdateBookingStatus}
-            onDeleteBooking={handleDeleteBooking}
-            onBackHome={() => {
-              setPage('home');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-          />
-        )}
+        <Suspense fallback={<div style={{ padding: '140px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--aspan-text-muted)' }}>FlyToAspan…</div>}>
+          {page === 'admin' && canManage && (
+            <AdminPanelPage
+              lang={lang}
+              currency={currency}
+              currentUser={user}
+              markup={markup}
+              onUpdateMarkup={async (next) => setMarkup((await api.updatePricing(next)).markup)}
+              bookings={bookings}
+              onAddBooking={(draft) => handleAddBooking(draft, true)}
+              onLogout={signOut}
+              onUpdateBookingStatus={handleUpdateBookingStatus}
+              onDeleteBooking={handleDeleteBooking}
+              onBackHome={() => {
+                setPage('home');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          )}
 
-        {page === 'legal' && (
-          <LegalPages
-            lang={lang}
-            activeDoc={legalDoc}
-            onSelectDoc={setLegalDoc}
-            onBackHome={() => {
-              setPage('home');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-          />
-        )}
+          {page === 'legal' && (
+            <LegalPages
+              lang={lang}
+              activeDoc={legalDoc}
+              onSelectDoc={(doc) => setPage('legal', doc)}
+              onBackHome={() => {
+                setPage('home');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          )}
 
-        {page === 'panel' && user && (
-          <MemberPanel
-            lang={lang}
-            user={user}
-            bookings={bookings}
-            onCancelBooking={handleCancelBooking}
-            onUpdateUser={setUser}
-            onLogout={() => {
-              setUser(null);
-              setPage('home');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            onGoSearch={() => {
-              setPage('home');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-          />
-        )}
+          {page === 'panel' && user && (
+            <MemberPanel
+              lang={lang}
+              user={user}
+              bookings={bookings}
+              onCancelBooking={handleCancelBooking}
+              onLogout={signOut}
+              onGoSearch={() => {
+                setPage('home');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          )}
+        </Suspense>
       </main>
 
       <Footer
         lang={lang}
+        canManage={canManage}
         onNavigate={(p) => {
           setPage(p);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         onJumpToTab={handleJumpToTab}
         onOpenLegal={(doc) => {
-          setLegalDoc(doc);
-          setPage('legal');
+          setPage('legal', doc);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
       />
 
       <AuthModals
+        key={authMode ?? 'closed'}
         lang={lang}
         mode={authMode}
         onClose={() => setAuthMode(null)}
         onSwitchMode={setAuthMode}
         onAuthSuccess={(u) => {
+          setBookingView(null);
           setUser(u);
-          setPage('panel');
+          const hasPanelAccess = u.role === 'admin' || Boolean(u.permissions && u.permissions.length > 0);
+          setPage(page === 'admin' || hasPanelAccess ? 'admin' : 'panel');
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
       />

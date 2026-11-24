@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { NavbarIcon } from './NavbarIcon';
 import { CURRENCIES } from '../data/mockData';
+import { hrefForPage } from '../data/routes';
 import { LANGUAGES, PHONE_DISPLAY, TRANSLATIONS } from '../i18n/translations';
 import { CurrencyCode, LangCode, PageView, UserProfile } from '../types';
 
@@ -72,6 +73,13 @@ export const Navbar: React.FC<NavbarProps> = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const followPage = (event: React.MouseEvent<HTMLAnchorElement>, page: PageView) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    handleGo(page);
+  };
+
+
   return (
     <>
       <svg width="0" height="0" aria-hidden="true" focusable="false" style={{ position: 'absolute' }}>
@@ -107,58 +115,47 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               <div className="nav-links">
-                <button
-                  type="button"
-                  className={`nav-link-item ${currentPage === 'campaigns' ? 'active' : ''}`}
-                  onClick={() => handleGo('campaigns')}
+                <a className={`nav-link-item ${currentPage === 'campaigns' ? 'active' : ''}`} href={hrefForPage('campaigns')} onClick={(event) => followPage(event, 'campaigns')}
                 >
                   <NavbarIcon name="gift" size={17} />
                   <span>{t.campaigns}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`nav-link-item ${currentPage === 'checkin' ? 'active' : ''}`}
-                  onClick={() => handleGo('checkin')}
+                </a>
+                <a className={`nav-link-item ${currentPage === 'checkin' ? 'active' : ''}`} href={hrefForPage('checkin')} onClick={(event) => followPage(event, 'checkin')}
                 >
                   <NavbarIcon name="takeoff" size={17} />
                   <span>{t.checkin}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`nav-link-item ${currentPage === 'help' ? 'active' : ''}`}
-                  onClick={() => handleGo('help')}
+                </a>
+                <a className={`nav-link-item ${currentPage === 'help' ? 'active' : ''}`} href={hrefForPage('help')} onClick={(event) => followPage(event, 'help')}
                 >
                   <NavbarIcon name="help" size={17} />
                   <span>{t.help}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`nav-link-item ${currentPage === 'booking-ops' ? 'active' : ''}`}
-                  onClick={() => handleGo('booking-ops')}
+                </a>
+                <a className={`nav-link-item ${currentPage === 'booking-ops' ? 'active' : ''}`} href={hrefForPage('booking-ops')} onClick={(event) => followPage(event, 'booking-ops')}
                 >
                   <NavbarIcon name="ticket" size={17} />
                   <span>{t.booking}</span>
-                </button>
+                </a>
               </div>
             </div>
 
             <div className="header-right">
               <span className="header-divider" aria-hidden="true" />
               {user ? (
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                   <div className="lang-dropdown-wrap" ref={userRef}>
                     <button
                       type="button"
                       className="user-pill-btn"
                       onClick={() => setUserMenuOpen((v) => !v)}
                       aria-expanded={userMenuOpen}
+                      style={{ whiteSpace: 'nowrap' }}
                     >
                       <span className="user-avatar-dot">
                         {user.firstName.charAt(0).toUpperCase()}
                         {user.lastName.charAt(0).toUpperCase()}
                       </span>
-                      <span>
-                        {user.firstName} · {t.myPanel}
+                      <span style={{ maxWidth: 112, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {user.firstName}
                       </span>
                       <ChevronDown size={14} />
                     </button>
@@ -209,7 +206,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           {t.booking}
                         </span>
                       </button>
-                      <button
+                      {(user?.role === 'admin' || Boolean(user?.permissions?.length)) && (<button
                         type="button"
                         className="lang-opt-btn"
                         onClick={() => {
@@ -219,9 +216,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                       >
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                           <Sliders size={15} color="#00A8B5" />
-                          Yönetici &amp; Fiyat Paneli
+                          {user?.role === 'admin' ? 'Yönetici & Fiyat Paneli' : 'Ekip & Satış Paneli'}
                         </span>
-                      </button>
+                      </button>)}
                       <div style={{ height: 1, background: 'var(--aspan-border)', margin: '4px 0' }} />
                       <button
                         type="button"
@@ -239,17 +236,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                       </button>
                     </div>
                   </div>
-
-                  <button
-                    type="button"
-                    className="btn-logout-nav"
-                    onClick={onLogout}
-                    title={t.logout}
-                    aria-label={t.logout}
-                  >
-                    <LogOut size={15} />
-                    <span>{t.logout}</span>
-                  </button>
                 </div>
               ) : (
                 <>
@@ -406,39 +392,36 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
 
               <div className="drawer-nav">
-                <button type="button" className="drawer-link" onClick={() => handleGo('campaigns')}>
+                <a className="drawer-link" href={hrefForPage('campaigns')} onClick={(event) => followPage(event, 'campaigns')}>
                   <span className="drawer-link-left">
                     <NavbarIcon name="gift" size={18} />
                     {t.campaigns}
                   </span>
                   <ChevronRight size={17} />
-                </button>
-                <button type="button" className="drawer-link" onClick={() => handleGo('checkin')}>
+                </a>
+                <a className="drawer-link" href={hrefForPage('checkin')} onClick={(event) => followPage(event, 'checkin')}>
                   <span className="drawer-link-left">
                     <NavbarIcon name="takeoff" size={18} />
                     {t.checkin}
                   </span>
                   <ChevronRight size={17} />
-                </button>
-                <button type="button" className="drawer-link" onClick={() => handleGo('help')}>
+                </a>
+                <a className="drawer-link" href={hrefForPage('help')} onClick={(event) => followPage(event, 'help')}>
                   <span className="drawer-link-left">
                     <NavbarIcon name="help" size={18} />
                     {t.help}
                   </span>
                   <ChevronRight size={17} />
-                </button>
-                <button
-                  type="button"
-                  className="drawer-link"
-                  onClick={() => handleGo('booking-ops')}
+                </a>
+                <a className="drawer-link" href={hrefForPage('booking-ops')} onClick={(event) => followPage(event, 'booking-ops')}
                 >
                   <span className="drawer-link-left">
                     <NavbarIcon name="ticket" size={18} />
                     {t.booking}
                   </span>
                   <ChevronRight size={17} />
-                </button>
-                <button
+                </a>
+                {user?.role === 'admin' && (<button
                   type="button"
                   className="drawer-link"
                   onClick={() => handleGo('admin')}
@@ -448,7 +431,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     Yönetici &amp; Fiyat Paneli
                   </span>
                   <ChevronRight size={17} />
-                </button>
+                </button>)}
               </div>
 
               {user ? (

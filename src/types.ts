@@ -54,23 +54,53 @@ export interface TransferSearchQuery {
   children: number;
 }
 
+export type StaffPermission =
+  | 'flights.sell'
+  | 'hotels.sell'
+  | 'transfers.sell'
+  | 'tours.sell'
+  | 'bookings.view_own'
+  | 'bookings.view_org'
+  | 'bookings.manage'
+  | 'inventory.manage'
+  | 'pricing.edit'
+  | 'team.manage';
+
+export interface Organization {
+  id: string;
+  name: string;
+  type: string;
+  status: 'active' | 'suspended';
+  creditLimitTRY: number;
+  allowedModules: Array<'flights' | 'hotels' | 'transfers' | 'tours'>;
+  createdAt: number;
+}
+
 export interface UserProfile {
   id: string;
+  role: 'member' | 'admin';
+  status?: 'active' | 'pending' | 'suspended';
+  organizationId?: string | null;
+  permissions?: StaffPermission[];
   firstName: string;
   lastName: string;
   email: string;
   phone: string;
   accountType: 'individual' | 'corporate';
   companyName?: string;
+  applicantType?: 'agency' | 'corporate' | 'sales';
+  taxId?: string;
+  requestedModules?: string[];
   miles: number;
-  twoFactorEnabled: boolean;
   createdAt: string;
+  registeredAt?: number;
 }
 
 export interface BookingRecord {
   id: string;
   pnr: string;
   eticketNumber?: string;
+  demo?: boolean;
   type: 'Uçak' | 'Otel' | 'Transfer';
   title: string;
   subtitle: string;
@@ -83,12 +113,39 @@ export interface BookingRecord {
   invoiceCompany?: string;
   invoiceTaxNo?: string;
   price: number;
+  createdAt?: number;
+  sellerName?: string | null;
+  sellerEmail?: string | null;
+  organizationName?: string | null;
   status:
     | 'Onaylandı'
     | 'Tamamlandı'
     | 'İptal Talebi'
     | 'İptal Edildi'
     | 'İade Edildi';
+}
+
+export interface FinanceEntry {
+  id: string;
+  type: 'income' | 'expense';
+  category: string;
+  title: string;
+  amount: number;
+  entryDate: string;
+  createdBy: string;
+  createdAt: number;
+}
+
+export interface CrmTask {
+  id: string;
+  title: string;
+  customerName: string;
+  pnr: string;
+  dueDate: string;
+  priority: 'high' | 'normal' | 'low';
+  status: 'open' | 'done';
+  assignedTo: string;
+  createdAt: number;
 }
 
 export interface SavedPassenger {

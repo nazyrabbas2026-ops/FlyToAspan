@@ -106,6 +106,16 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
   const [calMonth, setCalMonth] = useState(() => ({ year: today.getFullYear(), month: today.getMonth() }));
   const [invalidTab, setInvalidTab] = useState<SearchTab | null>(null);
   const [userChangedDest, setUserChangedDest] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<
+    Array<{ fromCode: string; toCode: string; departDate: string; tripType: 'oneway' | 'roundtrip' }>
+  >(() => {
+    try {
+      const raw = localStorage.getItem('flytoaspan_recent_searches_v1');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
 
   const [hotelQuery, setHotelQuery] = useState<HotelSearchQuery>({
     destination: 'Bodrum, Muğla',
@@ -125,10 +135,10 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
   });
 
   useEffect(() => {
-    const onDocClick = (e: MouseEvent) => {
+    const onDocClick = (e: MouseEvent | TouchEvent) => {
       const target = e.target as HTMLElement | null;
       if (!target) return;
-      // Close popover whenever clicking anywhere outside an active field/popover wrapper
+      // Close popover whenever clicking or tapping anywhere outside an active field/popover wrapper
       if (!target.closest('.u4-field-wrap')) {
         setOpenPop(null);
       }
@@ -139,9 +149,11 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
       }
     };
     document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('touchstart', onDocClick, { passive: true });
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('touchstart', onDocClick);
       document.removeEventListener('keydown', onKeyDown);
     };
   }, []);
@@ -175,38 +187,97 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
     [flightQuery.toCode]
   );
 
-  const filteredFrom = useMemo(() => {
-    const q = fromFilter.trim().toLowerCase();
-    if (!q) return AIRPORTS;
-    return AIRPORTS.filter(
-      (a) =>
-        a.city.toLowerCase().includes(q) ||
-        a.code.toLowerCase().includes(q) ||
-        a.airport.toLowerCase().includes(q) ||
-        a.country.toLowerCase().includes(q)
+  const matchesAirport = (a: Airport, raw: string) => {
+    const q = raw.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      a.city.toLowerCase().includes(q) ||
+      a.code.toLowerCase().includes(q) ||
+      a.airport.toLowerCase().includes(q) ||
+      a.country.toLowerCase().includes(q) ||
+      Boolean(a.aliases?.some((al) => al.toLowerCase().includes(q)))
     );
-  }, [fromFilter]);
+  };
 
-  const filteredTo = useMemo(() => {
-    const q = toFilter.trim().toLowerCase();
-    if (!q) return AIRPORTS;
-    return AIRPORTS.filter(
-      (a) =>
-        a.city.toLowerCase().includes(q) ||
-        a.code.toLowerCase().includes(q) ||
-        a.airport.toLowerCase().includes(q) ||
-        a.country.toLowerCase().includes(q)
-    );
-  }, [toFilter]);
+  const filteredFrom = useMemo(
+    () => AIRPORTS.filter((a) => matchesAirport(a, fromFilter)),
+    [fromFilter]
+  );
+
+  const filteredTo = useMemo(
+    () => AIRPORTS.filter((a) => matchesAirport(a, toFilter)),
+    [toFilter]
+  );
 
   const totalPax = flightQuery.adults + flightQuery.children + flightQuery.infants;
 
+  const PROMO_META: Record<
+    LangCode,
+    {
+      flight1: string;
+      flight2: string;
+      hotel1: string;
+      hotel2: string;
+      transfer1: string;
+      transfer2: string;
+      hotelChip: string;
+      transferChip: string;
+      routeSub: (airport: string) => string;
+    }
+  > = {
+    TR: {
+      flight1: '500+ rota',
+      flight2: 'Anında bilet',
+      hotel1: '5.000+ otel',
+      hotel2: 'Gerçek fiyat',
+      transfer1: 'Özel VIP',
+      transfer2: 'Sabit fiyat',
+      hotelChip: '★ 5 Yıldız',
+      transferChip: 'VIP Mercedes',
+      routeSub: (airport) => `${airport} direkt & aktarmalı en uygun uçuşlar.`,
+    },
+    EN: {
+      flight1: '500+ routes',
+      flight2: 'Instant booking',
+      hotel1: '5,000+ hotels',
+      hotel2: 'Transparent rates',
+      transfer1: 'Private VIP',
+      transfer2: 'Fixed fare',
+      hotelChip: '★ 5 Stars',
+      transferChip: 'VIP Mercedes',
+      routeSub: (airport) => `Best direct & connecting flights to ${airport}.`,
+    },
+    RU: {
+      flight1: '500+ маршрутов',
+      flight2: 'Быстрый подбор',
+      hotel1: '5 000+ отелей',
+      hotel2: 'Честная цена',
+      transfer1: 'Частный VIP',
+      transfer2: 'Фикс. тариф',
+      hotelChip: '★ 5 звёзд',
+      transferChip: 'VIP Mercedes',
+      routeSub: (airport) => `Лучшие прямые и стыковочные рейсы: ${airport}.`,
+    },
+    KK: {
+      flight1: '500+ бағыт',
+      flight2: 'Жылдам іздеу',
+      hotel1: '5 000+ қонақүй',
+      hotel2: 'Ашық баға',
+      transfer1: 'Жеке VIP',
+      transfer2: 'Тұрақты баға',
+      hotelChip: '★ 5 жұлдыз',
+      transferChip: 'VIP Mercedes',
+      routeSub: (airport) => `${airport} бағытындағы ең тиімді тікелей және ауыспалы рейстер.`,
+    },
+  };
+  const pm = PROMO_META[lang];
+
   const promoContent =
     activeTab === 'flight'
-      ? { stat1: '500+ rota', stat2: 'Anında bilet', title: t.flightPromoTitle, sub: t.flightPromoSub }
+      ? { stat1: pm.flight1, stat2: pm.flight2, title: t.flightPromoTitle, sub: t.flightPromoSub }
       : activeTab === 'hotel'
-        ? { stat1: '5.000+ otel', stat2: 'Gerçek fiyat', title: t.hotelPromoTitle, sub: t.hotelPromoSub }
-        : { stat1: 'Özel VIP', stat2: 'Sabit fiyat', title: t.transferPromoTitle, sub: t.transferPromoSub };
+        ? { stat1: pm.hotel1, stat2: pm.hotel2, title: t.hotelPromoTitle, sub: t.hotelPromoSub }
+        : { stat1: pm.transfer1, stat2: pm.transfer2, title: t.transferPromoTitle, sub: t.transferPromoSub };
 
   const handleSwapFlight = () => {
     setUserChangedDest(true);
@@ -263,8 +334,27 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
       return;
     }
 
-    if (activeTab === 'flight') onSearchFlight(flightQuery);
-    else if (activeTab === 'hotel') onSearchHotel(hotelQuery);
+    if (activeTab === 'flight') {
+      const entry = {
+        fromCode: flightQuery.fromCode,
+        toCode: flightQuery.toCode,
+        departDate: flightQuery.departDate,
+        tripType: flightQuery.tripType,
+      };
+      const nextRecent = [
+        entry,
+        ...recentSearches.filter(
+          (r) => !(r.fromCode === entry.fromCode && r.toCode === entry.toCode && r.departDate === entry.departDate)
+        ),
+      ].slice(0, 3);
+      setRecentSearches(nextRecent);
+      try {
+        localStorage.setItem('flytoaspan_recent_searches_v1', JSON.stringify(nextRecent));
+      } catch {
+        /* ignore */
+      }
+      onSearchFlight(flightQuery);
+    } else if (activeTab === 'hotel') onSearchHotel(hotelQuery);
     else onSearchTransfer(transferQuery);
   };
 
@@ -731,12 +821,14 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
                               type="button"
                               className="u4-step-btn"
                               disabled={flightQuery.adults <= 1}
-                              onClick={() =>
+                              onClick={() => {
+                                const nextAdults = Math.max(1, flightQuery.adults - 1);
                                 onFlightQueryChange({
                                   ...flightQuery,
-                                  adults: Math.max(1, flightQuery.adults - 1),
-                                })
-                              }
+                                  adults: nextAdults,
+                                  infants: Math.min(flightQuery.infants, nextAdults),
+                                });
+                              }}
                             >
                               −
                             </button>
@@ -1119,6 +1211,33 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
               </div>
             )}
 
+            {activeTab === 'flight' && recentSearches.length > 0 && (
+              <div className="recent-searches-row">
+                <span className="recent-searches-lbl">
+                  {lang === 'EN' ? 'Recent:' : lang === 'RU' ? 'Недавние:' : lang === 'KK' ? 'Соңғы:' : 'Son aramalar:'}
+                </span>
+                {recentSearches.map((r) => (
+                  <button
+                    key={`${r.fromCode}-${r.toCode}-${r.departDate}`}
+                    type="button"
+                    className="recent-search-chip"
+                    onClick={() => {
+                      const nextQ: FlightSearchQuery = {
+                        ...flightQuery,
+                        fromCode: r.fromCode,
+                        toCode: r.toCode,
+                        departDate: r.departDate >= todayIso ? r.departDate : todayIso,
+                        tripType: r.tripType,
+                      };
+                      onFlightQueryChange(nextQ);
+                      onSearchFlight(nextQ);
+                    }}
+                  >
+                    {r.fromCode} → {r.toCode} · {formatDateLocal(r.departDate >= todayIso ? r.departDate : todayIso)}
+                  </button>
+                ))}
+              </div>
+            )}
             {invalidTab === activeTab && searchError && (
               <p className="u4-search-error" role="alert">{searchError}</p>
             )}
@@ -1183,9 +1302,9 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
                     {fromAirport.code} <Plane size={11} style={{ margin: '0 3px' }} /> {toAirport.code}
                   </>
                 ) : activeTab === 'hotel' ? (
-                  <>★ 5 Yıldız</>
+                  <>{pm.hotelChip}</>
                 ) : (
-                  <>VIP Mercedes</>
+                  <>{pm.transferChip}</>
                 )}
               </span>
             </div>
@@ -1220,7 +1339,7 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
               </h5>
               <p className="u4-promo-sub">
                 {activeTab === 'flight' && userChangedDest
-                  ? `${toAirport.airport} direkt & aktarmalı en uygun uçuşlar.`
+                  ? pm.routeSub(toAirport.airport)
                   : promoContent.sub}
               </p>
             </div>

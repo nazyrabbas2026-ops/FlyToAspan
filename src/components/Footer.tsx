@@ -3,8 +3,6 @@ import {
   Phone,
   MessageCircle,
   ArrowUp,
-  Instagram,
-  Linkedin,
   Cookie,
   ShieldCheck,
   Award,
@@ -18,6 +16,7 @@ import { LangCode, LegalDocKey, PageView, SearchTab } from '../types';
 
 interface FooterProps {
   lang: LangCode;
+  canManage?: boolean;
   onNavigate: (page: PageView) => void;
   onJumpToTab: (tab: SearchTab) => void;
   onOpenLegal?: (doc: LegalDocKey) => void;
@@ -108,12 +107,88 @@ const FOOTER_LINKS_I18N: Record<
   },
 };
 
-export const Footer: React.FC<FooterProps> = ({ lang, onNavigate, onJumpToTab, onOpenLegal }) => {
+const PREFOOTER_I18N: Record<
+  LangCode,
+  {
+    eyebrow: string;
+    title: string;
+    vipSupport: string;
+    waCta: string;
+    pillars: [string, string][];
+    registryLine: string;
+  }
+> = {
+  TR: {
+    eyebrow: 'INFINITIVE TRAVEL · GLOBAL HAVACILIK VE KONAKLAMA AĞI',
+    title: "Türkiye, Kazakistan, Avrupa ve Orta Doğu'da Güvenilir Seyahat Deneyimi",
+    vipSupport: '7/24 VIP Destek:',
+    waCta: 'WhatsApp Hızlı Destek',
+    pillars: [
+      ['256-Bit SSL & Güvenli Altyapı', 'Uluslararası güvenlik standartlarında şifreli oturum ve veri koruması'],
+      ['IATA & TÜRSAB Acente Standartları', '500+ tarifeli ve charter havayolu ile şeffaf rezervasyon akışı'],
+      ['Çoklu Döviz & Şeffaf Fiyat', 'TRY ₺, USD $, EUR €, KZT ₸ ve RUB ₽ ile şeffaf, gizli ücretsiz fiyatlar'],
+      ['Anında İptal, İade & Değişiklik', '7/24 kesintisiz çağrı merkezi ve online PNR sorgulama desteği'],
+    ],
+    registryLine: 'Ticari Ünvan: Infinitive Travel (Resmi künye & TÜRSAB Belge No: Bilgi bekleniyor · MERSİS / Vergi No: Bilgi bekleniyor)',
+  },
+  EN: {
+    eyebrow: 'INFINITIVE TRAVEL · GLOBAL AVIATION & HOSPITALITY NETWORK',
+    title: 'Trusted Travel Experience Across Turkey, Kazakhstan, Europe & Middle East',
+    vipSupport: '24/7 VIP Support:',
+    waCta: 'WhatsApp Quick Support',
+    pillars: [
+      ['256-Bit SSL & Secure Platform', 'Encrypted sessions and personal data protection at international standards'],
+      ['IATA & TURSAB Agency Standards', 'Transparent booking flow across 500+ scheduled and charter airlines'],
+      ['Multi-Currency & Transparent Fares', 'Clear fares in TRY ₺, USD $, EUR €, KZT ₸ and RUB ₽ with no hidden fees'],
+      ['Instant Cancellation & Changes', '24/7 travel desk support and online PNR booking lookup'],
+    ],
+    registryLine: 'Legal Entity: Infinitive Travel (Official TURSAB License No: Pending · Tax / Registry ID: Pending)',
+  },
+  RU: {
+    eyebrow: 'INFINITIVE TRAVEL · МЕЖДУНАРОДНАЯ СЕТЬ АВИАЦИИ И ОТЕЛЕЙ',
+    title: 'Надёжные путешествия по Турции, Казахстану, Европе и Ближнему Востоку',
+    vipSupport: 'VIP-поддержка 24/7:',
+    waCta: 'Быстрая помощь WhatsApp',
+    pillars: [
+      ['256-Bit SSL и защита данных', 'Защищённые сессии и сохранность персональных данных по мировым стандартам'],
+      ['Стандарты агентств IATA и TURSAB', 'Прозрачный подбор более 500 регулярных и чартерных авиакомпаний'],
+      ['Мультивалютность и честные цены', 'Прозрачные тарифы в TRY ₺, USD $, EUR €, KZT ₸ и RUB ₽ без скрытых сборов'],
+      ['Быстрый обмен и возврат', 'Круглосуточная поддержка 24/7 и онлайн-проверка брони по PNR'],
+    ],
+    registryLine: 'Юр. лицо: Infinitive Travel (Лицензия TURSAB: ожидается · Рег. номер / ИНН: ожидается)',
+  },
+  KK: {
+    eyebrow: 'INFINITIVE TRAVEL · ХАЛЫҚАРАЛЫҚ ӘУЕ ЖӘНЕ ҚОНАҚҮЙ ЖЕЛІСІ',
+    title: 'Түркия, Қазақстан, Еуропа және Таяу Шығыстағы сенімді саяхат қызметі',
+    vipSupport: '24/7 VIP қолдау:',
+    waCta: 'WhatsApp жедел қолдау',
+    pillars: [
+      ['256-Bit SSL және деректер қорғау', 'Халықаралық қауіпсіздік стандарттарына сай шифрланған жүйе'],
+      ['IATA және TÜRSAB стандарттары', '500+ тұрақты және чартерлік әуе компаниялары бойынша ашық іздеу'],
+      ['Көп валюта және ашық баға', 'TRY ₺, USD $, EUR €, KZT ₸ және RUB ₽ бойынша жасырын төлемсіз бағалар'],
+      ['Жылдам өзгерту және қайтару', '24/7 үздіксіз байланыс орталығы және онлайн PNR тексеру'],
+    ],
+    registryLine: 'Заңды тұлға: Infinitive Travel (TÜRSAB куәлік №: ақпарат күтілуде · БСН / Салық №: ақпарат күтілуде)',
+  },
+};
+
+const cookiePreferenceKey = 'flytoaspan_cookie_preference_v1';
+
+export const Footer: React.FC<FooterProps> = ({ lang, canManage, onNavigate, onJumpToTab, onOpenLegal }) => {
   const t = TRANSLATIONS[lang].footer;
   const fl = FOOTER_LINKS_I18N[lang];
+  const pf = PREFOOTER_I18N[lang];
   const [showTop, setShowTop] = useState(false);
   const [cookieVisible, setCookieVisible] = useState(false);
-  const [cookieDismissed, setCookieDismissed] = useState(false);
+  const [cookiePreference, setCookiePreference] = useState<'accepted' | 'rejected' | null>(() => {
+    try {
+      const saved = localStorage.getItem(cookiePreferenceKey);
+      return saved === 'accepted' || saved === 'rejected' ? saved : null;
+    } catch {
+      return null;
+    }
+  });
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
 
   useEffect(() => {
     const onScroll = () => {
@@ -124,7 +199,14 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate, onJumpToTab, o
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const cookieOpen = cookieVisible && !cookieDismissed;
+  const cookieOpen = preferencesOpen || (cookieVisible && cookiePreference === null);
+  const chooseCookies = (preference: 'accepted' | 'rejected') => {
+    try {
+      localStorage.setItem(cookiePreferenceKey, preference);
+    } catch { /* The choice still applies for this visit. */ }
+    setCookiePreference(preference);
+    setPreferencesOpen(false);
+  };
 
   return (
     <>
@@ -136,16 +218,14 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate, onJumpToTab, o
               <div>
                 <div className="exec-prefooter-eyebrow">
                   <Plane size={13} />
-                  <span>INFINITIVE TRAVEL · GLOBAL AVIATION &amp; HOSPITALITY NETWORK</span>
+                  <span>{pf.eyebrow}</span>
                 </div>
-                <h3 className="exec-prefooter-title">
-                  Türkiye, Kazakistan, Avrupa ve Orta Doğu&apos;da Resmi Acente Güvencesi
-                </h3>
+                <h3 className="exec-prefooter-title">{pf.title}</h3>
               </div>
               <div className="exec-prefooter-ctas">
                 <a href={PHONE_HREF} className="exec-prefooter-phone">
                   <Headphones size={16} />
-                  <span>7/24 VIP Destek: {PHONE_DISPLAY}</span>
+                  <span>{pf.vipSupport} {PHONE_DISPLAY}</span>
                 </a>
                 <a
                   href={WA_HREF}
@@ -154,7 +234,7 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate, onJumpToTab, o
                   className="exec-prefooter-wa"
                 >
                   <MessageCircle size={16} />
-                  <span>WhatsApp Hızlı Biletleme</span>
+                  <span>{pf.waCta}</span>
                 </a>
               </div>
             </div>
@@ -165,8 +245,8 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate, onJumpToTab, o
                   <ShieldCheck size={20} />
                 </div>
                 <div>
-                  <strong>256-Bit SSL &amp; 3D Secure</strong>
-                  <span>Uluslararası PCI-DSS standartlarında şifreli banka ödeme altyapısı</span>
+                  <strong>{pf.pillars[0][0]}</strong>
+                  <span>{pf.pillars[0][1]}</span>
                 </div>
               </div>
 
@@ -175,8 +255,8 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate, onJumpToTab, o
                   <Award size={20} />
                 </div>
                 <div>
-                  <strong>IATA &amp; TÜRSAB Yetkili Acente</strong>
-                  <span>500+ tarifeli ve charter havayolunda resmi PNR &amp; e-bilet garantisi</span>
+                  <strong>{pf.pillars[1][0]}</strong>
+                  <span>{pf.pillars[1][1]}</span>
                 </div>
               </div>
 
@@ -185,8 +265,8 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate, onJumpToTab, o
                   <CreditCard size={20} />
                 </div>
                 <div>
-                  <strong>Çoklu Döviz &amp; 9 Taksit</strong>
-                  <span>TRY ₺, USD $, EUR €, KZT ₸ ve RUB ₽ ile şeffaf, gizli ücretsi fiyatlar</span>
+                  <strong>{pf.pillars[2][0]}</strong>
+                  <span>{pf.pillars[2][1]}</span>
                 </div>
               </div>
 
@@ -195,8 +275,8 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate, onJumpToTab, o
                   <CheckCircle2 size={20} />
                 </div>
                 <div>
-                  <strong>Anında İptal, İade &amp; Değişiklik</strong>
-                  <span>7/24 kesintisiz çağrı merkezi ve online PNR yönetim desteği</span>
+                  <strong>{pf.pillars[3][0]}</strong>
+                  <span>{pf.pillars[3][1]}</span>
                 </div>
               </div>
             </div>
@@ -353,6 +433,9 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate, onJumpToTab, o
                   </button>
                 </li>
                 <li>
+                  <button type="button" onClick={() => setPreferencesOpen(true)}>{t.cookieTitle}</button>
+                </li>
+                {canManage && <li>
                   <button
                     type="button"
                     onClick={() => onNavigate('admin')}
@@ -360,7 +443,7 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate, onJumpToTab, o
                   >
                     ⚙ Yönetici &amp; Fiyat Paneli
                   </button>
-                </li>
+                </li>}
               </ul>
             </div>
           </div>
@@ -386,25 +469,28 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate, onJumpToTab, o
           </div>
 
           <div className="uff-bottom">
-            <div>{t.rights}</div>
+            <div>
+              <div>{t.rights}</div>
+              <div style={{ fontSize: 11.5, opacity: 0.72, marginTop: 4 }}>{pf.registryLine}</div>
+            </div>
             <div className="uff-socials">
               <a
-                href="https://instagram.com"
+                href={WA_HREF}
                 target="_blank"
                 rel="noreferrer"
                 className="uff-social-btn"
-                aria-label="Instagram"
+                aria-label="WhatsApp"
+                title="WhatsApp 7/24 Destek"
               >
-                <Instagram size={16} />
+                <MessageCircle size={16} />
               </a>
               <a
-                href="https://linkedin.com"
-                target="_blank"
-                rel="noreferrer"
+                href={PHONE_HREF}
                 className="uff-social-btn"
-                aria-label="LinkedIn"
+                aria-label="Telefon"
+                title={PHONE_DISPLAY}
               >
-                <Linkedin size={16} />
+                <Phone size={16} />
               </a>
             </div>
           </div>
@@ -455,14 +541,14 @@ export const Footer: React.FC<FooterProps> = ({ lang, onNavigate, onJumpToTab, o
             <button
               type="button"
               className="cookie-btn-ghost"
-              onClick={() => setCookieDismissed(true)}
+              onClick={() => chooseCookies('rejected')}
             >
               {t.reject}
             </button>
             <button
               type="button"
               className="cookie-btn-accept"
-              onClick={() => setCookieDismissed(true)}
+              onClick={() => chooseCookies('accepted')}
             >
               {t.accept}
             </button>

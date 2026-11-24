@@ -657,8 +657,13 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
   const sideCampaigns = CAMPAIGNS.filter((c) => !c.wide);
   const curLeft = wideCampaigns[leftSlide % wideCampaigns.length];
   const curRight = sideCampaigns[rightSlide % sideCampaigns.length];
-  const curLeftText = loc.campaigns[curLeft.id] || curLeft;
-  const curRightText = loc.campaigns[curRight.id] || curRight;
+  const formatCampaignText = (c: { badge: string; title: string; subtitle: string }) => ({
+    ...c,
+    title: c.title.replace(/350\s*TL/gi, formatPrice(350, currency)),
+    subtitle: c.subtitle.replace(/350\s*TL/gi, formatPrice(350, currency)),
+  });
+  const curLeftText = formatCampaignText(loc.campaigns[curLeft.id] || curLeft);
+  const curRightText = formatCampaignText(loc.campaigns[curRight.id] || curRight);
 
   const flightDeals = getFlightDeals(lang, markup);
   const featuredDeal = flightDeals[0];
