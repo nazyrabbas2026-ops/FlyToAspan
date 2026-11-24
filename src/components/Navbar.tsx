@@ -210,12 +210,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                         className="lang-opt-btn"
                         onClick={() => {
                           setUserMenuOpen(false);
-                          handleGo('admin');
+                          window.open('/yonetim', '_blank', 'noopener');
                         }}
                       >
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                           <Sliders size={15} color="#00A8B5" />
-                          {user?.role === 'admin' ? 'Yönetici & Fiyat Paneli' : 'Ekip & Satış Paneli'}
+                          {user?.role === 'admin' ? 'Yönetici Portalı (Yeni Sekme ↗)' : 'Ekip Portalı (Yeni Sekme ↗)'}
                         </span>
                       </button>)}
                       <div style={{ height: 1, background: 'var(--aspan-border)', margin: '4px 0' }} />

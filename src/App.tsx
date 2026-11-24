@@ -12,6 +12,7 @@ import {
   OnlineCheckInPage,
 } from './components/SubPages';
 import { AuthModals } from './components/AuthModals';
+import { AdminLoginGate } from './components/AdminLoginGate';
 import { DEFAULT_MARKUP, FlightDeal, refreshLiveExchangeRates } from './data/mockData';
 import { addCalendarDays, toCalendarDate } from './data/calendarDates';
 import { api, apiMessage, type BookingDraft } from './data/api';
@@ -44,7 +45,11 @@ import {
 } from './types';
 
 export const App: React.FC = () => {
-  const [page, updatePage] = useState(() => readSiteRoute(window.location.pathname).page);
+  const isAdminSubdomain =
+    typeof window !== 'undefined' && /^(panel|admin)\./i.test(window.location.hostname);
+  const [page, updatePage] = useState<PageView>(() =>
+    isAdminSubdomain ? 'admin' : readSiteRoute(window.location.pathname).page
+  );
   const [lang, setLang] = useState<LangCode>('TR');
   const [currency, setCurrency] = useState<CurrencyCode>('TRY');
   const [, setFxVersion] = useState(0);
@@ -55,11 +60,13 @@ export const App: React.FC = () => {
   const [initialDate] = useState(() => toCalendarDate(new Date()));
   const [splashProgress, setSplashProgress] = useState(0);
   const [splashFloat, setSplashFloat] = useState(0);
+  const isStandaloneAdmin = page === 'admin' || isAdminSubdomain;
   const [splashStage, setSplashStage] = useState<'playing' | 'exiting' | 'done'>(() => {
     try {
+      if (isStandaloneAdmin) return 'done';
       return sessionStorage.getItem('flytoaspan_splash_seen') === '1' ? 'done' : 'playing';
     } catch {
-      return 'playing';
+      return isStandaloneAdmin ? 'done' : 'playing';
     }
   });
 
@@ -337,27 +344,46 @@ export const App: React.FC = () => {
         );
       })()}
 
-      <Navbar
-        currentPage={page}
-        onNavigate={setPage}
-        onOpenAuth={setAuthMode}
-        lang={lang}
-        onSelectLang={setLang}
-        currency={currency}
-        onSelectCurrency={setCurrency}
-        user={user}
-        onLogout={signOut}
-      />
+      {!isStandaloneAdmin && (
+        <Navbar
+          currentPage={page}
+          onNavigate={setPage}
+          onOpenAuth={setAuthMode}
+          lang={lang}
+          onSelectLang={setLang}
+          currency={currency}
+          onSelectCurrency={setCurrency}
+          user={user}
+          onLogout={signOut}
+        />
+      )}
 
       <main>
         {notice && <p className="site-action-notice" role="alert">{notice}</p>}
-        {((page === 'panel' && !user) || (page === 'admin' && !canManage)) && (
+        {page === 'admin' && !canManage && (
+          <AdminLoginGate
+            sessionLoading={sessionLoading}
+            currentUser={user}
+            isDedicatedSubdomain={isAdminSubdomain}
+            onLoginSuccess={(u) => {
+              setBookingView(null);
+              setUser(u);
+              setPage('admin');
+            }}
+            onLogout={signOut}
+            onBackToSite={() => {
+              setPage('home');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+          />
+        )}
+        {page === 'panel' && !user && (
           <section className="inner-hero">
             <div className="container">
-              <h1 className="inner-h1">{page === 'admin' ? 'Yönetici paneli' : 'Hesabım'}</h1>
+              <h1 className="inner-h1">Hesabım</h1>
               {sessionLoading ? <p role="status">Oturum kontrol ediliyor…</p> : (
                 <>
-                  <p>{page === 'admin' ? 'Bu bölüme yönetici hesabıyla girebilirsiniz.' : 'Rezervasyonlarınızı görmek için giriş yapın.'}</p>
+                  <p>Rezervasyonlarınızı görmek için giriş yapın.</p>
                   <button type="button" className="btn-gold-nav" onClick={() => setAuthMode('login')}>Giriş Yap</button>
                 </>
               )}
@@ -538,19 +564,21 @@ export const App: React.FC = () => {
         </Suspense>
       </main>
 
-      <Footer
-        lang={lang}
-        canManage={canManage}
-        onNavigate={(p) => {
-          setPage(p);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
-        onJumpToTab={handleJumpToTab}
-        onOpenLegal={(doc) => {
-          setPage('legal', doc);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
-      />
+      {!isStandaloneAdmin && (
+        <Footer
+          lang={lang}
+          canManage={canManage}
+          onNavigate={(p) => {
+            setPage(p);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onJumpToTab={handleJumpToTab}
+          onOpenLegal={(doc) => {
+            setPage('legal', doc);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+      )}
 
       <AuthModals
         key={authMode ?? 'closed'}
