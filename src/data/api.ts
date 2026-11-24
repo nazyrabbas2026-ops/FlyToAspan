@@ -1,4 +1,15 @@
-import type { AdminMarkupConfig, BookingRecord, CrmTask, FinanceEntry, Organization, StaffPermission, UserProfile } from '../types';
+import type {
+  AdminMarkupConfig,
+  BookingRecord,
+  CrmTask,
+  FinanceEntry,
+  Organization,
+  OrgLedgerEntry,
+  PriceAlertRecord,
+  SavedPassengerRecord,
+  StaffPermission,
+  UserProfile,
+} from '../types';
 
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -47,6 +58,7 @@ export interface AdminCatalog {
   agencies: { id: string; name: string; type: string; contact: string; creditLimitTRY: number; miles: number; status: string }[];
   hotels: { id: string; city: string; name: string; stars: number; boardType: string; nights: number; price: number; active: boolean }[];
   transfers: { id: string; city: string; vehicle: string; route: string; capacity: string; baggage: string; price: number; active: boolean }[];
+  tours: { id: string; city: string; title: string; duration: string; quota: number; price: number; active: boolean }[];
 }
 
 export type AdminCatalogState = {
@@ -91,9 +103,21 @@ export const api = {
   adminOrganizations: (signal?: AbortSignal) => request<{ organizations: Organization[] }>('/admin/organizations', 'GET', undefined, signal),
   createOrganization: (payload: { name: string; type: string; creditLimitTRY: number; allowedModules: string[] }) =>
     request<{ organization: Organization }>('/admin/organizations', 'POST', payload),
-  updateOrganization: (id: string, payload: { status?: 'active' | 'suspended'; creditLimitTRY?: number; allowedModules?: string[] }) =>
+  updateOrganization: (id: string, payload: { status?: 'active' | 'suspended'; creditLimitTRY?: number; discountPercent?: number; allowedModules?: string[] }) =>
     request<{ organization: Organization }>(`/admin/organizations/${encodeURIComponent(id)}`, 'PATCH', payload),
+  orgLedger: (id: string, signal?: AbortSignal) =>
+    request<{ entries: OrgLedgerEntry[] }>(`/admin/organizations/${encodeURIComponent(id)}/ledger`, 'GET', undefined, signal),
+  orgPayment: (id: string, payload: { amount: number; description?: string }) =>
+    request<{ organization: Organization; entry: OrgLedgerEntry }>(`/admin/organizations/${encodeURIComponent(id)}/payment`, 'POST', payload),
   deleteOrganization: (id: string) => request<{ ok: true }>(`/admin/organizations/${encodeURIComponent(id)}`, 'DELETE'),
+  savedPassengers: (signal?: AbortSignal) => request<{ passengers: SavedPassengerRecord[] }>('/passengers', 'GET', undefined, signal),
+  addSavedPassenger: (payload: { fullName: string; tcOrPassport?: string; birthDate?: string; gender?: 'M' | 'F'; phone?: string }) =>
+    request<{ passenger: SavedPassengerRecord }>('/passengers', 'POST', payload),
+  deleteSavedPassenger: (id: string) => request<{ ok: true }>(`/passengers/${encodeURIComponent(id)}`, 'DELETE'),
+  priceAlerts: (signal?: AbortSignal) => request<{ alerts: PriceAlertRecord[] }>('/alerts', 'GET', undefined, signal),
+  addPriceAlert: (payload: { route: string; target: number; current?: number }) =>
+    request<{ alert: PriceAlertRecord }>('/alerts', 'POST', payload),
+  deletePriceAlert: (id: string) => request<{ ok: true }>(`/alerts/${encodeURIComponent(id)}`, 'DELETE'),
   adminCatalog: (signal?: AbortSignal) => request<{ catalog: AdminCatalogState }>('/admin/catalog', 'GET', undefined, signal),
   updateAdminCatalog: <Section extends keyof AdminCatalog>(section: Section, revision: number, items: AdminCatalog[Section]) =>
     request<{ entry: { revision: number; items: AdminCatalog[Section] } }>('/admin/catalog/' + section, 'PUT', { revision, items }),

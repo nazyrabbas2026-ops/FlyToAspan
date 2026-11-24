@@ -3,6 +3,7 @@ export type PageView =
   | 'flight-results'
   | 'hotel-results'
   | 'transfer-results'
+  | 'tour-results'
   | 'campaigns'
   | 'checkin'
   | 'help'
@@ -11,8 +12,8 @@ export type PageView =
   | 'admin'
   | 'legal';
 
-export type SearchTab = 'flight' | 'hotel' | 'transfer';
-export type TripType = 'oneway' | 'roundtrip';
+export type SearchTab = 'flight' | 'hotel' | 'transfer' | 'tour';
+export type TripType = 'oneway' | 'roundtrip' | 'multicity';
 export type LangCode = 'TR' | 'EN' | 'RU' | 'KK';
 export type CurrencyCode = 'TRY' | 'USD' | 'EUR' | 'KZT' | 'RUB';
 export type LegalDocKey = 'terms' | 'kvkk' | 'refund' | 'commercial' | 'cookies';
@@ -31,6 +32,9 @@ export interface FlightSearchQuery {
   toCode: string;
   departDate: string;
   returnDate: string;
+  leg2FromCode?: string;
+  leg2ToCode?: string;
+  leg2Date?: string;
   adults: number;
   children: number;
   infants: number;
@@ -72,7 +76,39 @@ export interface Organization {
   type: string;
   status: 'active' | 'suspended';
   creditLimitTRY: number;
+  usedCreditTRY: number;
+  remainingCreditTRY: number;
+  discountPercent: number;
   allowedModules: Array<'flights' | 'hotels' | 'transfers' | 'tours'>;
+  createdAt: number;
+}
+
+export interface OrgLedgerEntry {
+  id: string;
+  organizationId: string;
+  type: 'debit' | 'credit';
+  amount: number;
+  description: string;
+  pnr: string;
+  createdBy: string;
+  createdAt: number;
+}
+
+export interface SavedPassengerRecord {
+  id: string;
+  fullName: string;
+  tcOrPassport: string;
+  birthDate: string;
+  gender: 'M' | 'F';
+  phone: string;
+  createdAt: number;
+}
+
+export interface PriceAlertRecord {
+  id: string;
+  route: string;
+  target: number;
+  current: number;
   createdAt: number;
 }
 
@@ -101,7 +137,7 @@ export interface BookingRecord {
   pnr: string;
   eticketNumber?: string;
   demo?: boolean;
-  type: 'Uçak' | 'Otel' | 'Transfer';
+  type: 'Uçak' | 'Otel' | 'Transfer' | 'Tur';
   title: string;
   subtitle: string;
   date: string;

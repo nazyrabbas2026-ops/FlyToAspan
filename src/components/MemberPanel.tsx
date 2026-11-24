@@ -18,7 +18,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { formatDisplayDate, formatTRY } from '../data/mockData';
-import { apiMessage } from '../data/api';
+import { api, apiMessage } from '../data/api';
 import { openBrandedEticketPdf } from '../utils/eticketPdf';
 import { toCalendarDate } from '../data/calendarDates';
 import { PanelNavigation } from './PanelNavigation';
@@ -26,6 +26,8 @@ import {
   BookingRecord,
   CorpApproval,
   LangCode,
+  PriceAlertRecord,
+  SavedPassengerRecord,
   UserProfile,
 } from '../types';
 
@@ -205,18 +207,28 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
   const [bookingType, setBookingType] = useState<BookingRecord['type'] | 'ALL'>('ALL');
   const [pendingCancel, setPendingCancel] = useState<string | null>(null);
 
-  const [passengers, setPassengers] = useState<{ id: string; fullName: string }[]>([]);
+  const [passengers, setPassengers] = useState<SavedPassengerRecord[]>([]);
   const [newPaxName, setNewPaxName] = useState('');
+  const [newPaxDoc, setNewPaxDoc] = useState('');
+  const [newPaxBirth, setNewPaxBirth] = useState('');
   const [cancelPending, setCancelPending] = useState(false);
   const [cancelError, setCancelError] = useState('');
 
-  // Price Alerts state
-  const [alerts, setAlerts] = useState([
-    { id: 'al-1', route: 'İstanbul (IST) → Almatı (ALA)', target: 6200, current: 6890 },
-    { id: 'al-2', route: 'İstanbul (IST) → Londra (LHR)', target: 4900, current: 5420 },
-  ]);
+  // Price Alerts state (persisted in SQLite)
+  const [alerts, setAlerts] = useState<PriceAlertRecord[]>([]);
   const [newAlertRoute, setNewAlertRoute] = useState('İstanbul (IST) → Astana (NQZ)');
   const [newAlertTarget, setNewAlertTarget] = useState('6500');
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api.savedPassengers(controller.signal)
+      .then(({ passengers: list }) => { if (!controller.signal.aborted) setPassengers(list); })
+      .catch(() => { /* ignore */ });
+    api.priceAlerts(controller.signal)
+      .then(({ alerts: list }) => { if (!controller.signal.aborted) setAlerts(list); })
+      .catch(() => { /* ignore */ });
+    return () => controller.abort();
+  }, [user.id]);
 
   // Corporate Approval Queue state (UygunFly Corporate Portal style!)
   const [approvals, setApprovals] = useState<CorpApproval[]>([
@@ -264,38 +276,40 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
     }, 3000);
   };
 
-  const handleAddPassenger = (e: React.FormEvent) => {
+  const handleAddPassenger = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPaxName.trim()) return;
-    setPassengers((prev) => [
-      ...prev,
-      {
-        id: `pax-${Date.now()}`,
+    try {
+      const { passenger } = await api.addSavedPassenger({
         fullName: newPaxName.trim(),
-
-
-
-      },
-    ]);
-    setNewPaxName('');
-
-
-    flash('Yolcu geçici listeye eklendi.');
+        tcOrPassport: newPaxDoc.trim(),
+        birthDate: newPaxBirth,
+      });
+      setPassengers((prev) => [passenger, ...prev]);
+      setNewPaxName('');
+      setNewPaxDoc('');
+      setNewPaxBirth('');
+      flash('Yolcu veritabanına kaydedildi! Ödeme ekranında 1 tıkla doldurabilirsiniz.');
+    } catch (err) {
+      flash(apiMessage(err));
+    }
   };
 
-  const handleAddAlert = (e: React.FormEvent) => {
+  const handleAddAlert = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAlertRoute.trim()) return;
-    setAlerts((prev) => [
-      ...prev,
-      {
-        id: `al-${Date.now()}`,
-        route: newAlertRoute,
-        target: Number(newAlertTarget) || 5000,
-        current: (Number(newAlertTarget) || 5000) + 640,
-      },
-    ]);
-    flash('Fiyat takibi deneme listesine eklendi.');
+    const target = Number(newAlertTarget) || 5000;
+    try {
+      const { alert } = await api.addPriceAlert({
+        route: newAlertRoute.trim(),
+        target,
+        current: target + 640,
+      });
+      setAlerts((prev) => [alert, ...prev]);
+      flash('Fiyat alarmı veritabanına kaydedildi.');
+    } catch (err) {
+      flash(apiMessage(err));
+    }
   };
 
   const activeBookingsCount = bookings.filter((b) => b.status === 'Onaylandı').length;
@@ -324,6 +338,7 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
     Uçak: bookingUi.flight,
     Otel: bookingUi.hotel,
     Transfer: bookingUi.transfer,
+    Tur: lang === 'EN' ? 'Tour' : lang === 'RU' ? 'Тур' : lang === 'KK' ? 'Тур' : 'Tur',
   };
   const dates = (booking: BookingRecord) =>
     formatDisplayDate(booking.date, lang) +
@@ -644,11 +659,22 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
                       >
                         <div>
                           <strong>{p.fullName}</strong>
+                          {(p.tcOrPassport || p.birthDate) && (
+                            <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)', marginTop: 2 }}>
+                              {p.tcOrPassport ? `Belge: ${p.tcOrPassport}` : ''}
+                              {p.tcOrPassport && p.birthDate ? ' · ' : ''}
+                              {p.birthDate ? `Doğum: ${p.birthDate}` : ''}
+                            </div>
+                          )}
                         </div>
                         <button
                           type="button"
                           className="drawer-close"
-                          onClick={() => setPassengers((prev) => prev.filter((x) => x.id !== p.id))}
+                          onClick={async () => {
+                            await api.deleteSavedPassenger(p.id);
+                            setPassengers((prev) => prev.filter((x) => x.id !== p.id));
+                            flash('Kayıtlı yolcu silindi.');
+                          }}
                           aria-label="Yolcuyu sil"
                         >
                           <Trash2 size={15} />
@@ -658,20 +684,35 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
                   </div>
 
                   <form className="panel-card" onSubmit={handleAddPassenger}>
-                    <strong style={{ fontSize: 15.5, display: 'block', marginBottom: 12 }}>
-                      Yeni Yolcu Ekle
+                    <strong style={{ fontSize: 15.5, display: 'block', marginBottom: 8 }}>
+                      Yeni Yolcu Ekle (Kalıcı SQLite)
                     </strong>
-                    <p>Bu listeyi bu ziyaret sırasında kullanabilirsiniz.</p>
+                    <p style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)', marginTop: 0 }}>
+                      Kaydettiğiniz yolcular bilet satın alma ekranında 1 tıkla otomatik doldurulur.
+                    </p>
                     <div className="panel-form-grid">
                       <input
                         required
                         className="modal-input"
-                        aria-label="Yolcu adı ve soyadı" placeholder="Ad Soyad"
+                        aria-label="Yolcu adı ve soyadı" placeholder="Ad Soyad *"
                         value={newPaxName}
                         onChange={(e) => setNewPaxName(e.target.value)}
                       />
+                      <input
+                        className="modal-input"
+                        aria-label="TC Kimlik veya Pasaport No" placeholder="TC Kimlik / Pasaport No"
+                        value={newPaxDoc}
+                        onChange={(e) => setNewPaxDoc(e.target.value)}
+                      />
+                      <input
+                        className="modal-input"
+                        type="date"
+                        aria-label="Doğum Tarihi"
+                        value={newPaxBirth}
+                        onChange={(e) => setNewPaxBirth(e.target.value)}
+                      />
                       <button type="submit" className="btn-gold-nav" style={{ borderRadius: 12 }}>
-                        <Plus size={16} /> Ekle
+                        <Plus size={16} /> Kaydet
                       </button>
                     </div>
                   </form>
@@ -825,7 +866,11 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
                         <button
                           type="button"
                           className="drawer-close"
-                          onClick={() => setAlerts((prev) => prev.filter((x) => x.id !== al.id))}
+                          onClick={async () => {
+                            await api.deletePriceAlert(al.id);
+                            setAlerts((prev) => prev.filter((x) => x.id !== al.id));
+                            flash('Fiyat alarmı silindi.');
+                          }}
                         >
                           <Trash2 size={15} />
                         </button>

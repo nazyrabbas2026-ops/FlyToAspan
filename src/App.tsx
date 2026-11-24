@@ -26,6 +26,9 @@ const AdminPanelPage = lazy(() =>
 const LegalPages = lazy(() =>
   import('./components/LegalPages').then((m) => ({ default: m.LegalPages }))
 );
+const TourResultsPage = lazy(() =>
+  import('./components/TourResultsPage').then((m) => ({ default: m.TourResultsPage }))
+);
 import {
   AdminMarkupConfig,
   BookingRecord,
@@ -380,6 +383,10 @@ export const App: React.FC = () => {
                 setPage('transfer-results');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
+              onSearchTour={() => {
+                setPage('tour-results');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
             />
             <HomeSections
               lang={lang}
@@ -471,6 +478,19 @@ export const App: React.FC = () => {
         {page === 'booking-ops' && <BookingOpsPage lang={lang} />}
 
         <Suspense fallback={<div style={{ padding: '140px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--aspan-text-muted)' }}>FlyToAspan…</div>}>
+          {page === 'tour-results' && (
+            <TourResultsPage
+              lang={lang}
+              currency={currency}
+              onAddBooking={handleAddBooking}
+              onBackHome={() => {
+                setActiveTab('tour');
+                setPage('home');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          )}
+
           {page === 'admin' && canManage && (
             <AdminPanelPage
               lang={lang}

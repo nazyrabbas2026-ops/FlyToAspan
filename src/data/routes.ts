@@ -5,6 +5,7 @@ const paths: Record<PageView, string> = {
   'flight-results': '/ucus-ara',
   'hotel-results': '/',
   'transfer-results': '/',
+  'tour-results': '/turlar',
   campaigns: '/kampanyalar',
   checkin: '/online-check-in',
   help: '/yardim',
@@ -48,7 +49,7 @@ export function parseFlightSearch(search: string, fallback: FlightSearchQuery): 
   const depart = p.get('depart');
   if (!from || !to || !depart || !/^\d{4}-\d{2}-\d{2}$/.test(depart)) return fallback;
   const ret = p.get('ret');
-  const tripType = p.get('type') === 'roundtrip' ? 'roundtrip' : 'oneway';
+  const tripType = p.get('type') === 'roundtrip' ? 'roundtrip' : p.get('type') === 'multicity' ? 'multicity' : 'oneway';
   const adults = Math.min(9, Math.max(1, Number(p.get('adults')) || 1));
   const children = Math.min(6, Math.max(0, Number(p.get('children')) || 0));
   const infants = Math.min(adults, Math.max(0, Number(p.get('infants')) || 0));

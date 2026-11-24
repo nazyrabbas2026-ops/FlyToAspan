@@ -47,6 +47,7 @@ import {
   CurrencyCode,
   LangCode,
   Organization,
+  OrgLedgerEntry,
   StaffPermission,
   UserProfile,
 } from '../types';
@@ -280,6 +281,10 @@ const exampleCatalog: AdminCatalog = {
     price: tr.price,
     active: true,
   })),
+  tours: [
+    { id: 'tour-ala-1', city: 'ALMATI', title: 'Almatı & Shymbulak Kültür Turu', duration: '4 Gece 5 Gün', quota: 14, price: 24900, active: true },
+    { id: 'tour-cap-2', city: 'KAPADOKYA', title: 'Kapadokya Mağara Otel & Balon Turu', duration: '2 Gece 3 Gün', quota: 10, price: 9850, active: true },
+  ],
 };
 
 export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
@@ -341,6 +346,10 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   const [editPermsDraft, setEditPermsDraft] = useState<StaffPermission[]>([]);
   const [agentsTab, setAgentsTab] = useState<'pending' | 'users' | 'orgs'>('pending');
   const [agentsSearch, setAgentsSearch] = useState('');
+  const [openLedgerOrgId, setOpenLedgerOrgId] = useState<string | null>(null);
+  const [orgLedgerEntries, setOrgLedgerEntries] = useState<OrgLedgerEntry[]>([]);
+  const [payAmountInput, setPayAmountInput] = useState('25000');
+  const [payDescInput, setPayDescInput] = useState('Havale / EFT Cari Tahsilat');
 
   // Module 4: Hotel & Transfer new item forms
   const [newTrCity, setNewTrCity] = useState('');
@@ -2904,7 +2913,10 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                         Henüz kayıtlı şirket yok. Aşağıdan yeni şirket ekleyebilir veya bekleyen bir kurumsal başvuruyu onaylayabilirsiniz.
                       </div>
                     ) : (
-                      filteredOrgs.map((org) => (
+                      filteredOrgs.map((org) => {
+                        const usedPct = org.creditLimitTRY > 0 ? Math.min(100, Math.round((org.usedCreditTRY / org.creditLimitTRY) * 100)) : 0;
+                        const ledgerOpen = openLedgerOrgId === org.id;
+                        return (
                         <div
                           key={org.id}
                           style={{
@@ -2912,14 +2924,10 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                             borderRadius: 14,
                             border: '1px solid var(--aspan-border)',
                             marginBottom: 10,
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            flexWrap: 'wrap',
-                            gap: 12,
                             opacity: org.status === 'active' ? 1 : 0.6,
                           }}
                         >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                           <div>
                             <span className="pkg-pill">
                               {org.type === 'agency' ? 'B2B Alt Acente' : org.type === 'corporate' ? 'Kurumsal Şirket' : 'Merkez Ekip'}
@@ -2927,6 +2935,11 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                             <span className={`status-badge ${org.status === 'active' ? 'ok' : 'warn'}`}>
                               {org.status === 'active' ? '● Çalışıyor' : '● Askıda'}
                             </span>
+                            {org.discountPercent > 0 && (
+                              <span className="pkg-pill" style={{ marginLeft: 4, background: 'rgba(16,185,129,0.12)', color: '#047857' }}>
+                                %{org.discountPercent} Özel İndirim
+                              </span>
+                            )}
                             <div style={{ fontWeight: 800, fontSize: 15.5, marginTop: 4 }}>{org.name}</div>
                             <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)' }}>
                               Oluşturulma: <strong style={{ color: 'var(--aspan-text)' }}>{formatTrDateTime(org.createdAt)}</strong> · Modüller:{' '}
@@ -2936,11 +2949,42 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
 
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                             <div style={{ textAlign: 'right', marginRight: 6 }}>
-                              <div style={{ fontSize: 11, color: 'var(--aspan-text-muted)' }}>B2B Cari Kredi Limiti</div>
-                              <strong style={{ fontSize: 16, color: 'var(--aspan-teal-deep)' }}>
-                                {formatPrice(org.creditLimitTRY, currency)}
-                              </strong>
+                              <div style={{ fontSize: 11, color: 'var(--aspan-text-muted)' }}>
+                                Kalan: <strong style={{ color: '#059669' }}>{formatPrice(org.remainingCreditTRY, currency)}</strong> / {formatPrice(org.creditLimitTRY, currency)}
+                              </div>
+                              <div style={{ fontSize: 11, color: org.usedCreditTRY > 0 ? '#D97706' : 'var(--aspan-text-muted)' }}>
+                                Kullanılan Borç: <strong>{formatPrice(org.usedCreditTRY, currency)}</strong> (%{usedPct})
+                              </div>
                             </div>
+                            <button
+                              type="button"
+                              className="uf-quick-pill"
+                              disabled={busy}
+                              onClick={() => void runAction(async () => {
+                                if (ledgerOpen) {
+                                  setOpenLedgerOrgId(null);
+                                  return;
+                                }
+                                const { entries } = await api.orgLedger(org.id);
+                                setOrgLedgerEntries(entries);
+                                setOpenLedgerOrgId(org.id);
+                              })}
+                            >
+                              {ledgerOpen ? 'Ekstreyi Kapat' : 'Cari Ekstre & Tahsilat'}
+                            </button>
+                            <button
+                              type="button"
+                              className="uf-quick-pill"
+                              disabled={busy}
+                              onClick={() => void runAction(async () => {
+                                const nextDisc = (org.discountPercent + 2) % 12;
+                                const { organization: updated } = await api.updateOrganization(org.id, { discountPercent: nextDisc });
+                                setOrganizations((prev) => prev.map((row) => (row.id === org.id ? updated : row)));
+                                flash(`${org.name} özel komisyon indirimi %${nextDisc} yapıldı.`);
+                              })}
+                            >
+                              İndirim %{org.discountPercent}
+                            </button>
                             <button
                               type="button"
                               className="uf-quick-pill"
@@ -2982,8 +3026,65 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                               <Trash2 size={14} />
                             </button>
                           </div>
+                          </div>
+
+                          {/* Cari Credit Usage Bar */}
+                          {org.creditLimitTRY > 0 && (
+                            <div style={{ width: '100%', height: 6, borderRadius: 999, background: '#E2E8F0', marginTop: 10, overflow: 'hidden' }}>
+                              <div style={{ width: `${usedPct}%`, height: '100%', background: usedPct > 85 ? '#F43F5E' : '#10B981', borderRadius: 999 }} />
+                            </div>
+                          )}
+
+                          {/* Expandable Cari Ekstre & Payment Form */}
+                          {ledgerOpen && (
+                            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--aspan-border)' }}>
+                              <form
+                                style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}
+                                onSubmit={(e) => {
+                                  e.preventDefault();
+                                  const amt = Math.round(Number(payAmountInput));
+                                  if (!amt || amt <= 0) return;
+                                  void runAction(async () => {
+                                    const { organization: updated, entry } = await api.orgPayment(org.id, {
+                                      amount: amt,
+                                      description: payDescInput.trim() || 'Cari Tahsilat',
+                                    });
+                                    setOrganizations((prev) => prev.map((row) => (row.id === org.id ? updated : row)));
+                                    setOrgLedgerEntries((prev) => [entry, ...prev]);
+                                    flash(`${org.name} hesabına ₺${amt.toLocaleString('tr-TR')} tahsilat işlendi.`);
+                                  });
+                                }}
+                              >
+                                <input className="modal-input" style={{ maxWidth: 150, height: 34 }} type="number" min={1} value={payAmountInput} onChange={(e) => setPayAmountInput(e.target.value)} placeholder="Tahsilat (TL)" />
+                                <input className="modal-input" style={{ flex: 1, minWidth: 180, height: 34 }} value={payDescInput} onChange={(e) => setPayDescInput(e.target.value)} placeholder="Açıklama (EFT/Havale)" />
+                                <button type="submit" className="btn-gold-nav" style={{ height: 34, fontSize: 12 }} disabled={busy}>
+                                  + Tahsilat İşle
+                                </button>
+                              </form>
+                              {orgLedgerEntries.length === 0 ? (
+                                <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>Bu şirket için henüz cari hareket yok.</div>
+                              ) : (
+                                orgLedgerEntries.map((le) => (
+                                  <div key={le.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid var(--aspan-border)', fontSize: 12 }}>
+                                    <div>
+                                      <span className={`status-badge ${le.type === 'credit' ? 'ok' : 'warn'}`}>
+                                        {le.type === 'credit' ? 'Tahsilat (+)' : 'Satış Borç (-)'}
+                                      </span>{' '}
+                                      {le.pnr && <span className="uf-airport-code">{le.pnr}</span>}{' '}
+                                      <strong>{le.description}</strong>
+                                      <span style={{ color: 'var(--aspan-text-muted)', marginLeft: 6 }}>{formatTrDateTime(le.createdAt)}</span>
+                                    </div>
+                                    <strong style={{ color: le.type === 'credit' ? '#059669' : '#BE123C' }}>
+                                      {le.type === 'credit' ? '+' : '-'}{formatPrice(le.amount, currency)}
+                                    </strong>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          )}
                         </div>
-                      ))
+                        );
+                      })
                     )}
 
                     <form

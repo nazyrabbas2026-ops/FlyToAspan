@@ -6,7 +6,10 @@ import {
   crmTaskRecord,
   financeEntryRecord,
   openDatabase,
+  orgLedgerRecord,
   organizationRecord,
+  priceAlertRecord,
+  savedPassengerRecord,
   setAccountPassword,
   verifyPassword,
   writeAuditLog,
@@ -66,6 +69,7 @@ const catalogFields = {
   agencies: { name: 120, type: 48, contact: 120, creditLimitTRY: 'integer', miles: 'integer', status: 24 },
   hotels: { city: 60, name: 120, stars: 'integer', boardType: 60, nights: 'integer', price: 'integer', active: 'boolean' },
   transfers: { city: 60, vehicle: 120, route: 140, capacity: 48, baggage: 48, price: 'integer', active: 'boolean' },
+  tours: { city: 60, title: 140, duration: 48, quota: 'integer', price: 'integer', active: 'boolean' },
 };
 
 class RequestError extends Error {
@@ -169,7 +173,7 @@ function resolveClientIp(req) {
 
 function newDemoBooking(db, body, owner) {
   const type = text(body.type, 10);
-  if (!['Uçak', 'Otel', 'Transfer'].includes(type)) fail(400, 'Rezervasyon türü geçersiz.');
+  if (!['Uçak', 'Otel', 'Transfer', 'Tur'].includes(type)) fail(400, 'Rezervasyon türü geçersiz.');
   const surname = normalizeSurname(body.lookupSurname);
   const date = isoDate(body.date);
   const returnDate = body.returnDate ? isoDate(body.returnDate) : undefined;
@@ -361,7 +365,53 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         }
       }
 
-      if (method === 'GET' && path === '/api/health') {
+      if (method === 'GET' && path === '/api/passengers') {
+        if (!user) fail(401, 'Oturum açın.');
+        const rows = db.prepare('SELECT * FROM saved_passengers WHERE user_id = ? ORDER BY created_at DESC').all(user.id);
+        send(res, 200, { passengers: rows.map(savedPassengerRecord) });
+      } else if (method === 'POST' && path === '/api/passengers') {
+        if (!user) fail(401, 'Oturum açın.');
+        const body = await readJson(req);
+        const fullName = text(body.fullName, 120, 2);
+        const tcOrPassport = typeof body.tcOrPassport === 'string' ? body.tcOrPassport.trim().slice(0, 32) : '';
+        const birthDate = typeof body.birthDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.birthDate) ? body.birthDate : '';
+        const gender = body.gender === 'F' ? 'F' : 'M';
+        const phone = typeof body.phone === 'string' ? body.phone.trim().slice(0, 32) : '';
+        const id = randomBytes(12).toString('hex');
+        db.prepare(`
+          INSERT INTO saved_passengers (id, user_id, full_name, tc_or_passport, birth_date, gender, phone, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(id, user.id, fullName, tcOrPassport, birthDate, gender, phone, Date.now());
+        const row = db.prepare('SELECT * FROM saved_passengers WHERE id = ?').get(id);
+        send(res, 201, { passenger: savedPassengerRecord(row) });
+      } else if (method === 'DELETE' && /^\/api\/passengers\/[a-f0-9]{24}$/.test(path)) {
+        if (!user) fail(401, 'Oturum açın.');
+        const id = path.split('/').at(-1);
+        db.prepare('DELETE FROM saved_passengers WHERE id = ? AND user_id = ?').run(id, user.id);
+        send(res, 200, { ok: true });
+      } else if (method === 'GET' && path === '/api/alerts') {
+        if (!user) fail(401, 'Oturum açın.');
+        const rows = db.prepare('SELECT * FROM price_alerts WHERE user_id = ? ORDER BY created_at DESC').all(user.id);
+        send(res, 200, { alerts: rows.map(priceAlertRecord) });
+      } else if (method === 'POST' && path === '/api/alerts') {
+        if (!user) fail(401, 'Oturum açın.');
+        const body = await readJson(req);
+        const route = text(body.route, 140, 3);
+        const target = Math.max(200, Math.min(5_000_000, Math.round(Number(body.target) || 5000)));
+        const current = Math.max(200, Math.min(5_000_000, Math.round(Number(body.current) || target + 640)));
+        const id = randomBytes(12).toString('hex');
+        db.prepare(`
+          INSERT INTO price_alerts (id, user_id, route, target_price, current_price, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(id, user.id, route, target, current, Date.now());
+        const row = db.prepare('SELECT * FROM price_alerts WHERE id = ?').get(id);
+        send(res, 201, { alert: priceAlertRecord(row) });
+      } else if (method === 'DELETE' && /^\/api\/alerts\/[a-f0-9]{24}$/.test(path)) {
+        if (!user) fail(401, 'Oturum açın.');
+        const id = path.split('/').at(-1);
+        db.prepare('DELETE FROM price_alerts WHERE id = ? AND user_id = ?').run(id, user.id);
+        send(res, 200, { ok: true });
+      } else if (method === 'GET' && path === '/api/health') {
         send(res, 200, { ok: true, status: 'healthy', timestamp: new Date().toISOString() });
       } else if (method === 'GET' && path === '/api/session') {
         send(res, 200, { user: user ? accountProfile(user) : null });
@@ -463,7 +513,37 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           send(res, 200, { booking: idempotencyCache.get(idemKey).booking, deduplicated: true });
           return true;
         }
+        // B2B Organization Credit Limit check & auto-deduction
+        let orgRow = null;
+        if (path === '/api/bookings' && user?.organization_id) {
+          orgRow = db.prepare('SELECT * FROM organizations WHERE id = ?').get(user.organization_id);
+          if (orgRow && orgRow.status === 'suspended') {
+            fail(403, 'Bağlı olduğunuz şirket hesabı askıya alınmıştır.');
+          }
+          if (orgRow && orgRow.credit_limit > 0) {
+            const saleAmount = Math.round(Number(body.price) || 0);
+            if ((orgRow.used_credit || 0) + saleAmount > orgRow.credit_limit) {
+              fail(402, `Şirket B2B cari kredi limiti yetersiz! Kalan limit: ₺${Math.max(0, orgRow.credit_limit - (orgRow.used_credit || 0)).toLocaleString('tr-TR')}`);
+            }
+          }
+        }
         const booking = newDemoBooking(db, body, path === '/api/bookings' ? user : null);
+        if (orgRow && orgRow.credit_limit > 0) {
+          const debitAmt = Math.round(booking.price);
+          db.prepare('UPDATE organizations SET used_credit = used_credit + ? WHERE id = ?').run(debitAmt, orgRow.id);
+          db.prepare(`
+            INSERT INTO org_ledger (id, organization_id, type, amount, description, pnr, created_by, created_at)
+            VALUES (?, ?, 'debit', ?, ?, ?, ?, ?)
+          `).run(
+            randomBytes(12).toString('hex'),
+            orgRow.id,
+            debitAmt,
+            `${booking.type} Satışı: ${booking.title} (${booking.passenger})`,
+            booking.pnr,
+            user.email,
+            Date.now()
+          );
+        }
         if (idemKey) {
           idempotencyCache.set(idemKey, { booking, until: Date.now() + 10 * 60_000 });
         }
@@ -508,7 +588,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const rows = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'catalog:%'").all();
         const catalog = Object.fromEntries(rows.map(({ key, value }) => [key.slice('catalog:'.length), JSON.parse(value)]));
         send(res, 200, { catalog });
-      } else if (method === 'PUT' && /^\/api\/admin\/catalog\/(rules|coupons|agencies|hotels|transfers)$/.test(path)) {
+      } else if (method === 'PUT' && /^\/api\/admin\/catalog\/(rules|coupons|agencies|hotels|transfers|tours)$/.test(path)) {
         const section = path.split('/')[4];
         const key = 'catalog:' + section;
         const body = await readJson(req);
@@ -665,15 +745,40 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           ? Math.max(0, Math.min(100_000_000, Math.round(Number(body.creditLimitTRY) || 0)))
           : existing.credit_limit;
         const nextModules = body.allowedModules ? JSON.stringify(cleanModules(body.allowedModules)) : existing.allowed_modules;
+        const nextDiscount = body.discountPercent !== undefined
+          ? Math.max(0, Math.min(25, Math.round(Number(body.discountPercent) || 0)))
+          : (existing.discount_percent || 0);
         const row = db.prepare(`
-          UPDATE organizations SET status = ?, credit_limit = ?, allowed_modules = ?
+          UPDATE organizations SET status = ?, credit_limit = ?, allowed_modules = ?, discount_percent = ?
           WHERE id = ? RETURNING *
-        `).get(nextStatus, nextCredit, nextModules, orgId);
+        `).get(nextStatus, nextCredit, nextModules, nextDiscount, orgId);
         if (nextStatus === 'suspended') {
           db.prepare('DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE organization_id = ?)').run(orgId);
         }
         writeAuditLog(db, { actorEmail: user.email, action: 'admin:org_update', target: `${row.name}:${nextStatus}`, ip });
         send(res, 200, { organization: organizationRecord(row) });
+      } else if (method === 'GET' && /^\/api\/admin\/organizations\/[a-f0-9]{24}\/ledger$/.test(path)) {
+        const orgId = path.split('/')[4];
+        const rows = db.prepare('SELECT * FROM org_ledger WHERE organization_id = ? ORDER BY created_at DESC LIMIT 100').all(orgId);
+        send(res, 200, { entries: rows.map(orgLedgerRecord) });
+      } else if (method === 'POST' && /^\/api\/admin\/organizations\/[a-f0-9]{24}\/payment$/.test(path)) {
+        const orgId = path.split('/')[4];
+        const org = db.prepare('SELECT * FROM organizations WHERE id = ?').get(orgId);
+        if (!org) fail(404, 'Şirket bulunamadı.');
+        const body = await readJson(req);
+        const amount = Math.round(Number(body.amount));
+        if (!Number.isFinite(amount) || amount <= 0 || amount > 100_000_000) fail(400, 'Geçerli bir tahsilat tutarı girin.');
+        const description = text(body.description || 'Cari Hesap Tahsilatı', 160);
+        db.prepare('UPDATE organizations SET used_credit = MAX(0, used_credit - ?) WHERE id = ?').run(amount, orgId);
+        const entryId = randomBytes(12).toString('hex');
+        db.prepare(`
+          INSERT INTO org_ledger (id, organization_id, type, amount, description, pnr, created_by, created_at)
+          VALUES (?, ?, 'credit', ?, ?, '', ?, ?)
+        `).run(entryId, orgId, amount, description, user.email, Date.now());
+        const updatedOrg = db.prepare('SELECT * FROM organizations WHERE id = ?').get(orgId);
+        const entryRow = db.prepare('SELECT * FROM org_ledger WHERE id = ?').get(entryId);
+        writeAuditLog(db, { actorEmail: user.email, action: 'admin:org_payment', target: `${org.name}:${amount}`, ip });
+        send(res, 201, { organization: organizationRecord(updatedOrg), entry: orgLedgerRecord(entryRow) });
       } else if (method === 'DELETE' && /^\/api\/admin\/organizations\/[a-f0-9]{24}$/.test(path)) {
         const orgId = path.split('/')[4];
         const existing = db.prepare('SELECT name FROM organizations WHERE id = ?').get(orgId);

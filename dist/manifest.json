@@ -1,0 +1,17 @@
+{
+  "name": "FlyToAspan — Uçak Bileti, Otel, Transfer & Turlar",
+  "short_name": "FlyToAspan",
+  "description": "Türkiye ↔ Kazakistan ve 500+ dünya havayolunda uçak bileti, otel, VIP transfer ve kültür turları.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B1E33",
+  "theme_color": "#0B1E33",
+  "lang": "tr",
+  "icons": [
+    {
+      "src": "/images/favicon.png",
+      "sizes": "128x128",
+      "type": "image/png"
+    }
+  ]
+}

@@ -84,6 +84,37 @@ export function openDatabase(filename = process.env.FLYTOASPAN_DB || '.data/flyt
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS crm_tasks_due ON crm_tasks(status, due_date ASC);
+    CREATE TABLE IF NOT EXISTS org_ledger (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      type TEXT NOT NULL CHECK (type IN ('debit', 'credit')),
+      amount INTEGER NOT NULL,
+      description TEXT NOT NULL,
+      pnr TEXT NOT NULL DEFAULT '',
+      created_by TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS org_ledger_org ON org_ledger(organization_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS saved_passengers (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      full_name TEXT NOT NULL,
+      tc_or_passport TEXT NOT NULL DEFAULT '',
+      birth_date TEXT NOT NULL DEFAULT '',
+      gender TEXT NOT NULL DEFAULT 'M',
+      phone TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS saved_passengers_user ON saved_passengers(user_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS price_alerts (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      route TEXT NOT NULL,
+      target_price INTEGER NOT NULL,
+      current_price INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS price_alerts_user ON price_alerts(user_id, created_at DESC);
   `);
   const safeAlter = (sql) => { try { db.exec(sql); } catch { /* column already exists */ } };
   safeAlter("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
@@ -91,6 +122,8 @@ export function openDatabase(filename = process.env.FLYTOASPAN_DB || '.data/flyt
   safeAlter("ALTER TABLE users ADD COLUMN permissions TEXT NOT NULL DEFAULT '[]'");
   safeAlter('ALTER TABLE bookings ADD COLUMN organization_id TEXT');
   safeAlter('ALTER TABLE bookings ADD COLUMN sold_by_user_id TEXT');
+  safeAlter('ALTER TABLE organizations ADD COLUMN used_credit INTEGER NOT NULL DEFAULT 0');
+  safeAlter('ALTER TABLE organizations ADD COLUMN discount_percent INTEGER NOT NULL DEFAULT 0');
   return db;
 }
 
@@ -119,13 +152,53 @@ export function accountProfile(row) {
 export function organizationRecord(row) {
   let modules = ['flights', 'hotels', 'transfers'];
   try { modules = JSON.parse(row.allowed_modules || '[]'); } catch { /* default */ }
+  const used = row.used_credit || 0;
+  const limit = row.credit_limit || 0;
   return {
     id: row.id,
     name: row.name,
     type: row.type,
     status: row.status,
-    creditLimitTRY: row.credit_limit,
+    creditLimitTRY: limit,
+    usedCreditTRY: used,
+    remainingCreditTRY: Math.max(0, limit - used),
+    discountPercent: row.discount_percent || 0,
     allowedModules: Array.isArray(modules) ? modules : [],
+    createdAt: row.created_at,
+  };
+}
+
+export function orgLedgerRecord(row) {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    type: row.type,
+    amount: row.amount,
+    description: row.description,
+    pnr: row.pnr || '',
+    createdBy: row.created_by || '',
+    createdAt: row.created_at,
+  };
+}
+
+export function savedPassengerRecord(row) {
+  return {
+    id: row.id,
+    fullName: row.full_name,
+    tcOrPassport: row.tc_or_passport || '',
+    birthDate: row.birth_date || '',
+    gender: row.gender || 'M',
+    phone: row.phone || '',
+    createdAt: row.created_at,
+  };
+}
+
+export function priceAlertRecord(row) {
+  return {
+    id: row.id,
+    route: row.route,
+    target: row.target_price,
+    current: row.current_price,
     createdAt: row.created_at,
   };
 }

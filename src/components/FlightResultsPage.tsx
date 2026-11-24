@@ -28,7 +28,8 @@ import {
   generateFlights,
 } from '../data/mockData';
 import { addCalendarDays, toCalendarDate } from '../data/calendarDates';
-import { apiMessage, type BookingDraft } from '../data/api';
+import { api, apiMessage, type BookingDraft } from '../data/api';
+import type { SavedPassengerRecord } from '../types';
 import { openBrandedEticketPdf } from '../utils/eticketPdf';
 import {
   AdminMarkupConfig,
@@ -627,6 +628,15 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
   const [bookingConfirmedPnr, setBookingConfirmedPnr] = useState<string | null>(null);
   const [confirmedBooking, setConfirmedBooking] = useState<BookingRecord | null>(null);
   const [pnrCopied, setPnrCopied] = useState(false);
+  const [savedPassengers, setSavedPassengers] = useState<SavedPassengerRecord[]>([]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api.savedPassengers(controller.signal)
+      .then(({ passengers }) => { if (!controller.signal.aborted) setSavedPassengers(passengers); })
+      .catch(() => { /* guest user */ });
+    return () => controller.abort();
+  }, []);
   const [bookingError, setBookingError] = useState('');
   const [bookingPending, setBookingPending] = useState(false);
   const [couponInput, setCouponInput] = useState('');
@@ -1172,6 +1182,39 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                         <p className="uf-co-card-sub">{co.bookingOwnerSub}</p>
                       </div>
                     </div>
+
+                    {savedPassengers.length > 0 && (
+                      <div style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 12, background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                        <div style={{ fontSize: 11.5, fontWeight: 800, color: '#047857', marginBottom: 6 }}>
+                          ⚡ Kayıtlı Yolcudan 1 Tıkla Doldur:
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {savedPassengers.map((sp) => (
+                            <button
+                              key={sp.id}
+                              type="button"
+                              className="uf-quick-pill"
+                              onClick={() => {
+                                const parts = sp.fullName.trim().split(/\s+/);
+                                const last = parts.length > 1 ? parts.pop()! : '';
+                                const first = parts.join(' ');
+                                const setVal = (name: string, val: string) => {
+                                  const el = document.querySelector<HTMLInputElement>(`input[name="${name}"]`);
+                                  if (el && val) el.value = val;
+                                };
+                                setVal('firstName_0', first);
+                                setVal('surname_0', last);
+                                setVal('docNo_0', sp.tcOrPassport);
+                                setVal('birthDate_0', sp.birthDate);
+                                if (sp.phone) setVal('contactPhone', sp.phone);
+                              }}
+                            >
+                              {sp.fullName}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="uf-co-pax-list">
                       {paxSlots.map((slot, idx) => (

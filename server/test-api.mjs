@@ -425,4 +425,92 @@ test('FlyToAspan API & Security Suite', async (t) => {
     });
     assert.equal(delTask.status, 200);
   });
+
+  await t.test('B2B Cari Limit auto-deduction, 402 block, payment, Saved Passengers, Price Alerts & Tours', async () => {
+    const adminLogin = await call(env.origin, '/api/auth/login', {
+      method: 'POST',
+      body: { email: 'ops@flytoaspan.com', password: 'AdminSuperSecret2026!' },
+    });
+    const adminCookie = adminLogin.cookie;
+
+    // 1. Create org with 10.000 TL credit limit & approve corporate agent into it
+    const orgRes = await call(env.origin, '/api/admin/organizations', {
+      method: 'POST',
+      cookie: adminCookie,
+      body: { name: 'B2B Cari Test Acente', type: 'agency', creditLimitTRY: 10000, allowedModules: ['flights', 'tours'] },
+    });
+    assert.equal(orgRes.status, 201);
+    const orgId = orgRes.json.organization.id;
+
+    await call(env.origin, '/api/auth/register', {
+      method: 'POST',
+      body: { email: 'cari@test.com', firstName: 'Can', lastName: 'Yilmaz', companyName: 'B2B Cari Test Acente', phone: '+905310001122', accountType: 'corporate' },
+    });
+    const usersList = await call(env.origin, '/api/admin/users', { cookie: adminCookie });
+    const can = usersList.json.users.find((u) => u.email === 'cari@test.com');
+    await call(env.origin, `/api/admin/users/${can.id}/approve`, {
+      method: 'POST',
+      cookie: adminCookie,
+      body: { password: 'CariAgentPass2026!', organizationId: orgId, permissions: ['flights.sell', 'tours.sell', 'bookings.view_own'] },
+    });
+    const agentLogin = await call(env.origin, '/api/auth/login', {
+      method: 'POST',
+      body: { email: 'cari@test.com', password: 'CariAgentPass2026!' },
+    });
+    const agentCookie = agentLogin.cookie;
+
+    // 2. Book 7.000 TL tour -> succeeds & deducts from Cari Limit
+    const tourBk = await call(env.origin, '/api/bookings', {
+      method: 'POST',
+      cookie: agentCookie,
+      body: { type: 'Tur', title: 'Kapadokya Balon Turu', subtitle: '2 Gece', date: '2026-12-18', passenger: 'Can Yilmaz', lookupSurname: 'Yilmaz', price: 7000 },
+    });
+    assert.equal(tourBk.status, 201);
+
+    // 3. Second booking of 5.000 TL exceeds 10.000 TL limit -> 402 Payment Required!
+    const overLimit = await call(env.origin, '/api/bookings', {
+      method: 'POST',
+      cookie: agentCookie,
+      body: { type: 'Uçak', title: 'IST → ALA', subtitle: 'KC912', date: '2026-12-20', passenger: 'Can Yilmaz', lookupSurname: 'Yilmaz', price: 5000 },
+    });
+    assert.equal(overLimit.status, 402);
+
+    // 4. Admin records 4.000 TL payment -> usedCredit drops to 3.000 TL, ledger has 2 rows
+    const payRes = await call(env.origin, `/api/admin/organizations/${orgId}/payment`, {
+      method: 'POST',
+      cookie: adminCookie,
+      body: { amount: 4000, description: 'EFT Tahsilat' },
+    });
+    assert.equal(payRes.status, 201);
+    assert.equal(payRes.json.organization.usedCreditTRY, 3000);
+    assert.equal(payRes.json.organization.remainingCreditTRY, 7000);
+
+    const ledgerRes = await call(env.origin, `/api/admin/organizations/${orgId}/ledger`, { cookie: adminCookie });
+    assert.equal(ledgerRes.status, 200);
+    assert.equal(ledgerRes.json.entries.length, 2);
+
+    // 5. Persistent Saved Passengers & Price Alerts
+    const paxAdd = await call(env.origin, '/api/passengers', {
+      method: 'POST',
+      cookie: agentCookie,
+      body: { fullName: 'Can Yilmaz', tcOrPassport: '12345678901', birthDate: '1992-05-14' },
+    });
+    assert.equal(paxAdd.status, 201);
+    const paxList = await call(env.origin, '/api/passengers', { cookie: agentCookie });
+    assert.equal(paxList.json.passengers.length, 1);
+
+    const alertAdd = await call(env.origin, '/api/alerts', {
+      method: 'POST',
+      cookie: agentCookie,
+      body: { route: 'IST → ALA', target: 5800 },
+    });
+    assert.equal(alertAdd.status, 201);
+    const alertList = await call(env.origin, '/api/alerts', { cookie: agentCookie });
+    assert.equal(alertList.json.alerts.length, 1);
+
+    // 6. Health check endpoint
+    const health = await call(env.origin, '/api/health');
+    assert.equal(health.status, 200);
+    assert.equal(health.json.ok, true);
+  });
 });

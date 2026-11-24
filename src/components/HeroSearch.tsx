@@ -21,6 +21,7 @@ import {
   Sparkles,
   Star,
   Zap,
+  Compass,
 } from 'lucide-react';
 import { AIRPORTS, Airport } from '../data/mockData';
 import { addCalendarDays, fromCalendarDate, toCalendarDate } from '../data/calendarDates';
@@ -43,6 +44,7 @@ interface HeroSearchProps {
   onSearchFlight: (q: FlightSearchQuery) => void;
   onSearchHotel: (q: HotelSearchQuery) => void;
   onSearchTransfer: (q: TransferSearchQuery) => void;
+  onSearchTour?: () => void;
 }
 
 type CalendarField = 'depart' | 'return' | 'hotelIn' | 'hotelOut' | 'trDate';
@@ -64,6 +66,8 @@ const PROMO_IMAGES: Record<SearchTab, string> = {
     'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=900&q=85',
   transfer:
     'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?auto=format&fit=crop&w=900&q=85',
+  tour:
+    '/images/almaty.jpg',
 };
 
 // High-altitude commercial aircraft in-flight photography for every destination route
@@ -92,6 +96,7 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
   onSearchFlight,
   onSearchHotel,
   onSearchTransfer,
+  onSearchTour,
 }) => {
   const t = TRANSLATIONS[lang].hero;
   const widgetRef = useRef<HTMLDivElement>(null);
@@ -107,7 +112,7 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
   const [invalidTab, setInvalidTab] = useState<SearchTab | null>(null);
   const [userChangedDest, setUserChangedDest] = useState(false);
   const [recentSearches, setRecentSearches] = useState<
-    Array<{ fromCode: string; toCode: string; departDate: string; tripType: 'oneway' | 'roundtrip' }>
+    Array<{ fromCode: string; toCode: string; departDate: string; tripType: 'oneway' | 'roundtrip' | 'multicity' }>
   >(() => {
     try {
       const raw = localStorage.getItem('flytoaspan_recent_searches_v1');
@@ -277,7 +282,14 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
       ? { stat1: pm.flight1, stat2: pm.flight2, title: t.flightPromoTitle, sub: t.flightPromoSub }
       : activeTab === 'hotel'
         ? { stat1: pm.hotel1, stat2: pm.hotel2, title: t.hotelPromoTitle, sub: t.hotelPromoSub }
-        : { stat1: pm.transfer1, stat2: pm.transfer2, title: t.transferPromoTitle, sub: t.transferPromoSub };
+        : activeTab === 'tour'
+          ? {
+              stat1: lang === 'EN' ? '4 Countries' : lang === 'RU' ? '4 страны' : lang === 'KK' ? '4 ел' : '4 Ülke · 12+ Rota',
+              stat2: lang === 'EN' ? 'All-Inclusive' : lang === 'RU' ? 'Всё включено' : lang === 'KK' ? 'Барлығы кіреді' : 'Uçak + Otel Dahil',
+              title: lang === 'EN' ? 'Curated Cultural & Holiday Tours' : lang === 'RU' ? 'Авторские туры и отдых' : lang === 'KK' ? 'Мәдени және демалыс турлары' : 'Seçkin Kültür & Tatil Turları',
+              sub: lang === 'EN' ? 'Almaty, Cappadocia, Antalya & Visa-Free Balkans with Turkish guides.' : lang === 'RU' ? 'Алматы, Каппадокия, Анталья и безвизовые Балканы.' : lang === 'KK' ? 'Алматы, Каппадокия, Анталья және визасыз Балқан турлары.' : 'Almatı, Kapadokya, Antalya ve vizesiz Balkanlarda her şey dahil paketler.',
+            }
+          : { stat1: pm.transfer1, stat2: pm.transfer2, title: t.transferPromoTitle, sub: t.transferPromoSub };
 
   const handleSwapFlight = () => {
     setUserChangedDest(true);
@@ -323,6 +335,7 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
       (flightQuery.tripType === 'roundtrip' && flightQuery.returnDate < minReturnDate),
     hotel: hotelQuery.checkIn < todayIso || hotelQuery.checkOut < minHotelOut,
     transfer: transferQuery.date < todayIso,
+    tour: false,
   };
   const searchError = activeTab === 'flight' && flightQuery.fromCode === flightQuery.toCode
     ? t.invalidFlightRoute
@@ -355,6 +368,7 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
       }
       onSearchFlight(flightQuery);
     } else if (activeTab === 'hotel') onSearchHotel(hotelQuery);
+    else if (activeTab === 'tour') onSearchTour?.();
     else onSearchTransfer(transferQuery);
   };
 
@@ -575,7 +589,35 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
                 <CarTaxiFront size={17} />
                 <span>{t.tabTransfer}</span>
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'tour'}
+                className={`u4-tab-btn ${activeTab === 'tour' ? 'active' : ''}`}
+                onClick={() => {
+                  onTabChange('tour');
+                  setOpenPop(null);
+                }}
+              >
+                <Compass size={17} />
+                <span>{lang === 'EN' ? 'Tours' : lang === 'RU' ? 'Туры' : lang === 'KK' ? 'Турлар' : 'Turlar'}</span>
+              </button>
             </div>
+
+            {activeTab === 'tour' && (
+              <div className="u4-form-stack" style={{ padding: '8px 0' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+                  <div className="u4-field" style={{ cursor: 'default' }}>
+                    <span className="u4-label"><MapPin size={13} /> Bölge / Rota</span>
+                    <div className="u4-val">Almatı · Kapadokya · Antalya · Balkanlar</div>
+                  </div>
+                  <div className="u4-field" style={{ cursor: 'default' }}>
+                    <span className="u4-label"><Sparkles size={13} /> Paket İçeriği</span>
+                    <div className="u4-val">Uçak + Otel + Rehber + VIP Transfer</div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* ================= FLIGHT FORM ================= */}
             {activeTab === 'flight' && (
@@ -607,7 +649,71 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
                     <ArrowLeftRight size={15} />
                     <span>{t.roundTrip}</span>
                   </button>
+                  <button
+                    type="button"
+                    className={`u4-trip-btn ${flightQuery.tripType === 'multicity' ? 'active' : ''}`}
+                    onClick={() =>
+                      onFlightQueryChange({
+                        ...flightQuery,
+                        tripType: 'multicity',
+                        leg2FromCode: flightQuery.leg2FromCode || flightQuery.toCode,
+                        leg2ToCode: flightQuery.leg2ToCode || (flightQuery.toCode === 'ALA' ? 'NQZ' : 'ALA'),
+                        leg2Date: flightQuery.leg2Date || addCalendarDays(flightQuery.departDate, 4),
+                      })
+                    }
+                  >
+                    <Compass size={15} />
+                    <span>{lang === 'EN' ? 'Multi-City' : lang === 'RU' ? 'Сложный маршрут' : lang === 'KK' ? 'Көп қалалы' : 'Çoklu Uçuş'}</span>
+                  </button>
                 </div>
+
+                {flightQuery.tripType === 'multicity' && (
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                      gap: 8,
+                      padding: '10px 12px',
+                      borderRadius: 12,
+                      background: 'rgba(0, 168, 181, 0.07)',
+                      border: '1px dashed rgba(0, 168, 181, 0.45)',
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--aspan-teal-deep)', marginBottom: 3 }}>2. Etap Kalkış</div>
+                      <select
+                        className="modal-input"
+                        style={{ height: 34, fontSize: 12 }}
+                        value={flightQuery.leg2FromCode || flightQuery.toCode}
+                        onChange={(e) => onFlightQueryChange({ ...flightQuery, leg2FromCode: e.target.value })}
+                      >
+                        {AIRPORTS.map((a) => <option key={a.code} value={a.code}>{a.city} ({a.code})</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--aspan-teal-deep)', marginBottom: 3 }}>2. Etap Varış</div>
+                      <select
+                        className="modal-input"
+                        style={{ height: 34, fontSize: 12 }}
+                        value={flightQuery.leg2ToCode || 'NQZ'}
+                        onChange={(e) => onFlightQueryChange({ ...flightQuery, leg2ToCode: e.target.value })}
+                      >
+                        {AIRPORTS.map((a) => <option key={a.code} value={a.code}>{a.city} ({a.code})</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--aspan-teal-deep)', marginBottom: 3 }}>2. Etap Tarihi</div>
+                      <input
+                        type="date"
+                        className="modal-input"
+                        style={{ height: 34, fontSize: 12 }}
+                        min={flightQuery.departDate}
+                        value={flightQuery.leg2Date || addCalendarDays(flightQuery.departDate, 4)}
+                        onChange={(e) => onFlightQueryChange({ ...flightQuery, leg2Date: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div className="u4-row-route">
                   <div className="u4-field-wrap">
@@ -1269,7 +1375,9 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
                     ? t.searchFlight
                     : activeTab === 'hotel'
                       ? t.searchHotel
-                      : t.searchTransfer}
+                      : activeTab === 'tour'
+                        ? (lang === 'EN' ? 'Explore Tours' : lang === 'RU' ? 'Смотреть туры' : lang === 'KK' ? 'Турларды көру' : 'Tur Paketlerini İncele')
+                        : t.searchTransfer}
                 </span>
               </button>
             </div>
@@ -1303,6 +1411,8 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
                   </>
                 ) : activeTab === 'hotel' ? (
                   <>{pm.hotelChip}</>
+                ) : activeTab === 'tour' ? (
+                  <>{lang === 'EN' ? '★ Guided Tours' : lang === 'RU' ? '★ Авторские туры' : lang === 'KK' ? '★ Таңдаулы турлар' : '★ Seçkin Turlar'}</>
                 ) : (
                   <>{pm.transferChip}</>
                 )}
@@ -1316,6 +1426,8 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
                     <Plane size={12} />
                   ) : activeTab === 'hotel' ? (
                     <Building2 size={12} />
+                  ) : activeTab === 'tour' ? (
+                    <Compass size={12} />
                   ) : (
                     <CarTaxiFront size={12} />
                   )}
