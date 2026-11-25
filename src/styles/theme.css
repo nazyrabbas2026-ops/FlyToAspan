@@ -7046,3 +7046,51 @@ body {
     radial-gradient(640px 380px at 50% 42%, rgba(214, 174, 86, 0.18) 0%, transparent 70%),
     linear-gradient(180deg, #04111d 0%, #0a243a 52%, #04111d 100%);
 }
+
+
+/* Ultra-sleek, hair-thin luxury aviation map routes */
+.hfm-land {
+  fill: #102b44;
+  fill-opacity: 0.36;
+  stroke: rgba(214, 174, 86, 0.18);
+  stroke-opacity: 1;
+}
+
+.hfm-route {
+  stroke-width: 0.95;
+  opacity: 0.44;
+}
+
+.hfm-route.gold {
+  stroke: rgba(242, 207, 122, 0.78);
+}
+
+.hfm-route.cyan {
+  stroke: rgba(164, 214, 228, 0.6);
+}
+
+.hfm-route.secondary {
+  stroke-width: 0.75;
+  opacity: 0.28;
+  stroke-dasharray: 3 5;
+}
+
+.hfm-route.hfm-atlantic-route {
+  stroke-width: 0.85;
+  opacity: 0.52;
+}
+
+.hfm-airport .halo {
+  fill: #d6ae56;
+  opacity: 0.13;
+}
+
+.hfm-airport .dot {
+  fill: rgba(242, 207, 122, 0.68);
+  stroke: rgba(255, 248, 228, 0.35);
+  stroke-width: 0.85px;
+}
+
+.hfm-airport text {
+  fill: rgba(235, 240, 246, 0.48);
+}
