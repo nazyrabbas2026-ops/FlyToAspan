@@ -149,6 +149,12 @@ export const App: React.FC = () => {
     return () => controller.abort();
   }, []);
 
+  const refreshPublicCatalog = () => {
+    api.publicCatalog()
+      .then(({ catalog }) => setPublicCatalog(catalog ?? {}))
+      .catch(() => { /* ignore */ });
+  };
+
   useEffect(() => {
     if (!bookingKey) return;
     const controller = new AbortController();
@@ -461,6 +467,7 @@ export const App: React.FC = () => {
             currency={currency}
             markup={markup}
             manualFlights={publicCatalog.flights}
+            operatorRules={publicCatalog.operators}
             query={flightQuery}
             onChangeQuery={(next) => {
               setFlightQuery(next);
@@ -479,6 +486,7 @@ export const App: React.FC = () => {
             lang={lang}
             currency={currency}
             markup={markup}
+            liveHotels={publicCatalog.hotels}
             query={hotelQuery}
             onAddBooking={handleAddBooking}
             onBackHome={() => {
@@ -494,6 +502,7 @@ export const App: React.FC = () => {
             lang={lang}
             currency={currency}
             markup={markup}
+            liveTransfers={publicCatalog.transfers}
             query={transferQuery}
             onAddBooking={handleAddBooking}
             onBackHome={() => {
@@ -504,7 +513,13 @@ export const App: React.FC = () => {
           />
         )}
 
-        {page === 'campaigns' && <CampaignsPage lang={lang} onUseCampaign={handleJumpToTab} />}
+        {page === 'campaigns' && (
+          <CampaignsPage
+            lang={lang}
+            liveCoupons={publicCatalog.coupons}
+            onUseCampaign={handleJumpToTab}
+          />
+        )}
         {page === 'checkin' && <OnlineCheckInPage lang={lang} />}
         {page === 'help' && <HelpPage lang={lang} />}
         {page === 'booking-ops' && <BookingOpsPage lang={lang} />}
@@ -535,7 +550,9 @@ export const App: React.FC = () => {
               onLogout={signOut}
               onUpdateBookingStatus={handleUpdateBookingStatus}
               onDeleteBooking={handleDeleteBooking}
+              onCatalogUpdated={refreshPublicCatalog}
               onBackHome={() => {
+                refreshPublicCatalog();
                 setPage('home');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}

@@ -26,6 +26,7 @@ import {
   formatDisplayDate,
   formatPrice,
   generateFlights,
+  getLiveRatesSnapshot,
 } from '../data/mockData';
 import { addCalendarDays, toCalendarDate } from '../data/calendarDates';
 import { api, apiMessage, type AdminCatalog, type BookingDraft } from '../data/api';
@@ -44,6 +45,7 @@ interface FlightResultsPageProps {
   currency?: CurrencyCode;
   markup?: AdminMarkupConfig;
   manualFlights?: AdminCatalog['flights'];
+  operatorRules?: AdminCatalog['operators'];
   query: FlightSearchQuery;
   onChangeQuery?: (next: FlightSearchQuery) => void;
   onBackHome: () => void;
@@ -610,6 +612,7 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
   currency = 'TRY',
   markup = DEFAULT_MARKUP,
   manualFlights = [],
+  operatorRules = [],
   query,
   onChangeQuery,
   onBackHome,
@@ -658,6 +661,22 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
     const generated = generateFlights(query.fromCode, query.toCode, query.departDate, query.cabin, lang, markup, currency);
     const fromObj = AIRPORTS.find((a) => a.code === query.fromCode);
     const toObj = AIRPORTS.find((a) => a.code === query.toCode);
+    const eurRateToTRY = Math.round(1 / (getLiveRatesSnapshot().rates.EUR || 0.0181));
+    const applyOperatorXmlMarkup = (baseTRY: number, operatorName: string): number => {
+      const normOp = operatorName.toLowerCase();
+      const rule = operatorRules.find(
+        (r) =>
+          r.active &&
+          r.product.toLowerCase().includes('uçak') &&
+          (normOp.includes(r.operator.toLowerCase().replace(/\s*\(xml\)/g, '').trim()) ||
+            r.operator.toLowerCase().includes(normOp.replace(/\s*\(xml\)/g, '').trim()))
+      );
+      if (!rule || rule.markupType === 'NET' || rule.markupValue === 0) return baseTRY;
+      if (rule.markupType === 'EUR') return baseTRY + Math.round(rule.markupValue * eurRateToTRY);
+      if (rule.markupType === 'TRY') return baseTRY + rule.markupValue;
+      if (rule.markupType === 'PERCENT') return Math.round(baseTRY * (1 + rule.markupValue / 100));
+      return baseTRY;
+    };
     const custom: FlightResult[] = manualFlights
       .filter((mf) => mf.active && mf.fromCode.toUpperCase() === query.fromCode.toUpperCase() && mf.toCode.toUpperCase() === query.toCode.toUpperCase())
       .map((mf) => {
@@ -667,6 +686,7 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
         const arrMins = Number(ah) * 60 + Number(am);
         const durMins = arrMins > depMins ? arrMins - depMins : (24 * 60 - depMins + arrMins);
         const nextDay = arrMins < depMins ? 1 : 0;
+        const xmlAdjustedPrice = applyOperatorXmlMarkup(mf.priceTRY, mf.operator);
         return {
           id: `manual-${mf.id}`,
           airline: `${mf.airline} (${mf.operator})`,
@@ -687,7 +707,7 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
           durationLabel: mf.duration || `${Math.floor(durMins / 60)}sa ${durMins % 60}dk`,
           stops: 0,
           seatsLeft: mf.quota,
-          basePrice: mf.priceTRY,
+          basePrice: xmlAdjustedPrice,
           packages: [
             {
               id: `man-eco-${mf.id}`,
@@ -707,7 +727,7 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
         };
       });
     return [...custom, ...generated];
-  }, [query.fromCode, query.toCode, query.departDate, query.cabin, lang, markup, currency, manualFlights]);
+  }, [query.fromCode, query.toCode, query.departDate, query.cabin, lang, markup, currency, manualFlights, operatorRules]);
   const inboundFlights = useMemo(
     () =>
       isRoundTrip

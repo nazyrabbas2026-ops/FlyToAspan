@@ -214,13 +214,30 @@ const SUBPAGES_I18N: Record<
 
 export const CampaignsPage: React.FC<{
   lang?: LangCode;
+  liveCoupons?: Array<{ id: string; code: string; title: string; category: string; validUntil: string; active: boolean }>;
   onUseCampaign: (tab: SearchTab) => void;
-}> = ({ lang = 'TR', onUseCampaign }) => {
+}> = ({ lang = 'TR', liveCoupons, onUseCampaign }) => {
   const [cat, setCat] = useState<'Tümü' | 'Uçak' | 'Otel' | 'Transfer'>('Tümü');
   const [copied, setCopied] = useState<string | null>(null);
   const ui = SUBPAGES_I18N[lang];
 
-  const list = cat === 'Tümü' ? CAMPAIGNS : CAMPAIGNS.filter((c) => c.category === cat);
+  const sourceList = liveCoupons !== undefined
+    ? liveCoupons
+        .filter((c) => c.active)
+        .map((c, idx) => {
+          const base = CAMPAIGNS.find((m) => m.id === c.id || m.code === c.code) ?? CAMPAIGNS[idx % CAMPAIGNS.length];
+          return {
+            ...base,
+            id: c.id,
+            code: c.code,
+            title: c.title,
+            category: (c.category === 'Otel' || c.category === 'Transfer' ? c.category : 'Uçak') as 'Uçak' | 'Otel' | 'Transfer',
+            validUntil: c.validUntil,
+          };
+        })
+    : CAMPAIGNS;
+
+  const list = cat === 'Tümü' ? sourceList : sourceList.filter((c) => c.category === cat);
 
   return (
     <>

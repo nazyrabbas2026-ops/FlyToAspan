@@ -527,6 +527,34 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
       } else if (method === 'GET' && path === '/api/catalog') {
         const rows = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'catalog:%'").all();
         const catalog = Object.fromEntries(rows.map(({ key, value }) => [key.slice('catalog:'.length), JSON.parse(value).items]));
+        if (!('operators' in catalog)) {
+          catalog.operators = [
+            { id: 'op-funsun', operator: 'FUN&SUN (XML)', product: 'Uçak Bileti', markupType: 'NET', markupValue: 0, active: true },
+            { id: 'op-kompas', operator: 'Kompas Tour (XML)', product: 'Uçak Bileti', markupType: 'EUR', markupValue: 10, active: true },
+            { id: 'op-selfie', operator: 'Selfie Travel (XML)', product: 'Uçak Bileti', markupType: 'EUR', markupValue: 10, active: true },
+            { id: 'op-tours-net', operator: 'Tüm Operatörler (XML)', product: 'Tur Paketi', markupType: 'NET', markupValue: 0, active: true },
+          ];
+        }
+        if (!('flights' in catalog)) {
+          catalog.flights = [
+            {
+              id: 'mf-kc918',
+              airline: 'Air Astana Charter',
+              airlineCode: 'KC',
+              flightNumber: 'KC918',
+              fromCode: 'IST',
+              toCode: 'ALA',
+              departTime: '22:45',
+              arriveTime: '06:15',
+              duration: '5sa 30dk',
+              operator: 'Kompas Tour (XML)',
+              baggage: '20 kg Bagaj',
+              priceTRY: 6450,
+              quota: 12,
+              active: true,
+            },
+          ];
+        }
         send(res, 200, { catalog });
       } else if (method === 'GET' && path === '/api/fx') {
         send(res, 200, await readFxRates());

@@ -5,6 +5,7 @@ import {
   Ticket,
   Tag,
   CheckCircle2,
+  AlertCircle,
   RotateCcw,
   Plane,
   Building2,
@@ -131,6 +132,7 @@ interface AdminPanelPageProps {
   onAddBooking: (draft: BookingDraft) => Promise<BookingRecord>;
   onUpdateBookingStatus: (id: string, status: BookingRecord['status']) => Promise<void>;
   onDeleteBooking: (id: string) => Promise<void>;
+  onCatalogUpdated?: () => void;
   onLogout: () => void;
   onBackHome: () => void;
 }
@@ -326,6 +328,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   onAddBooking,
   onUpdateBookingStatus,
   onDeleteBooking,
+  onCatalogUpdated,
   onLogout,
   onBackHome,
 }) => {
@@ -374,6 +377,9 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   const [newOpProduct, setNewOpProduct] = useState('Uçak Bileti');
   const [newOpMarkupType, setNewOpMarkupType] = useState<'NET' | 'EUR' | 'TRY' | 'PERCENT'>('EUR');
   const [newOpMarkupVal, setNewOpMarkupVal] = useState('10');
+  const [newCouponCategory, setNewCouponCategory] = useState<'Uçak' | 'Otel' | 'Transfer' | 'Tur'>('Uçak');
+  const [newCouponValidUntil, setNewCouponValidUntil] = useState('31 Aralık 2027');
+  const [pendingCatalogDelete, setPendingCatalogDelete] = useState<{ section: keyof AdminCatalog; id: string; label: string } | null>(null);
 
   // New Manual Flight form state
   const [mfAirline, setMfAirline] = useState('Air Astana');
@@ -755,6 +761,8 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
     void runAction(async () => {
       const { entry } = await api.updateAdminCatalog(section, catalog[section]?.revision ?? 0, items);
       setCatalog((current) => ({ ...current, [section]: entry }));
+      setPendingCatalogDelete(null);
+      onCatalogUpdated?.();
       afterSave?.();
       flash(message);
     });
@@ -2012,125 +2020,243 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                   </div>
 
                   {/* OPERATOR XML PRICING ENGINE (FUN&SUN, KOMPAS TOUR, SELFIE TRAVEL, NET TOURS) */}
-                  <div className="panel-card" style={{ border: '1.5px solid rgba(0,168,181,0.4)' }}>
-                    <strong style={{ fontSize: 17.5, display: 'block', marginBottom: 4 }}>
+                  <div className="panel-card" style={{ border: '1.5px solid rgba(0,168,181,0.45)' }}>
+                    <strong style={{ fontSize: 18, display: 'block', marginBottom: 6 }}>
                       Operatör XML Bazlı Fiyatlandırma &amp; Net Kâr Kuralları
                     </strong>
-                    <p style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)', marginTop: 0, marginBottom: 14 }}>
-                      FUN&amp;SUN, Kompas Tour, Selfie Travel ve tüm operatörlerden XML ile gelen bilet ve tur paketlerine ayrı ayrı NET, +€ (Euro), +₺ veya +% kuralı tanımlayın.
-                    </p>
-                    {operatorRules.map((op) => {
-                      const badgeText =
-                        op.markupType === 'NET' || op.markupValue === 0
-                          ? 'NET Fiyat (+0 € · Kâr Eklenmez)'
-                          : op.markupType === 'EUR'
-                            ? `+${op.markupValue} € Ekle`
-                            : op.markupType === 'TRY'
-                              ? `+₺${op.markupValue} Ekle`
-                              : `+%${op.markupValue} Komisyon`;
-                      return (
-                        <div
-                          key={op.id}
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            padding: '11px 0',
-                            borderBottom: '1px solid var(--aspan-border)',
-                            flexWrap: 'wrap',
-                            gap: 10,
-                            opacity: op.active ? 1 : 0.55,
-                          }}
-                        >
-                          <div>
-                            <span className="pkg-pill">{op.product}</span>{' '}
-                            <strong style={{ fontSize: 14.5 }}>{op.operator}</strong>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span className={`status-badge ${op.markupType === 'NET' ? 'ok' : 'warn'}`}>{badgeText}</span>
-                            <button
-                              type="button"
-                              className="uf-quick-pill"
-                              disabled={!catalogWritable}
-                              onClick={() => saveCatalog(
-                                'operators',
-                                operatorRules.map((r) => (r.id === op.id ? { ...r, active: !r.active } : r)),
-                                `${op.operator} XML kuralı güncellendi.`
-                              )}
-                            >
-                              {op.active ? 'Pasifleştir' : 'Aktifleştir'}
-                            </button>
-                            <button
-                              type="button"
-                              className="drawer-close"
-                              disabled={!catalogWritable}
-                              aria-label={`${op.operator} sil`}
-                              onClick={() => saveCatalog(
-                                'operators',
-                                operatorRules.filter((r) => r.id !== op.id),
-                                `${op.operator} XML kuralı silindi.`
-                              )}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    <div className="adm-banner adm-banner-info">
+                      <AlertCircle size={17} style={{ flexShrink: 0, marginTop: 2 }} />
+                      <div>
+                        <strong>Nasıl Çalışır?</strong> FUN&amp;SUN, Kompas Tour, Selfie Travel ve diğer XML tedarikçilerden gelen bilet ve tur paketlerine ayrı ayrı <strong>NET (+0 €)</strong>, <strong>+Euro (€)</strong>, <strong>+TL (₺)</strong> veya <strong>+Yüzde (%)</strong> kâr kuralı tanımlayın. Aktif kurallar manuel uçuşlara ve XML simülasyonuna anında yansır.
+                      </div>
+                    </div>
 
-                    <form
-                      className="panel-form-grid"
-                      style={{ marginTop: 14 }}
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        if (!newOpName.trim()) return;
-                        saveCatalog(
-                          'operators',
-                          [
-                            ...operatorRules,
-                            {
-                              id: crypto.randomUUID(),
-                              operator: newOpName.trim(),
-                              product: newOpProduct,
-                              markupType: newOpMarkupType,
-                              markupValue: newOpMarkupType === 'NET' ? 0 : Math.max(0, Math.round(Number(newOpMarkupVal) || 0)),
-                              active: true,
-                            },
-                          ],
-                          'Yeni operatör XML kuralı kaydedildi.',
-                          () => {
-                            setNewOpName('');
-                            setNewOpMarkupVal('10');
-                          }
-                        );
-                      }}
-                    >
-                      <input className="modal-input" required placeholder="Operatör (Örn: FUN&SUN, Kompas Tour)" value={newOpName} onChange={(e) => setNewOpName(e.target.value)} />
-                      <select className="modal-input" value={newOpProduct} onChange={(e) => setNewOpProduct(e.target.value)}>
-                        <option value="Uçak Bileti">Uçak Bileti</option>
-                        <option value="Tur Paketi">Tur Paketi</option>
-                        <option value="Otel">Otel</option>
-                        <option value="Transfer">Transfer</option>
-                      </select>
-                      <select className="modal-input" value={newOpMarkupType} onChange={(e) => setNewOpMarkupType(e.target.value as 'NET' | 'EUR' | 'TRY' | 'PERCENT')}>
-                        <option value="NET">NET (Kâr Eklenmez)</option>
-                        <option value="EUR">+ Euro (€)</option>
-                        <option value="TRY">+ TL (₺)</option>
-                        <option value="PERCENT">+ Yüzde (%)</option>
-                      </select>
-                      <input
-                        className="modal-input"
-                        type="number"
-                        min={0}
-                        disabled={newOpMarkupType === 'NET'}
-                        placeholder="Değer (Örn: 10)"
-                        value={newOpMarkupType === 'NET' ? '0' : newOpMarkupVal}
-                        onChange={(e) => setNewOpMarkupVal(e.target.value)}
-                      />
-                      <button type="submit" className="btn-gold-nav" style={{ borderRadius: 12 }} disabled={!catalogWritable}>
-                        <Plus size={15} /> XML Kuralı Ekle
-                      </button>
-                    </form>
+                    <div className="adm-table-wrap">
+                      <table className="adm-table">
+                        <thead>
+                          <tr>
+                            <th>Operatör (XML)</th>
+                            <th>Ürün Tipi</th>
+                            <th>Kâr / Komisyon Kuralı</th>
+                            <th>Örnek Geliş → Canlı Satış</th>
+                            <th>Durum</th>
+                            <th>İşlemler</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {operatorRules.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--aspan-text-muted)' }}>
+                                Henüz operatör XML kuralı eklenmemiş. Aşağıdaki formdan yeni kural ekleyebilirsiniz.
+                              </td>
+                            </tr>
+                          ) : (
+                            operatorRules.map((op) => {
+                              const eurRate = Math.round(1 / (fxSnapshot.rates.EUR || 0.0181));
+                              const isTour = op.product.toLowerCase().includes('tur');
+                              const sampleNetEur = isTour ? 500 : 200;
+                              const saleEur =
+                                op.markupType === 'NET' || op.markupValue === 0
+                                  ? sampleNetEur
+                                  : op.markupType === 'EUR'
+                                    ? sampleNetEur + op.markupValue
+                                    : op.markupType === 'PERCENT'
+                                      ? Math.round(sampleNetEur * (1 + op.markupValue / 100))
+                                      : Math.round(sampleNetEur + op.markupValue / Math.max(1, eurRate));
+                              const badgeText =
+                                op.markupType === 'NET' || op.markupValue === 0
+                                  ? 'NET (+0 € · Kâr Yok)'
+                                  : op.markupType === 'EUR'
+                                    ? `+${op.markupValue} €`
+                                    : op.markupType === 'TRY'
+                                      ? `+₺${op.markupValue}`
+                                      : `+%${op.markupValue}`;
+                              const isConfirming = pendingCatalogDelete?.section === 'operators' && pendingCatalogDelete.id === op.id;
+
+                              return (
+                                <tr key={op.id} className={!op.active ? 'is-inactive' : ''}>
+                                  <td>
+                                    <strong style={{ fontSize: 14 }}>{op.operator}</strong>
+                                  </td>
+                                  <td>
+                                    <span className="pkg-pill">{op.product}</span>
+                                  </td>
+                                  <td>
+                                    <span className={`status-badge ${op.markupType === 'NET' || op.markupValue === 0 ? 'ok' : 'warn'}`}>
+                                      {badgeText}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <span style={{ color: 'var(--aspan-text-muted)', fontWeight: 600 }}>{sampleNetEur} €</span>{' '}
+                                    → <strong style={{ color: 'var(--aspan-teal-deep)' }}>{saleEur} €</strong>{' '}
+                                    <span style={{ fontSize: 11.5, color: '#059669', fontWeight: 700 }}>
+                                      ({saleEur === sampleNetEur ? 'NET' : `+${saleEur - sampleNetEur} €`})
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <span className={`status-badge ${op.active ? 'ok' : 'warn'}`}>
+                                      {op.active ? '● Aktif' : '○ Pasif'}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <div className="adm-actions">
+                                      {op.markupType === 'EUR' && (
+                                        <>
+                                          <button
+                                            type="button"
+                                            className="adm-btn adm-btn-blue"
+                                            disabled={!catalogWritable}
+                                            onClick={() => saveCatalog(
+                                              'operators',
+                                              operatorRules.map((r) => (r.id === op.id ? { ...r, markupValue: r.markupValue + 5 } : r)),
+                                              `${op.operator} kuralı +${op.markupValue + 5} € olarak güncellendi.`
+                                            )}
+                                          >
+                                            +5 €
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="adm-btn adm-btn-ghost"
+                                            disabled={!catalogWritable || op.markupValue < 5}
+                                            onClick={() => saveCatalog(
+                                              'operators',
+                                              operatorRules.map((r) => (r.id === op.id ? { ...r, markupValue: Math.max(0, r.markupValue - 5) } : r)),
+                                              `${op.operator} kuralı +${Math.max(0, op.markupValue - 5)} € olarak güncellendi.`
+                                            )}
+                                          >
+                                            -5 €
+                                          </button>
+                                        </>
+                                      )}
+                                      <button
+                                        type="button"
+                                        className={`adm-btn ${op.active ? 'adm-btn-amber' : 'adm-btn-green-soft'}`}
+                                        disabled={!catalogWritable}
+                                        onClick={() => saveCatalog(
+                                          'operators',
+                                          operatorRules.map((r) => (r.id === op.id ? { ...r, active: !r.active } : r)),
+                                          `${op.operator} XML kuralı ${op.active ? 'pasifleştirildi' : 'aktifleştirildi'}.`
+                                        )}
+                                      >
+                                        {op.active ? 'Pasifleştir' : 'Aktifleştir'}
+                                      </button>
+                                      {isConfirming ? (
+                                        <span className="adm-confirm-inline">
+                                          Silinsin mi?
+                                          <button
+                                            type="button"
+                                            className="adm-btn adm-btn-red-solid"
+                                            style={{ height: 26, padding: '0 8px' }}
+                                            disabled={!catalogWritable}
+                                            onClick={() => saveCatalog(
+                                              'operators',
+                                              operatorRules.filter((r) => r.id !== op.id),
+                                              `✓ ${op.operator} XML kuralı kalıcı olarak silindi.`
+                                            )}
+                                          >
+                                            Evet, Sil
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="adm-btn adm-btn-ghost"
+                                            style={{ height: 26, padding: '0 8px' }}
+                                            onClick={() => setPendingCatalogDelete(null)}
+                                          >
+                                            Vazgeç
+                                          </button>
+                                        </span>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className="adm-btn adm-btn-red"
+                                          disabled={!catalogWritable}
+                                          aria-label={`${op.operator} sil`}
+                                          onClick={() => setPendingCatalogDelete({ section: 'operators', id: op.id, label: op.operator })}
+                                        >
+                                          <Trash2 size={13} /> Sil
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="adm-form-box">
+                      <div className="adm-form-title">
+                        <Plus size={16} color="#059669" /> Yeni Operatör XML Fiyat Kuralı Ekle
+                      </div>
+                      <form
+                        className="panel-form-grid"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (!newOpName.trim()) return;
+                          saveCatalog(
+                            'operators',
+                            [
+                              ...operatorRules,
+                              {
+                                id: crypto.randomUUID(),
+                                operator: newOpName.trim(),
+                                product: newOpProduct,
+                                markupType: newOpMarkupType,
+                                markupValue: newOpMarkupType === 'NET' ? 0 : Math.max(0, Math.round(Number(newOpMarkupVal) || 0)),
+                                active: true,
+                              },
+                            ],
+                            `✓ ${newOpName.trim()} XML kuralı eklendi ve aktif edildi.`,
+                            () => {
+                              setNewOpName('');
+                              setNewOpMarkupVal('10');
+                            }
+                          );
+                        }}
+                      >
+                        <div>
+                          <label className="adm-field-lbl">Operatör Adı (XML)</label>
+                          <input className="modal-input" required placeholder="Örn: FUN&SUN, Kompas Tour" value={newOpName} onChange={(e) => setNewOpName(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Ürün Tipi</label>
+                          <select className="modal-input" value={newOpProduct} onChange={(e) => setNewOpProduct(e.target.value)}>
+                            <option value="Uçak Bileti">Uçak Bileti</option>
+                            <option value="Tur Paketi">Tur Paketi</option>
+                            <option value="Otel">Otel</option>
+                            <option value="Transfer">Transfer</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Kâr Tipi</label>
+                          <select className="modal-input" value={newOpMarkupType} onChange={(e) => setNewOpMarkupType(e.target.value as 'NET' | 'EUR' | 'TRY' | 'PERCENT')}>
+                            <option value="NET">NET (0 € · Kâr Yok)</option>
+                            <option value="EUR">+ Euro (€) Ekle</option>
+                            <option value="TRY">+ TL (₺) Ekle</option>
+                            <option value="PERCENT">+ Yüzde (%) Komisyon</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Tutar / Oran</label>
+                          <input
+                            className="modal-input"
+                            type="number"
+                            min={0}
+                            disabled={newOpMarkupType === 'NET'}
+                            placeholder="Örn: 10"
+                            value={newOpMarkupType === 'NET' ? '0' : newOpMarkupVal}
+                            onChange={(e) => setNewOpMarkupVal(e.target.value)}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                          <button type="submit" className="adm-btn adm-btn-green" style={{ height: 42, width: '100%', fontSize: 13 }} disabled={!catalogWritable}>
+                            <Plus size={15} /> XML Kuralı Ekle
+                          </button>
+                        </div>
+                      </form>
+                    </div>
                   </div>
                 </>
               )}
@@ -2139,337 +2265,578 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
               {section === 'inventory' && (
                 <>
                   {/* MANUAL FLIGHTS / CHARTER BLOCK SEATS */}
-                  <div className="panel-card" style={{ border: '1.5px solid rgba(16,185,129,0.4)' }}>
-                    <strong style={{ fontSize: 17.5, display: 'block', marginBottom: 4 }}>
-                      ✈ Manuel Uçuş &amp; Blok Koltuk Envanteri (Canlı Siteye Yansır)
+                  <div className="panel-card" style={{ border: '1.5px solid rgba(16,185,129,0.45)' }}>
+                    <strong style={{ fontSize: 18, display: 'block', marginBottom: 6 }}>
+                      ✈ Manuel Uçuş &amp; Blok Koltuk Envanteri
                     </strong>
-                    <p style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)', marginTop: 0, marginBottom: 14 }}>
-                      Eklediğiniz aktif manuel/charter uçuşlar müşteriler ilgili rotayı aradığında doğrudan sonuç listesinde görünür ve satılabilir.
-                    </p>
-                    {manualFlights.map((mf) => (
-                      <div
-                        key={mf.id}
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '12px 0',
-                          borderBottom: '1px solid var(--aspan-border)',
-                          flexWrap: 'wrap',
-                          gap: 10,
-                          opacity: mf.active ? 1 : 0.55,
+                    <div className="adm-banner adm-banner-ok">
+                      <CheckCircle2 size={17} style={{ flexShrink: 0, marginTop: 2 }} />
+                      <div>
+                        <strong>Canlı Site Senkronizasyonu Aktif:</strong> Eklediğiniz aktif charter / blok koltuk uçuşları müşteriler ilgili parkuru (Örn: IST → ALA veya AYT → ALA) arattığında sonuçların en üstünde görünür. Operatör XML kuralı (Örn: Kompas Tour +10 €) otomatik uygulanır.
+                      </div>
+                    </div>
+
+                    <div className="adm-table-wrap">
+                      <table className="adm-table">
+                        <thead>
+                          <tr>
+                            <th>Parkur &amp; Uçuş</th>
+                            <th>Havayolu &amp; Saatler</th>
+                            <th>Operatör (XML)</th>
+                            <th>Bagaj / Koltuk</th>
+                            <th>Taban Fiyat</th>
+                            <th>Durum</th>
+                            <th>İşlemler</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {manualFlights.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} style={{ textAlign: 'center', padding: 24, color: 'var(--aspan-text-muted)' }}>
+                                Henüz manuel uçuş eklenmemiş. Aşağıdaki formdan yeni uçuş ekleyebilirsiniz.
+                              </td>
+                            </tr>
+                          ) : (
+                            manualFlights.map((mf) => {
+                              const isConfirming = pendingCatalogDelete?.section === 'flights' && pendingCatalogDelete.id === mf.id;
+                              return (
+                                <tr key={mf.id} className={!mf.active ? 'is-inactive' : ''}>
+                                  <td>
+                                    <span className="uf-airport-code">{mf.fromCode} → {mf.toCode}</span>
+                                    <div style={{ marginTop: 4 }}><span className="pkg-pill">{mf.flightNumber}</span></div>
+                                  </td>
+                                  <td>
+                                    <strong>{mf.airline}</strong>
+                                    <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>
+                                      {mf.departTime} → {mf.arriveTime} ({mf.duration})
+                                    </div>
+                                  </td>
+                                  <td><span className="pkg-pill">{mf.operator}</span></td>
+                                  <td>
+                                    <div>{mf.baggage}</div>
+                                    <div style={{ fontSize: 12, color: '#0369a1', fontWeight: 700 }}>{mf.quota} Koltuk</div>
+                                  </td>
+                                  <td>
+                                    <strong style={{ fontSize: 15, color: 'var(--aspan-teal-deep)' }}>
+                                      {formatPrice(mf.priceTRY, currency)}
+                                    </strong>
+                                  </td>
+                                  <td>
+                                    <span className={`status-badge ${mf.active ? 'ok' : 'warn'}`}>
+                                      {mf.active ? '● Satışta' : '○ Pasif'}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <div className="adm-actions">
+                                      <button
+                                        type="button"
+                                        className={`adm-btn ${mf.active ? 'adm-btn-amber' : 'adm-btn-green-soft'}`}
+                                        disabled={!catalogWritable}
+                                        onClick={() => saveCatalog(
+                                          'flights',
+                                          manualFlights.map((r) => (r.id === mf.id ? { ...r, active: !r.active } : r)),
+                                          `${mf.flightNumber} uçuşu ${mf.active ? 'pasife alındı' : 'satışa açıldı'}.`
+                                        )}
+                                      >
+                                        {mf.active ? 'Pasifleştir' : 'Satışa Aç'}
+                                      </button>
+                                      {isConfirming ? (
+                                        <span className="adm-confirm-inline">
+                                          Silinsin mi?
+                                          <button
+                                            type="button"
+                                            className="adm-btn adm-btn-red-solid"
+                                            style={{ height: 26, padding: '0 8px' }}
+                                            disabled={!catalogWritable}
+                                            onClick={() => saveCatalog(
+                                              'flights',
+                                              manualFlights.filter((r) => r.id !== mf.id),
+                                              `✓ ${mf.flightNumber} manuel uçuşu silindi ve siteden kaldırıldı.`
+                                            )}
+                                          >
+                                            Evet, Sil
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="adm-btn adm-btn-ghost"
+                                            style={{ height: 26, padding: '0 8px' }}
+                                            onClick={() => setPendingCatalogDelete(null)}
+                                          >
+                                            Vazgeç
+                                          </button>
+                                        </span>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className="adm-btn adm-btn-red"
+                                          disabled={!catalogWritable}
+                                          aria-label={`${mf.flightNumber} sil`}
+                                          onClick={() => setPendingCatalogDelete({ section: 'flights', id: mf.id, label: mf.flightNumber })}
+                                        >
+                                          <Trash2 size={13} /> Sil
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="adm-form-box">
+                      <div className="adm-form-title">
+                        <Plus size={16} color="#059669" /> Yeni Manuel / Charter Uçuş Ekle
+                      </div>
+                      <form
+                        className="panel-form-grid"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (!mfAirline.trim() || !mfNumber.trim() || !mfFrom.trim() || !mfTo.trim()) return;
+                          saveCatalog(
+                            'flights',
+                            [
+                              ...manualFlights,
+                              {
+                                id: crypto.randomUUID(),
+                                airline: mfAirline.trim(),
+                                airlineCode: mfCode.trim().toUpperCase().slice(0, 3) || 'FT',
+                                flightNumber: mfNumber.trim().toUpperCase(),
+                                fromCode: mfFrom.trim().toUpperCase().slice(0, 3),
+                                toCode: mfTo.trim().toUpperCase().slice(0, 3),
+                                departTime: mfDep.trim() || '10:00',
+                                arriveTime: mfArr.trim() || '14:00',
+                                duration: 'Direkt Charter',
+                                operator: mfOperator.trim() || 'Blok Koltuk',
+                                baggage: mfBaggage.trim() || '20 kg Bagaj',
+                                priceTRY: Math.max(250, Math.round(Number(mfPrice) || 5500)),
+                                quota: Math.max(1, Math.round(Number(mfQuota) || 10)),
+                                active: true,
+                              },
+                            ],
+                            `✓ ${mfNumber.trim().toUpperCase()} manuel uçuşu canlı siteye eklendi!`
+                          );
                         }}
                       >
                         <div>
-                          <span className="uf-airport-code">{mf.fromCode} → {mf.toCode}</span>{' '}
-                          <span className="pkg-pill">{mf.flightNumber}</span>{' '}
-                          <span className="pkg-pill">{mf.operator}</span>{' '}
-                          <span className={`status-badge ${mf.active ? 'ok' : 'warn'}`}>{mf.active ? 'Satışta' : 'Pasif'}</span>
-                          <div style={{ fontWeight: 800, fontSize: 14.5, marginTop: 4 }}>
-                            {mf.airline} · {mf.departTime} → {mf.arriveTime} ({mf.duration})
-                          </div>
-                          <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>
-                            {mf.baggage} · Kontenjan: <strong>{mf.quota} Koltuk</strong>
-                          </div>
+                          <label className="adm-field-lbl">Havayolu</label>
+                          <input className="modal-input" required placeholder="Örn: Air Astana" value={mfAirline} onChange={(e) => setMfAirline(e.target.value)} />
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <strong style={{ fontSize: 16, color: 'var(--aspan-teal-deep)' }}>
-                            {formatPrice(mf.priceTRY, currency)}
-                          </strong>
-                          <button
-                            type="button"
-                            className="uf-quick-pill"
-                            disabled={!catalogWritable}
-                            onClick={() => saveCatalog(
-                              'flights',
-                              manualFlights.map((r) => (r.id === mf.id ? { ...r, active: !r.active } : r)),
-                              `${mf.flightNumber} uçuş durumu güncellendi.`
-                            )}
-                          >
-                            {mf.active ? 'Pasifleştir' : 'Aktifleştir'}
-                          </button>
-                          <button
-                            type="button"
-                            className="drawer-close"
-                            disabled={!catalogWritable}
-                            aria-label={`${mf.flightNumber} sil`}
-                            onClick={() => saveCatalog(
-                              'flights',
-                              manualFlights.filter((r) => r.id !== mf.id),
-                              `${mf.flightNumber} manuel uçuşu silindi.`
-                            )}
-                          >
-                            <Trash2 size={14} />
+                        <div>
+                          <label className="adm-field-lbl">IATA Kodu</label>
+                          <input className="modal-input" required placeholder="KC" value={mfCode} onChange={(e) => setMfCode(e.target.value.toUpperCase())} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Uçuş No</label>
+                          <input className="modal-input" required placeholder="KC920" value={mfNumber} onChange={(e) => setMfNumber(e.target.value.toUpperCase())} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Kalkış (IATA)</label>
+                          <input className="modal-input" required placeholder="IST" value={mfFrom} onChange={(e) => setMfFrom(e.target.value.toUpperCase())} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Varış (IATA)</label>
+                          <input className="modal-input" required placeholder="ALA" value={mfTo} onChange={(e) => setMfTo(e.target.value.toUpperCase())} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Kalkış Saati</label>
+                          <input className="modal-input" required placeholder="10:30" value={mfDep} onChange={(e) => setMfDep(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Varış Saati</label>
+                          <input className="modal-input" required placeholder="18:00" value={mfArr} onChange={(e) => setMfArr(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Operatör (XML)</label>
+                          <input className="modal-input" placeholder="FUN&SUN / Kompas Tour" value={mfOperator} onChange={(e) => setMfOperator(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Bagaj Hakkı</label>
+                          <input className="modal-input" placeholder="20 kg Bagaj" value={mfBaggage} onChange={(e) => setMfBaggage(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Net Fiyat (₺)</label>
+                          <input className="modal-input" type="number" min={250} placeholder="6890" value={mfPrice} onChange={(e) => setMfPrice(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Kontenjan (Koltuk)</label>
+                          <input className="modal-input" type="number" min={1} placeholder="10" value={mfQuota} onChange={(e) => setMfQuota(e.target.value)} />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                          <button type="submit" className="adm-btn adm-btn-green" style={{ height: 42, width: '100%', fontSize: 13 }} disabled={!catalogWritable}>
+                            <Plus size={15} /> Manuel Uçuş Ekle
                           </button>
                         </div>
-                      </div>
-                    ))}
-
-                    <form
-                      className="panel-form-grid"
-                      style={{ marginTop: 14 }}
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        if (!mfAirline.trim() || !mfNumber.trim() || !mfFrom.trim() || !mfTo.trim()) return;
-                        saveCatalog(
-                          'flights',
-                          [
-                            ...manualFlights,
-                            {
-                              id: crypto.randomUUID(),
-                              airline: mfAirline.trim(),
-                              airlineCode: mfCode.trim().toUpperCase().slice(0, 3) || 'FT',
-                              flightNumber: mfNumber.trim().toUpperCase(),
-                              fromCode: mfFrom.trim().toUpperCase().slice(0, 3),
-                              toCode: mfTo.trim().toUpperCase().slice(0, 3),
-                              departTime: mfDep.trim() || '10:00',
-                              arriveTime: mfArr.trim() || '14:00',
-                              duration: 'Direkt Charter',
-                              operator: mfOperator.trim() || 'Blok Koltuk',
-                              baggage: mfBaggage.trim() || '20 kg Bagaj',
-                              priceTRY: Math.max(250, Math.round(Number(mfPrice) || 5500)),
-                              quota: Math.max(1, Math.round(Number(mfQuota) || 10)),
-                              active: true,
-                            },
-                          ],
-                          'Yeni manuel uçuş canlı siteye eklendi!'
-                        );
-                      }}
-                    >
-                      <input className="modal-input" required placeholder="Havayolu (Örn: Air Astana)" value={mfAirline} onChange={(e) => setMfAirline(e.target.value)} />
-                      <input className="modal-input" required placeholder="Kod (KC)" value={mfCode} onChange={(e) => setMfCode(e.target.value.toUpperCase())} />
-                      <input className="modal-input" required placeholder="Uçuş No (KC920)" value={mfNumber} onChange={(e) => setMfNumber(e.target.value.toUpperCase())} />
-                      <input className="modal-input" required placeholder="Kalkış (IST)" value={mfFrom} onChange={(e) => setMfFrom(e.target.value.toUpperCase())} />
-                      <input className="modal-input" required placeholder="Varış (ALA)" value={mfTo} onChange={(e) => setMfTo(e.target.value.toUpperCase())} />
-                      <input className="modal-input" required placeholder="Kalkış Saati (10:30)" value={mfDep} onChange={(e) => setMfDep(e.target.value)} />
-                      <input className="modal-input" required placeholder="Varış Saati (18:00)" value={mfArr} onChange={(e) => setMfArr(e.target.value)} />
-                      <input className="modal-input" placeholder="Operatör (FUN&SUN / Kompas)" value={mfOperator} onChange={(e) => setMfOperator(e.target.value)} />
-                      <input className="modal-input" placeholder="Bagaj (20 kg Bagaj)" value={mfBaggage} onChange={(e) => setMfBaggage(e.target.value)} />
-                      <input className="modal-input" type="number" min={250} placeholder="Fiyat (TL)" value={mfPrice} onChange={(e) => setMfPrice(e.target.value)} />
-                      <input className="modal-input" type="number" min={1} placeholder="Kontenjan" value={mfQuota} onChange={(e) => setMfQuota(e.target.value)} />
-                      <button type="submit" className="btn-gold-nav" style={{ borderRadius: 12 }} disabled={!catalogWritable}>
-                        <Plus size={15} /> Manuel Uçuş Ekle
-                      </button>
-                    </form>
+                      </form>
+                    </div>
                   </div>
                   <div className="panel-card">
-                    <strong style={{ fontSize: 17.5, display: 'block', marginBottom: 12 }}>
-                      VIP Havalimanı Transfer Filosu — Tam Yönetim (Ekle / Fiyat / Durum / Sil)
+                    <strong style={{ fontSize: 18, display: 'block', marginBottom: 10 }}>
+                      VIP Havalimanı Transfer Filosu (Canlı Vitrin Yönetimi)
                     </strong>
-                    {managedTransfers.map((tr) => (
-                      <div
-                        key={tr.id}
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '12px 0',
-                          borderBottom: '1px solid var(--aspan-border)',
-                          flexWrap: 'wrap',
-                          gap: 10,
-                          opacity: tr.active ? 1 : 0.55,
+                    <div className="adm-table-wrap">
+                      <table className="adm-table">
+                        <thead>
+                          <tr>
+                            <th>Şehir</th>
+                            <th>Araç &amp; Güzergâh</th>
+                            <th>Kapasite</th>
+                            <th>Satış Fiyatı</th>
+                            <th>Durum</th>
+                            <th>İşlemler</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {managedTransfers.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--aspan-text-muted)' }}>
+                                Kayıtlı transfer bulunmuyor. Aşağıdan yeni VIP transfer ekleyebilirsiniz.
+                              </td>
+                            </tr>
+                          ) : (
+                            managedTransfers.map((tr) => {
+                              const isConfirming = pendingCatalogDelete?.section === 'transfers' && pendingCatalogDelete.id === tr.id;
+                              return (
+                                <tr key={tr.id} className={!tr.active ? 'is-inactive' : ''}>
+                                  <td><span className="pkg-pill">{tr.city}</span></td>
+                                  <td>
+                                    <strong>{tr.vehicle}</strong>
+                                    <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>{tr.route}</div>
+                                  </td>
+                                  <td style={{ fontSize: 12.5 }}>{tr.capacity} · {tr.baggage}</td>
+                                  <td>
+                                    <strong style={{ fontSize: 15, color: 'var(--aspan-teal-deep)' }}>
+                                      {formatPrice(tr.price + (draft.transferAddTRY - DEFAULT_MARKUP.transferAddTRY), currency)}
+                                    </strong>
+                                  </td>
+                                  <td>
+                                    <span className={`status-badge ${tr.active ? 'ok' : 'warn'}`}>
+                                      {tr.active ? '● Aktif' : '○ Pasif'}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <div className="adm-actions">
+                                      <button
+                                        type="button"
+                                        className="adm-btn adm-btn-blue"
+                                        disabled={!catalogWritable}
+                                        onClick={() => saveCatalog(
+                                          'transfers',
+                                          managedTransfers.map((row) => row.id === tr.id ? { ...row, price: row.price + 100 } : row),
+                                          `${tr.vehicle} fiyatı +100 ₺ artırıldı.`
+                                        )}
+                                      >
+                                        +100 ₺
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="adm-btn adm-btn-ghost"
+                                        disabled={!catalogWritable || tr.price <= 400}
+                                        onClick={() => saveCatalog(
+                                          'transfers',
+                                          managedTransfers.map((row) => row.id === tr.id ? { ...row, price: Math.max(300, row.price - 100) } : row),
+                                          `${tr.vehicle} fiyatı -100 ₺ düşürüldü.`
+                                        )}
+                                      >
+                                        -100 ₺
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className={`adm-btn ${tr.active ? 'adm-btn-amber' : 'adm-btn-green-soft'}`}
+                                        disabled={!catalogWritable}
+                                        onClick={() => saveCatalog(
+                                          'transfers',
+                                          managedTransfers.map((row) => row.id === tr.id ? { ...row, active: !row.active } : row),
+                                          `${tr.vehicle} ${tr.active ? 'pasifleştirildi' : 'aktifleştirildi'}.`
+                                        )}
+                                      >
+                                        {tr.active ? 'Pasifleştir' : 'Aktifleştir'}
+                                      </button>
+                                      {isConfirming ? (
+                                        <span className="adm-confirm-inline">
+                                          Silinsin mi?
+                                          <button
+                                            type="button"
+                                            className="adm-btn adm-btn-red-solid"
+                                            style={{ height: 26, padding: '0 8px' }}
+                                            disabled={!catalogWritable}
+                                            onClick={() => saveCatalog(
+                                              'transfers',
+                                              managedTransfers.filter((row) => row.id !== tr.id),
+                                              `✓ ${tr.vehicle} silindi ve canlı siteden kaldırıldı.`
+                                            )}
+                                          >
+                                            Evet, Sil
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="adm-btn adm-btn-ghost"
+                                            style={{ height: 26, padding: '0 8px' }}
+                                            onClick={() => setPendingCatalogDelete(null)}
+                                          >
+                                            Vazgeç
+                                          </button>
+                                        </span>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className="adm-btn adm-btn-red"
+                                          disabled={!catalogWritable}
+                                          aria-label={`${tr.vehicle} sil`}
+                                          onClick={() => setPendingCatalogDelete({ section: 'transfers', id: tr.id, label: tr.vehicle })}
+                                        >
+                                          <Trash2 size={13} /> Sil
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="adm-form-box">
+                      <div className="adm-form-title">
+                        <Plus size={16} color="#059669" /> Yeni VIP Transfer Ekle
+                      </div>
+                      <form
+                        className="panel-form-grid"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (!newTrCity.trim() || !newTrVehicle.trim() || !newTrRoute.trim()) return;
+                          saveCatalog(
+                            'transfers',
+                            [
+                              ...managedTransfers,
+                              {
+                                id: crypto.randomUUID(),
+                                city: newTrCity.trim().toUpperCase(),
+                                vehicle: newTrVehicle.trim(),
+                                route: newTrRoute.trim(),
+                                capacity: '1–4 Yolcu',
+                                baggage: '4 Bavul',
+                                price: Math.max(300, Math.round(Number(newTrPrice) || 1500)),
+                                active: true,
+                              },
+                            ],
+                            `✓ ${newTrVehicle.trim()} canlı siteye eklendi.`,
+                            () => {
+                              setNewTrCity('');
+                              setNewTrVehicle('');
+                              setNewTrRoute('');
+                            }
+                          );
                         }}
                       >
                         <div>
-                          <span className="pkg-pill">{tr.city}</span>{' '}
-                          <span className={`status-badge ${tr.active ? 'ok' : 'warn'}`}>{tr.active ? 'Aktif' : 'Pasif'}</span>{' '}
-                          <strong>{tr.vehicle}</strong>
-                          <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)', marginTop: 2 }}>
-                            {tr.route} · {tr.capacity} · {tr.baggage}
-                          </div>
+                          <label className="adm-field-lbl">Şehir</label>
+                          <input className="modal-input" required placeholder="Örn: ASTANA" value={newTrCity} onChange={(e) => setNewTrCity(e.target.value)} />
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <strong style={{ fontSize: 16, color: 'var(--aspan-teal-deep)', marginRight: 4 }}>
-                            {formatPrice(tr.price + (draft.transferAddTRY - DEFAULT_MARKUP.transferAddTRY), currency)}
-                          </strong>
-                          <button
-                            type="button"
-                            className="uf-quick-pill"
-                            disabled={!catalogWritable}
-                            onClick={() => saveCatalog(
-                              'transfers',
-                              managedTransfers.map((row) => row.id === tr.id ? { ...row, price: row.price + 100 } : row),
-                              `${tr.vehicle} fiyatı güncellendi.`
-                            )}
-                          >
-                            +100 ₺
-                          </button>
-                          <button
-                            type="button"
-                            className="uf-quick-pill"
-                            disabled={!catalogWritable}
-                            onClick={() => saveCatalog(
-                              'transfers',
-                              managedTransfers.map((row) => row.id === tr.id ? { ...row, active: !row.active } : row),
-                              `${tr.vehicle} durumu değiştirildi.`
-                            )}
-                          >
-                            {tr.active ? 'Pasifleştir' : 'Aktifleştir'}
-                          </button>
-                          <button
-                            type="button"
-                            className="drawer-close"
-                            disabled={!catalogWritable}
-                            aria-label={`${tr.vehicle} sil`}
-                            onClick={() => saveCatalog(
-                              'transfers',
-                              managedTransfers.filter((row) => row.id !== tr.id),
-                              `${tr.vehicle} listeden kaldırıldı.`
-                            )}
-                          >
-                            <Trash2 size={14} />
+                        <div>
+                          <label className="adm-field-lbl">Araç Modeli</label>
+                          <input className="modal-input" required placeholder="Örn: Mercedes V-Class VIP" value={newTrVehicle} onChange={(e) => setNewTrVehicle(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Güzergâh</label>
+                          <input className="modal-input" required placeholder="Örn: NQZ → Merkez" value={newTrRoute} onChange={(e) => setNewTrRoute(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Fiyat (₺)</label>
+                          <input className="modal-input" type="number" min={300} placeholder="1750" value={newTrPrice} onChange={(e) => setNewTrPrice(e.target.value)} />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                          <button type="submit" className="adm-btn adm-btn-green" style={{ height: 42, width: '100%', fontSize: 13 }} disabled={!catalogWritable}>
+                            <Plus size={15} /> Transfer Ekle
                           </button>
                         </div>
-                      </div>
-                    ))}
-
-                    <form
-                      className="panel-form-grid"
-                      style={{ marginTop: 14 }}
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        if (!newTrCity.trim() || !newTrVehicle.trim() || !newTrRoute.trim()) return;
-                        saveCatalog(
-                          'transfers',
-                          [
-                            ...managedTransfers,
-                            {
-                              id: crypto.randomUUID(),
-                              city: newTrCity.trim().toUpperCase(),
-                              vehicle: newTrVehicle.trim(),
-                              route: newTrRoute.trim(),
-                              capacity: '1–4 Yolcu',
-                              baggage: '4 Bavul',
-                              price: Math.max(300, Math.round(Number(newTrPrice) || 1500)),
-                              active: true,
-                            },
-                          ],
-                          'Yeni VIP transfer eklendi.',
-                          () => {
-                            setNewTrCity('');
-                            setNewTrVehicle('');
-                            setNewTrRoute('');
-                          }
-                        );
-                      }}
-                    >
-                      <input className="modal-input" placeholder="Şehir (Örn: ASTANA)" value={newTrCity} onChange={(e) => setNewTrCity(e.target.value)} />
-                      <input className="modal-input" placeholder="Araç (Örn: Mercedes V-Class VIP)" value={newTrVehicle} onChange={(e) => setNewTrVehicle(e.target.value)} />
-                      <input className="modal-input" placeholder="Güzergâh (Örn: NQZ → Merkez)" value={newTrRoute} onChange={(e) => setNewTrRoute(e.target.value)} />
-                      <input className="modal-input" type="number" min={300} placeholder="Fiyat (TL)" value={newTrPrice} onChange={(e) => setNewTrPrice(e.target.value)} />
-                      <button type="submit" className="btn-gold-nav" style={{ borderRadius: 12 }} disabled={!catalogWritable}>
-                        <Plus size={15} /> Transfer Ekle
-                      </button>
-                    </form>
+                      </form>
+                    </div>
                   </div>
 
                   <div className="panel-card">
-                    <strong style={{ fontSize: 17.5, display: 'block', marginBottom: 12 }}>
-                      Vitrin Otelleri &amp; Konaklama — Tam Yönetim (Ekle / Fiyat / Durum / Sil)
+                    <strong style={{ fontSize: 18, display: 'block', marginBottom: 10 }}>
+                      Vitrin Otelleri &amp; Konaklama (Canlı Vitrin Yönetimi)
                     </strong>
-                    {managedHotels.map((h) => (
-                      <div
-                        key={h.id}
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '12px 0',
-                          borderBottom: '1px solid var(--aspan-border)',
-                          flexWrap: 'wrap',
-                          gap: 10,
-                          opacity: h.active ? 1 : 0.55,
+                    <div className="adm-table-wrap">
+                      <table className="adm-table">
+                        <thead>
+                          <tr>
+                            <th>Şehir</th>
+                            <th>Otel Adı &amp; Yıldız</th>
+                            <th>Pansiyon / Gece</th>
+                            <th>Satış Fiyatı</th>
+                            <th>Durum</th>
+                            <th>İşlemler</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {managedHotels.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--aspan-text-muted)' }}>
+                                Kayıtlı otel bulunmuyor. Aşağıdan yeni vitrin oteli ekleyebilirsiniz.
+                              </td>
+                            </tr>
+                          ) : (
+                            managedHotels.map((h) => {
+                              const isConfirming = pendingCatalogDelete?.section === 'hotels' && pendingCatalogDelete.id === h.id;
+                              return (
+                                <tr key={h.id} className={!h.active ? 'is-inactive' : ''}>
+                                  <td><span className="pkg-pill">{h.city}</span></td>
+                                  <td>
+                                    <strong>{h.name}</strong>
+                                    <div style={{ fontSize: 12, color: '#d97706' }}>{'★'.repeat(Math.min(5, Math.max(1, h.stars)))}</div>
+                                  </td>
+                                  <td style={{ fontSize: 12.5 }}>{h.boardType} · {h.nights} Gece</td>
+                                  <td>
+                                    <strong style={{ fontSize: 15, color: 'var(--aspan-teal-deep)' }}>
+                                      {formatPrice(Math.round(h.price * (1 + (draft.hotelPercent - DEFAULT_MARKUP.hotelPercent) / 100)), currency)}
+                                    </strong>
+                                  </td>
+                                  <td>
+                                    <span className={`status-badge ${h.active ? 'ok' : 'warn'}`}>
+                                      {h.active ? '● Aktif' : '○ Pasif'}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <div className="adm-actions">
+                                      <button
+                                        type="button"
+                                        className="adm-btn adm-btn-blue"
+                                        disabled={!catalogWritable}
+                                        onClick={() => saveCatalog(
+                                          'hotels',
+                                          managedHotels.map((row) => row.id === h.id ? { ...row, price: row.price + 250 } : row),
+                                          `${h.name} fiyatı +250 ₺ artırıldı.`
+                                        )}
+                                      >
+                                        +250 ₺
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="adm-btn adm-btn-ghost"
+                                        disabled={!catalogWritable || h.price <= 750}
+                                        onClick={() => saveCatalog(
+                                          'hotels',
+                                          managedHotels.map((row) => row.id === h.id ? { ...row, price: Math.max(500, row.price - 250) } : row),
+                                          `${h.name} fiyatı -250 ₺ düşürüldü.`
+                                        )}
+                                      >
+                                        -250 ₺
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className={`adm-btn ${h.active ? 'adm-btn-amber' : 'adm-btn-green-soft'}`}
+                                        disabled={!catalogWritable}
+                                        onClick={() => saveCatalog(
+                                          'hotels',
+                                          managedHotels.map((row) => row.id === h.id ? { ...row, active: !row.active } : row),
+                                          `${h.name} ${h.active ? 'pasifleştirildi' : 'aktifleştirildi'}.`
+                                        )}
+                                      >
+                                        {h.active ? 'Pasifleştir' : 'Aktifleştir'}
+                                      </button>
+                                      {isConfirming ? (
+                                        <span className="adm-confirm-inline">
+                                          Silinsin mi?
+                                          <button
+                                            type="button"
+                                            className="adm-btn adm-btn-red-solid"
+                                            style={{ height: 26, padding: '0 8px' }}
+                                            disabled={!catalogWritable}
+                                            onClick={() => saveCatalog(
+                                              'hotels',
+                                              managedHotels.filter((row) => row.id !== h.id),
+                                              `✓ ${h.name} silindi ve canlı siteden kaldırıldı.`
+                                            )}
+                                          >
+                                            Evet, Sil
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="adm-btn adm-btn-ghost"
+                                            style={{ height: 26, padding: '0 8px' }}
+                                            onClick={() => setPendingCatalogDelete(null)}
+                                          >
+                                            Vazgeç
+                                          </button>
+                                        </span>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className="adm-btn adm-btn-red"
+                                          disabled={!catalogWritable}
+                                          aria-label={`${h.name} sil`}
+                                          onClick={() => setPendingCatalogDelete({ section: 'hotels', id: h.id, label: h.name })}
+                                        >
+                                          <Trash2 size={13} /> Sil
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="adm-form-box">
+                      <div className="adm-form-title">
+                        <Plus size={16} color="#059669" /> Yeni Vitrin Oteli Ekle
+                      </div>
+                      <form
+                        className="panel-form-grid"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (!newHotelCity.trim() || !newHotelName.trim()) return;
+                          saveCatalog(
+                            'hotels',
+                            [
+                              ...managedHotels,
+                              {
+                                id: crypto.randomUUID(),
+                                city: newHotelCity.trim().toUpperCase(),
+                                name: newHotelName.trim(),
+                                stars: 5,
+                                boardType: 'Kahvaltı Dahil',
+                                nights: 2,
+                                price: Math.max(500, Math.round(Number(newHotelPrice) || 3200)),
+                                active: true,
+                              },
+                            ],
+                            `✓ ${newHotelName.trim()} canlı siteye eklendi.`,
+                            () => {
+                              setNewHotelCity('');
+                              setNewHotelName('');
+                            }
+                          );
                         }}
                       >
                         <div>
-                          <span className="pkg-pill">{h.city}</span>{' '}
-                          <span className={`status-badge ${h.active ? 'ok' : 'warn'}`}>{h.active ? 'Aktif' : 'Pasif'}</span>{' '}
-                          <strong>{h.name}</strong> ({'★'.repeat(Math.min(5, Math.max(1, h.stars)))})
-                          <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)', marginTop: 2 }}>
-                            {h.boardType} · {h.nights} Gece
-                          </div>
+                          <label className="adm-field-lbl">Şehir</label>
+                          <input className="modal-input" required placeholder="Örn: ANTALYA" value={newHotelCity} onChange={(e) => setNewHotelCity(e.target.value)} />
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <strong style={{ fontSize: 16, marginRight: 4 }}>
-                            {formatPrice(Math.round(h.price * (1 + (draft.hotelPercent - DEFAULT_MARKUP.hotelPercent) / 100)), currency)}
-                          </strong>
-                          <button
-                            type="button"
-                            className="uf-quick-pill"
-                            disabled={!catalogWritable}
-                            onClick={() => saveCatalog(
-                              'hotels',
-                              managedHotels.map((row) => row.id === h.id ? { ...row, price: row.price + 250 } : row),
-                              `${h.name} fiyatı güncellendi.`
-                            )}
-                          >
-                            +250 ₺
-                          </button>
-                          <button
-                            type="button"
-                            className="uf-quick-pill"
-                            disabled={!catalogWritable}
-                            onClick={() => saveCatalog(
-                              'hotels',
-                              managedHotels.map((row) => row.id === h.id ? { ...row, active: !row.active } : row),
-                              `${h.name} durumu değiştirildi.`
-                            )}
-                          >
-                            {h.active ? 'Pasifleştir' : 'Aktifleştir'}
-                          </button>
-                          <button
-                            type="button"
-                            className="drawer-close"
-                            disabled={!catalogWritable}
-                            aria-label={`${h.name} sil`}
-                            onClick={() => saveCatalog(
-                              'hotels',
-                              managedHotels.filter((row) => row.id !== h.id),
-                              `${h.name} listeden kaldırıldı.`
-                            )}
-                          >
-                            <Trash2 size={14} />
+                        <div>
+                          <label className="adm-field-lbl">Otel Adı</label>
+                          <input className="modal-input" required placeholder="Örn: Rixos Premium Belek" value={newHotelName} onChange={(e) => setNewHotelName(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Fiyat (₺)</label>
+                          <input className="modal-input" type="number" min={500} placeholder="3200" value={newHotelPrice} onChange={(e) => setNewHotelPrice(e.target.value)} />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                          <button type="submit" className="adm-btn adm-btn-green" style={{ height: 42, width: '100%', fontSize: 13 }} disabled={!catalogWritable}>
+                            <Plus size={15} /> Otel Ekle
                           </button>
                         </div>
-                      </div>
-                    ))}
-
-                    <form
-                      className="panel-form-grid"
-                      style={{ marginTop: 14 }}
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        if (!newHotelCity.trim() || !newHotelName.trim()) return;
-                        saveCatalog(
-                          'hotels',
-                          [
-                            ...managedHotels,
-                            {
-                              id: crypto.randomUUID(),
-                              city: newHotelCity.trim().toUpperCase(),
-                              name: newHotelName.trim(),
-                              stars: 5,
-                              boardType: 'Kahvaltı Dahil',
-                              nights: 2,
-                              price: Math.max(500, Math.round(Number(newHotelPrice) || 3200)),
-                              active: true,
-                            },
-                          ],
-                          'Yeni otel eklendi.',
-                          () => {
-                            setNewHotelCity('');
-                            setNewHotelName('');
-                          }
-                        );
-                      }}
-                    >
-                      <input className="modal-input" placeholder="Şehir (Örn: ANTALYA)" value={newHotelCity} onChange={(e) => setNewHotelCity(e.target.value)} />
-                      <input className="modal-input" placeholder="Otel Adı (Örn: Rixos Premium Belek)" value={newHotelName} onChange={(e) => setNewHotelName(e.target.value)} />
-                      <input className="modal-input" type="number" min={500} placeholder="Fiyat (TL)" value={newHotelPrice} onChange={(e) => setNewHotelPrice(e.target.value)} />
-                      <button type="submit" className="btn-gold-nav" style={{ borderRadius: 12 }} disabled={!catalogWritable}>
-                        <Plus size={15} /> Otel Ekle
-                      </button>
-                    </form>
+                      </form>
+                    </div>
                   </div>
                 </>
               )}
@@ -2477,92 +2844,180 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
               {/* ==================== MODULE 5: COUPONS & CAMPAIGNS ==================== */}
               {section === 'coupons' && (
                 <div className="panel-card">
-                  <strong style={{ fontSize: 18, display: 'block', marginBottom: 14 }}>
+                  <strong style={{ fontSize: 18, display: 'block', marginBottom: 8 }}>
                     Kampanya &amp; İndirim Kuponu Yönetimi
                   </strong>
+                  <div className="adm-banner adm-banner-ok">
+                    <CheckCircle2 size={17} style={{ flexShrink: 0, marginTop: 2 }} />
+                    <div>
+                      <strong>Canlı Senkronizasyon:</strong> Burada eklediğiniz, pasifleştirdiğiniz veya sildiğiniz tüm kuponlar hem ana sayfa kampanya vitrinine hem de <strong>/kampanyalar</strong> sayfasına anında yansır.
+                    </div>
+                  </div>
 
-                  {coupons.map((c) => (
-                    <div
-                      key={c.id}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '12px 0',
-                        borderBottom: '1px solid var(--aspan-border)',
-                        flexWrap: 'wrap',
-                        gap: 10,
+                  <div className="adm-table-wrap">
+                    <table className="adm-table">
+                      <thead>
+                        <tr>
+                          <th>Kupon Kodu</th>
+                          <th>Kategori</th>
+                          <th>Kampanya Başlığı</th>
+                          <th>Geçerlilik</th>
+                          <th>Durum</th>
+                          <th>İşlemler</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {coupons.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--aspan-text-muted)' }}>
+                              Aktif kupon bulunmuyor. Aşağıdaki formdan yeni kupon oluşturabilirsiniz.
+                            </td>
+                          </tr>
+                        ) : (
+                          coupons.map((c) => {
+                            const isConfirming = pendingCatalogDelete?.section === 'coupons' && pendingCatalogDelete.id === c.id;
+                            return (
+                              <tr key={c.id} className={!c.active ? 'is-inactive' : ''}>
+                                <td><span className="uf-airport-code">{c.code}</span></td>
+                                <td><span className="pkg-pill">{c.category}</span></td>
+                                <td><strong>{c.title}</strong></td>
+                                <td style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)' }}>{c.validUntil}</td>
+                                <td>
+                                  <span className={`status-badge ${c.active ? 'ok' : 'warn'}`}>
+                                    {c.active ? '● Aktif' : '○ Pasif'}
+                                  </span>
+                                </td>
+                                <td>
+                                  <div className="adm-actions">
+                                    <button
+                                      type="button"
+                                      className={`adm-btn ${c.active ? 'adm-btn-amber' : 'adm-btn-green-soft'}`}
+                                      disabled={!catalogWritable}
+                                      onClick={() => saveCatalog(
+                                        'coupons',
+                                        coupons.map((row) => row.id === c.id ? { ...row, active: !row.active } : row),
+                                        `${c.code} kuponu ${c.active ? 'pasifleştirildi' : 'aktifleştirildi'}.`,
+                                      )}
+                                    >
+                                      {c.active ? 'Pasifleştir' : 'Aktifleştir'}
+                                    </button>
+                                    {isConfirming ? (
+                                      <span className="adm-confirm-inline">
+                                        Silinsin mi?
+                                        <button
+                                          type="button"
+                                          className="adm-btn adm-btn-red-solid"
+                                          style={{ height: 26, padding: '0 8px' }}
+                                          disabled={!catalogWritable}
+                                          onClick={() => saveCatalog(
+                                            'coupons',
+                                            coupons.filter((row) => row.id !== c.id),
+                                            `✓ ${c.code} kuponu silindi ve canlı siteden kaldırıldı.`
+                                          )}
+                                        >
+                                          Evet, Sil
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="adm-btn adm-btn-ghost"
+                                          style={{ height: 26, padding: '0 8px' }}
+                                          onClick={() => setPendingCatalogDelete(null)}
+                                        >
+                                          Vazgeç
+                                        </button>
+                                      </span>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        className="adm-btn adm-btn-red"
+                                        disabled={!catalogWritable}
+                                        aria-label={c.code + ' kuponunu sil'}
+                                        onClick={() => setPendingCatalogDelete({ section: 'coupons', id: c.id, label: c.code })}
+                                      >
+                                        <Trash2 size={13} /> Sil
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="adm-form-box">
+                    <div className="adm-form-title">
+                      <Plus size={16} color="#059669" /> Yeni İndirim Kuponu &amp; Kampanya Oluştur
+                    </div>
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (!newCouponCode.trim() || !newCouponTitle.trim()) return;
+                        saveCatalog('coupons', [...coupons, {
+                          id: crypto.randomUUID(),
+                          code: newCouponCode.trim().toUpperCase(),
+                          title: newCouponTitle.trim(),
+                          category: newCouponCategory,
+                          validUntil: newCouponValidUntil.trim() || '31 Aralık 2027',
+                          active: true,
+                        }], `✓ ${newCouponCode.trim().toUpperCase()} kuponu canlı siteye eklendi.`, () => {
+                          setNewCouponCode('');
+                          setNewCouponTitle('');
+                        });
                       }}
+                      className="panel-form-grid"
                     >
                       <div>
-                        <span className="uf-airport-code">{c.code}</span>{' '}
-                        <span className="pkg-pill">{c.category}</span>{' '}
-                        <strong>{c.title}</strong>
-                        <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)', marginTop: 2 }}>
-                          Geçerlilik: {c.validUntil}
-                        </div>
+                        <label className="adm-field-lbl">Kupon Kodu</label>
+                        <input
+                          className="modal-input"
+                          required
+                          placeholder="Örn: ALMATY500"
+                          value={newCouponCode}
+                          onChange={(e) => setNewCouponCode(e.target.value.toUpperCase())}
+                        />
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <button
-                          type="button"
-                          className={`status-badge ${c.active ? 'ok' : 'warn'}`}
-                          style={{ border: 'none', cursor: 'pointer' }}
-                          disabled={!catalogWritable}
-                          onClick={() => saveCatalog(
-                            'coupons',
-                            coupons.map((row) => row.id === c.id ? { ...row, active: !row.active } : row),
-                            c.code + ' kupon durumu kaydedildi.',
-                          )}
+                      <div>
+                        <label className="adm-field-lbl">Kategori</label>
+                        <select
+                          className="modal-input"
+                          value={newCouponCategory}
+                          onChange={(e) => setNewCouponCategory(e.target.value as 'Uçak' | 'Otel' | 'Transfer' | 'Tur')}
                         >
-                          {c.active ? 'Aktif (Kapat)' : 'Pasif (Aç)'}
-                        </button>
-                        <button
-                          type="button"
-                          className="drawer-close"
-                          disabled={!catalogWritable}
-                          aria-label={c.code + ' kuponunu sil'}
-                          onClick={() => saveCatalog('coupons', coupons.filter((row) => row.id !== c.id), 'Örnek kupon silindi.')}
-                        >
-                          <Trash2 size={14} />
+                          <option value="Uçak">Uçak</option>
+                          <option value="Otel">Otel</option>
+                          <option value="Transfer">Transfer</option>
+                          <option value="Tur">Tur</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="adm-field-lbl">Kampanya Başlığı</label>
+                        <input
+                          className="modal-input"
+                          required
+                          placeholder="Örn: Almatı Uçuşlarında 500 TL İndirim"
+                          value={newCouponTitle}
+                          onChange={(e) => setNewCouponTitle(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="adm-field-lbl">Geçerlilik Tarihi</label>
+                        <input
+                          className="modal-input"
+                          placeholder="Örn: 31 Aralık 2027"
+                          value={newCouponValidUntil}
+                          onChange={(e) => setNewCouponValidUntil(e.target.value)}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                        <button type="submit" className="adm-btn adm-btn-green" style={{ height: 42, width: '100%', fontSize: 13 }} disabled={!catalogWritable}>
+                          <Plus size={15} /> Kupon Ekle
                         </button>
                       </div>
-                    </div>
-                  ))}
-
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      if (!newCouponCode.trim() || !newCouponTitle.trim()) return;
-                      saveCatalog('coupons', [...coupons, {
-                        id: crypto.randomUUID(),
-                        code: newCouponCode.trim().toUpperCase(),
-                        title: newCouponTitle.trim(),
-                        category: 'Uçak',
-                        validUntil: '31 Aralık 2027',
-                        active: true,
-                      }], 'Örnek kupon kaydedildi.', () => {
-                        setNewCouponCode('');
-                        setNewCouponTitle('');
-                      });
-                    }}
-                    className="panel-form-grid" style={{ marginTop: 16 }}
-                  >
-                    <input
-                      className="modal-input"
-                      placeholder="Kupon Kodu (Örn: ALMATY500)"
-                      value={newCouponCode}
-                      onChange={(e) => setNewCouponCode(e.target.value.toUpperCase())}
-                    />
-                    <input
-                      className="modal-input"
-                      placeholder="Kampanya Başlığı (Örn: Almatı Uçuşlarında 500 TL İndirim)"
-                      value={newCouponTitle}
-                      onChange={(e) => setNewCouponTitle(e.target.value)}
-                    />
-                    <button type="submit" className="btn-gold-nav" style={{ borderRadius: 12 }}>
-                      <Plus size={15} /> Kupon Ekle
-                    </button>
-                  </form>
+                    </form>
+                  </div>
                 </div>
               )}
 

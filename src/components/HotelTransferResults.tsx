@@ -198,10 +198,11 @@ export const HotelResultsPage: React.FC<{
   lang?: LangCode;
   currency?: CurrencyCode;
   markup?: AdminMarkupConfig;
+  liveHotels?: Array<{ id: string; city: string; name: string; stars: number; boardType: string; nights: number; price: number; active: boolean }>;
   query: HotelSearchQuery;
   onBackHome: () => void;
   onAddBooking: (draft: BookingDraft) => Promise<BookingRecord>;
-}> = ({ lang = 'TR', currency = 'TRY', markup = DEFAULT_MARKUP, query, onBackHome, onAddBooking }) => {
+}> = ({ lang = 'TR', currency = 'TRY', markup = DEFAULT_MARKUP, liveHotels, query, onBackHome, onAddBooking }) => {
   const [selectedHotel, setSelectedHotel] = useState<HotelDeal | null>(null);
   const [couponCode, setCouponCode] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState(0);
@@ -213,15 +214,24 @@ export const HotelResultsPage: React.FC<{
   const mu = HT_MODAL_I18N[lang];
   const hotelMult = 1 + (markup.hotelPercent - DEFAULT_MARKUP.hotelPercent) / 100;
 
+  const allHotels: HotelDeal[] = liveHotels !== undefined
+    ? liveHotels
+        .filter((h) => h.active)
+        .map((h, idx) => {
+          const base = HOTEL_DEALS.find((m) => m.id === h.id) ?? HOTEL_DEALS[idx % HOTEL_DEALS.length];
+          return { ...base, id: h.id, city: h.city, name: h.name, stars: h.stars, boardType: h.boardType, nights: h.nights, price: h.price };
+        })
+    : HOTEL_DEALS;
+
   const normalizeCity = (val: string) =>
     val.toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
   const destToken = normalizeCity(query.destination.split(',')[0] || '');
   const matchedHotels = destToken
-    ? HOTEL_DEALS.filter(
+    ? allHotels.filter(
         (h) => normalizeCity(h.city).includes(destToken) || normalizeCity(h.name).includes(destToken)
       )
-    : HOTEL_DEALS;
-  const displayedHotels = matchedHotels.length > 0 ? matchedHotels : HOTEL_DEALS;
+    : allHotels;
+  const displayedHotels = matchedHotels.length > 0 ? matchedHotels : allHotels;
   const isFallbackHotels = Boolean(destToken) && matchedHotels.length === 0;
   const fallbackNote: Record<LangCode, string> = {
     TR: `"${query.destination}" için birebir otel bulunamadı; öne çıkan diğer seçkin otellerimiz listeleniyor.`,
@@ -474,10 +484,11 @@ export const TransferResultsPage: React.FC<{
   lang?: LangCode;
   currency?: CurrencyCode;
   markup?: AdminMarkupConfig;
+  liveTransfers?: Array<{ id: string; city: string; vehicle: string; route: string; capacity: string; baggage: string; price: number; active: boolean }>;
   query: TransferSearchQuery;
   onBackHome: () => void;
   onAddBooking: (draft: BookingDraft) => Promise<BookingRecord>;
-}> = ({ lang = 'TR', currency = 'TRY', markup = DEFAULT_MARKUP, query, onBackHome, onAddBooking }) => {
+}> = ({ lang = 'TR', currency = 'TRY', markup = DEFAULT_MARKUP, liveTransfers, query, onBackHome, onAddBooking }) => {
   const [selectedTr, setSelectedTr] = useState<TransferDeal | null>(null);
   const [appliedDiscount, setAppliedDiscount] = useState(0);
   const [confirmedPnr, setConfirmedPnr] = useState<string | null>(null);
@@ -487,6 +498,15 @@ export const TransferResultsPage: React.FC<{
   const ui = HT_I18N[lang];
   const mu = HT_MODAL_I18N[lang];
   const transferDiff = markup.transferAddTRY - DEFAULT_MARKUP.transferAddTRY;
+
+  const displayedTransfers: TransferDeal[] = liveTransfers !== undefined
+    ? liveTransfers
+        .filter((tr) => tr.active)
+        .map((tr, idx) => {
+          const base = TRANSFER_DEALS.find((m) => m.id === tr.id) ?? TRANSFER_DEALS[idx % TRANSFER_DEALS.length];
+          return { ...base, id: tr.id, city: tr.city, vehicle: tr.vehicle, route: tr.route, capacity: tr.capacity, baggage: tr.baggage, price: tr.price };
+        })
+    : TRANSFER_DEALS;
 
   const openTransferModal = (tr: TransferDeal) => {
     setSelectedTr(tr);
@@ -527,7 +547,7 @@ export const TransferResultsPage: React.FC<{
       <section className="results-workspace">
         <div className="container">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 20 }}>
-            {TRANSFER_DEALS.map((tr) => {
+            {displayedTransfers.map((tr) => {
               const adjPrice = Math.max(490, tr.price + transferDiff);
               return (
                 <div key={tr.id} className="flight-card" style={{ marginBottom: 0 }}>
