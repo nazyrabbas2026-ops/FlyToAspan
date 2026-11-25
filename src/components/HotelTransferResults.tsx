@@ -199,10 +199,14 @@ export const HotelResultsPage: React.FC<{
   currency?: CurrencyCode;
   markup?: AdminMarkupConfig;
   liveHotels?: Array<{ id: string; city: string; name: string; stars: number; boardType: string; nights: number; price: number; active: boolean }>;
+  liveCoupons?: Array<{ id: string; code: string; title: string; category: string; validUntil: string; active: boolean }>;
   query: HotelSearchQuery;
   onBackHome: () => void;
   onAddBooking: (draft: BookingDraft) => Promise<BookingRecord>;
-}> = ({ lang = 'TR', currency = 'TRY', markup = DEFAULT_MARKUP, liveHotels, query, onBackHome, onAddBooking }) => {
+}> = ({ lang = 'TR', currency = 'TRY', markup = DEFAULT_MARKUP, liveHotels, liveCoupons, query, onBackHome, onAddBooking }) => {
+  const activeHotelCoupon = liveCoupons !== undefined
+    ? liveCoupons.find((c) => c.active && c.category === 'Otel') ?? null
+    : { code: 'OTEL30', title: 'Otel Kuponu' };
   const [selectedHotel, setSelectedHotel] = useState<HotelDeal | null>(null);
   const [couponCode, setCouponCode] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState(0);
@@ -439,6 +443,7 @@ export const HotelResultsPage: React.FC<{
                   </label>
                 </div>
 
+                {activeHotelCoupon && (
                 <div
                   style={{
                     padding: 10,
@@ -453,19 +458,20 @@ export const HotelResultsPage: React.FC<{
                 >
                   <span style={{ fontSize: 12, fontWeight: 700 }}>
                     <Tag size={13} color="#00A8B5" style={{ verticalAlign: 'middle', marginRight: 5 }} />
-                    {mu.hotelCouponLbl} <strong>OTEL30</strong> (−{formatPrice(300, currency)})
+                    {mu.hotelCouponLbl} <strong>{activeHotelCoupon.code}</strong> (−{formatPrice(300, currency)})
                   </span>
                   <button
                     type="button"
                     className="uf-quick-pill"
                     onClick={() => {
-                      setCouponCode('OTEL30');
+                      setCouponCode(activeHotelCoupon.code);
                       setAppliedDiscount(300);
                     }}
                   >
-                    {couponCode === 'OTEL30' ? mu.applied : mu.applyCode('OTEL30')}
+                    {couponCode === activeHotelCoupon.code ? mu.applied : mu.applyCode(activeHotelCoupon.code)}
                   </button>
                 </div>
+                )}
 
                 {bookingError && <p className="form-action-error" role="alert">{bookingError}</p>}
                 <button type="submit" className="uf-pop-done" disabled={bookingPending} style={{ height: 46, marginTop: 0 }}>
@@ -485,10 +491,14 @@ export const TransferResultsPage: React.FC<{
   currency?: CurrencyCode;
   markup?: AdminMarkupConfig;
   liveTransfers?: Array<{ id: string; city: string; vehicle: string; route: string; capacity: string; baggage: string; price: number; active: boolean }>;
+  liveCoupons?: Array<{ id: string; code: string; title: string; category: string; validUntil: string; active: boolean }>;
   query: TransferSearchQuery;
   onBackHome: () => void;
   onAddBooking: (draft: BookingDraft) => Promise<BookingRecord>;
-}> = ({ lang = 'TR', currency = 'TRY', markup = DEFAULT_MARKUP, liveTransfers, query, onBackHome, onAddBooking }) => {
+}> = ({ lang = 'TR', currency = 'TRY', markup = DEFAULT_MARKUP, liveTransfers, liveCoupons, query, onBackHome, onAddBooking }) => {
+  const activeTransferCoupon = liveCoupons !== undefined
+    ? liveCoupons.find((c) => c.active && c.category === 'Transfer') ?? null
+    : { code: 'VIP25', title: 'VIP Transfer' };
   const [selectedTr, setSelectedTr] = useState<TransferDeal | null>(null);
   const [appliedDiscount, setAppliedDiscount] = useState(0);
   const [confirmedPnr, setConfirmedPnr] = useState<string | null>(null);
@@ -673,6 +683,7 @@ export const TransferResultsPage: React.FC<{
                   </label>
                 </div>
 
+                {activeTransferCoupon && (
                 <div
                   style={{
                     padding: 10,
@@ -687,16 +698,17 @@ export const TransferResultsPage: React.FC<{
                 >
                   <span style={{ fontSize: 12, fontWeight: 700 }}>
                     <Tag size={13} color="#00A8B5" style={{ verticalAlign: 'middle', marginRight: 5 }} />
-                    VIP Transfer: <strong>VIP25</strong> (−{formatPrice(250, currency)})
+                    VIP Transfer: <strong>{activeTransferCoupon.code}</strong> (−{formatPrice(250, currency)})
                   </span>
                   <button
                     type="button"
                     className="uf-quick-pill"
                     onClick={() => setAppliedDiscount(250)}
                   >
-                    {appliedDiscount > 0 ? mu.applied : mu.applyCode('VIP25')}
+                    {appliedDiscount > 0 ? mu.applied : mu.applyCode(activeTransferCoupon.code)}
                   </button>
                 </div>
+                )}
 
                 {bookingError && <p className="form-action-error" role="alert">{bookingError}</p>}
                 <button type="submit" className="uf-pop-done" disabled={bookingPending} style={{ height: 46, marginTop: 0 }}>

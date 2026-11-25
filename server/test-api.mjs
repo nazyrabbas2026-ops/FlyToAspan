@@ -637,5 +637,13 @@ test('FlyToAspan API & Security Suite', async (t) => {
       body: { usdTry: 10, eurTry: 10, tryKzt: 10, tryRub: 10 },
     });
     assert.equal(subFxTry.status, 403);
+
+    // Turkish I/İ/Ş/Ç surname lookup normalization (Check 14 regression guard)
+    const trLookupUpper = await call(env.origin, '/api/bookings/lookup', {
+      method: 'POST',
+      body: { pnr: subBooking.json.booking.pnr, surname: 'COSKUN' },
+    });
+    assert.equal(trLookupUpper.status, 200);
+    assert.equal(trLookupUpper.json.booking.pnr, subBooking.json.booking.pnr);
   });
 });

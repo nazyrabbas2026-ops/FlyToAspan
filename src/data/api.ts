@@ -65,7 +65,7 @@ export interface AdminCatalog {
   flights: {
     id: string; airline: string; airlineCode: string; flightNumber: string; fromCode: string; toCode: string;
     departTime: string; arriveTime: string; duration: string; operator: string; baggage: string;
-    priceTRY: number; quota: number; active: boolean;
+    flightDate?: string; priceTRY: number; quota: number; active: boolean;
   }[];
 }
 

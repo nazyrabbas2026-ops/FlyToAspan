@@ -44,8 +44,10 @@ interface FlightResultsPageProps {
   lang?: LangCode;
   currency?: CurrencyCode;
   markup?: AdminMarkupConfig;
+  isLoggedIn?: boolean;
   manualFlights?: AdminCatalog['flights'];
   operatorRules?: AdminCatalog['operators'];
+  liveCoupons?: AdminCatalog['coupons'];
   query: FlightSearchQuery;
   onChangeQuery?: (next: FlightSearchQuery) => void;
   onBackHome: () => void;
@@ -366,7 +368,6 @@ type SortKey = 'cheapest' | 'fastest' | 'earliestDep' | 'earliestArr';
 
 type FlightSelection = { flight: FlightResult; pkg: FarePackage };
 
-const VALID_COUPONS = new Set(['ASPAN350', 'SKYALA18', 'VIP25', 'OTEL30']);
 
 const CHECKOUT_I18N: Record<
   LangCode,
@@ -611,8 +612,10 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
   lang = 'TR',
   currency = 'TRY',
   markup = DEFAULT_MARKUP,
+  isLoggedIn = false,
   manualFlights = [],
   operatorRules = [],
+  liveCoupons,
   query,
   onChangeQuery,
   onBackHome,
@@ -636,12 +639,16 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
   const [savedPassengers, setSavedPassengers] = useState<SavedPassengerRecord[]>([]);
 
   useEffect(() => {
+    if (!isLoggedIn) {
+      setSavedPassengers([]);
+      return;
+    }
     const controller = new AbortController();
     api.savedPassengers(controller.signal)
       .then(({ passengers }) => { if (!controller.signal.aborted) setSavedPassengers(passengers); })
       .catch(() => { /* guest user */ });
     return () => controller.abort();
-  }, []);
+  }, [isLoggedIn]);
   const [bookingError, setBookingError] = useState('');
   const [bookingPending, setBookingPending] = useState(false);
   const [couponInput, setCouponInput] = useState('');
@@ -678,7 +685,12 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
       return baseTRY;
     };
     const custom: FlightResult[] = manualFlights
-      .filter((mf) => mf.active && mf.fromCode.toUpperCase() === query.fromCode.toUpperCase() && mf.toCode.toUpperCase() === query.toCode.toUpperCase())
+      .filter((mf) =>
+        mf.active &&
+        mf.fromCode.toUpperCase() === query.fromCode.toUpperCase() &&
+        mf.toCode.toUpperCase() === query.toCode.toUpperCase() &&
+        (!mf.flightDate || mf.flightDate === query.departDate)
+      )
       .map((mf) => {
         const [dh = '10', dm = '00'] = mf.departTime.split(':');
         const [ah = '14', am = '00'] = mf.arriveTime.split(':');
@@ -774,15 +786,38 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
   const childSubtotalTRY = Math.round(unitLegTotal * query.children * 0.75);
   const infantSubtotalTRY = Math.round(unitLegTotal * query.infants * 0.1);
   const rawBookingTotal = adultSubtotalTRY + childSubtotalTRY + infantSubtotalTRY;
+  const activeCouponRecords = useMemo(() => {
+    if (liveCoupons !== undefined) {
+      return liveCoupons.filter((c) => c.active);
+    }
+    return [
+      { id: 'c1', code: 'ASPAN350', title: '350 TL İndirim', category: 'Uçak', validUntil: '', active: true },
+      { id: 'c2', code: 'SKYALA18', title: '%18 Avantaj', category: 'Uçak', validUntil: '', active: true },
+      { id: 'c3', code: 'OTEL30', title: '%30 İndirim', category: 'Otel', validUntil: '', active: true },
+      { id: 'c4', code: 'VIP25', title: '%25 İndirim', category: 'Transfer', validUntil: '', active: true },
+    ];
+  }, [liveCoupons]);
+
   const discountTRY = useMemo(() => {
     if (!appliedCoupon) return 0;
     const code = appliedCoupon.toUpperCase();
+    const rec = activeCouponRecords.find((c) => c.code.toUpperCase() === code);
+    if (!rec) return 0;
     if (code === 'ASPAN350') return 350;
     if (code === 'SKYALA18') return Math.round(rawBookingTotal * 0.18);
     if (code === 'VIP25') return 250;
     if (code === 'OTEL30') return 300;
-    return 0;
-  }, [appliedCoupon, rawBookingTotal]);
+    const pctMatch = rec.title.match(/%\s*(\d{1,2})|(\d{1,2})\s*%/);
+    if (pctMatch) {
+      const pct = Math.min(40, Number(pctMatch[1] || pctMatch[2]) || 10);
+      return Math.round(rawBookingTotal * (pct / 100));
+    }
+    const tlMatch = rec.title.match(/(\d{2,5})\s*(TL|₺)/i) || code.match(/(\d{2,4})$/);
+    if (tlMatch) {
+      return Math.min(Math.round(rawBookingTotal * 0.4), Math.max(50, Number(tlMatch[1]) || 300));
+    }
+    return 300;
+  }, [appliedCoupon, rawBookingTotal, activeCouponRecords]);
   const addonsTotalTRY =
     ((addonCancelShield ? 240 : 0) + (addonAutoCheckin ? 145 : 0)) * totalPax;
   const bookingTotal = Math.max(250, rawBookingTotal + addonsTotalTRY - discountTRY);
@@ -1028,7 +1063,8 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
         setCouponError('');
         return;
       }
-      if (VALID_COUPONS.has(code)) {
+      const matched = activeCouponRecords.find((c) => c.code.toUpperCase() === code);
+      if (matched) {
         setAppliedCoupon(code);
         setCouponError('');
       } else {
@@ -1404,18 +1440,21 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                         {showPromoCodeBox && (
                           <div className="uf-cc-promo-box">
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                              {['ASPAN350', 'SKYALA18'].map((code) => (
+                              {activeCouponRecords
+                                .filter((c) => c.category === 'Uçak' || activeCouponRecords.length <= 2)
+                                .slice(0, 4)
+                                .map((c) => (
                                 <button
-                                  key={code}
+                                  key={c.code}
                                   type="button"
                                   className="uf-quick-pill"
                                   style={{ fontSize: 11, padding: '3px 9px' }}
                                   onClick={() => {
-                                    setCouponInput(code);
-                                    applyCoupon(code);
+                                    setCouponInput(c.code);
+                                    applyCoupon(c.code);
                                   }}
                                 >
-                                  ⚡ {code}
+                                  ⚡ {c.code}
                                 </button>
                               ))}
                             </div>

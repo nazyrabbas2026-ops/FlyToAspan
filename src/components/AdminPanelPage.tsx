@@ -387,11 +387,13 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   const [mfNumber, setMfNumber] = useState('KC920');
   const [mfFrom, setMfFrom] = useState('IST');
   const [mfTo, setMfTo] = useState('ALA');
+  const [mfDate, setMfDate] = useState('');
   const [mfDep, setMfDep] = useState('10:30');
   const [mfArr, setMfArr] = useState('18:00');
   const [mfOperator, setMfOperator] = useState('Kompas Tour (XML)');
   const [mfBaggage, setMfBaggage] = useState('20 kg Bagaj');
-  const [mfPrice, setMfPrice] = useState('6890');
+  const [mfCurrency, setMfCurrency] = useState<'EUR' | 'USD' | 'TRY'>('EUR');
+  const [mfPrice, setMfPrice] = useState('150');
   const [mfQuota, setMfQuota] = useState('10');
   const [fxSnapshot, setFxSnapshot] = useState(() => getLiveRatesSnapshot());
   const [fxLoading, setFxLoading] = useState(false);
@@ -2301,12 +2303,32 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                           ) : (
                             manualFlights.map((mf) => {
                               const isConfirming = pendingCatalogDelete?.section === 'flights' && pendingCatalogDelete.id === mf.id;
+                              const eurRate = Math.round(1 / (fxSnapshot.rates.EUR || 0.0181));
+                              const normOp = mf.operator.toLowerCase();
+                              const matchedRule = operatorRules.find(
+                                (r) =>
+                                  r.active &&
+                                  r.product.toLowerCase().includes('uçak') &&
+                                  (normOp.includes(r.operator.toLowerCase().replace(/\s*\(xml\)/g, '').trim()) ||
+                                    r.operator.toLowerCase().includes(normOp.replace(/\s*\(xml\)/g, '').trim()))
+                              );
+                              const xmlSaleTRY = !matchedRule || matchedRule.markupType === 'NET' || matchedRule.markupValue === 0
+                                ? mf.priceTRY
+                                : matchedRule.markupType === 'EUR'
+                                  ? mf.priceTRY + Math.round(matchedRule.markupValue * eurRate)
+                                  : matchedRule.markupType === 'TRY'
+                                    ? mf.priceTRY + matchedRule.markupValue
+                                    : Math.round(mf.priceTRY * (1 + matchedRule.markupValue / 100));
+                              const xmlDiff = xmlSaleTRY - mf.priceTRY;
                               return (
                                 <tr key={mf.id} className={!mf.active ? 'is-inactive' : ''}>
                                   <td data-label="Parkur & Uçuş">
                                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                                       <span className="uf-airport-code">{mf.fromCode} → {mf.toCode}</span>
                                       <span className="pkg-pill">{mf.flightNumber}</span>
+                                    </div>
+                                    <div style={{ fontSize: 11.5, color: 'var(--aspan-text-muted)', marginTop: 3 }}>
+                                      {mf.flightDate ? formatDisplayDate(mf.flightDate, lang) : 'Her Gün (Sezonluk)'}
                                     </div>
                                   </td>
                                   <td data-label="Havayolu & Saat">
@@ -2324,10 +2346,17 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                       <div style={{ fontSize: 12, color: '#0369a1', fontWeight: 700 }}>{mf.quota} Koltuk</div>
                                     </div>
                                   </td>
-                                  <td data-label="Taban Fiyat">
-                                    <strong style={{ fontSize: 15, color: 'var(--aspan-teal-deep)', whiteSpace: 'nowrap' }}>
-                                      {formatPrice(mf.priceTRY, currency)}
-                                    </strong>
+                                  <td data-label="Net / XML Satış">
+                                    <div>
+                                      <strong style={{ fontSize: 15, color: 'var(--aspan-teal-deep)', whiteSpace: 'nowrap' }}>
+                                        {formatPrice(xmlSaleTRY, currency)}
+                                      </strong>
+                                      <div style={{ fontSize: 11, color: xmlDiff > 0 ? '#059669' : 'var(--aspan-text-muted)', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                        {xmlDiff > 0
+                                          ? `Net ${formatPrice(mf.priceTRY, currency)} + XML`
+                                          : 'NET Fiyat (Kâr Yok)'}
+                                      </div>
+                                    </div>
                                   </td>
                                   <td data-label="Durum">
                                     <span className={`status-badge ${mf.active ? 'ok' : 'warn'}`}>
@@ -2403,6 +2432,27 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                         onSubmit={(e) => {
                           e.preventDefault();
                           if (!mfAirline.trim() || !mfNumber.trim() || !mfFrom.trim() || !mfTo.trim()) return;
+                          const rawNum = Math.max(1, Number(mfPrice) || 0);
+                          const eurToTry = 1 / (fxSnapshot.rates.EUR || 0.0181);
+                          const usdToTry = 1 / (fxSnapshot.rates.USD || 0.0197);
+                          const computedTRY = Math.max(
+                            250,
+                            Math.round(
+                              mfCurrency === 'EUR'
+                                ? rawNum * eurToTry
+                                : mfCurrency === 'USD'
+                                  ? rawNum * usdToTry
+                                  : rawNum
+                            )
+                          );
+                          const [dh = '10', dm = '00'] = (mfDep || '10:00').split(':');
+                          const [ah = '14', am = '00'] = (mfArr || '14:00').split(':');
+                          const depMins = Number(dh) * 60 + Number(dm);
+                          const arrMins = Number(ah) * 60 + Number(am);
+                          const durMins = arrMins > depMins ? arrMins - depMins : (24 * 60 - depMins + arrMins);
+                          const autoDuration = Number.isFinite(durMins) && durMins > 0
+                            ? `${Math.floor(durMins / 60)}sa ${durMins % 60}dk`
+                            : 'Direkt Charter';
                           saveCatalog(
                             'flights',
                             [
@@ -2414,17 +2464,21 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                 flightNumber: mfNumber.trim().toUpperCase(),
                                 fromCode: mfFrom.trim().toUpperCase().slice(0, 3),
                                 toCode: mfTo.trim().toUpperCase().slice(0, 3),
+                                flightDate: mfDate.trim(),
                                 departTime: mfDep.trim() || '10:00',
                                 arriveTime: mfArr.trim() || '14:00',
-                                duration: 'Direkt Charter',
+                                duration: autoDuration,
                                 operator: mfOperator.trim() || 'Blok Koltuk',
                                 baggage: mfBaggage.trim() || '20 kg Bagaj',
-                                priceTRY: Math.max(250, Math.round(Number(mfPrice) || 5500)),
+                                priceTRY: computedTRY,
                                 quota: Math.max(1, Math.round(Number(mfQuota) || 10)),
                                 active: true,
                               },
                             ],
-                            `✓ ${mfNumber.trim().toUpperCase()} manuel uçuşu canlı siteye eklendi!`
+                            `✓ ${mfNumber.trim().toUpperCase()} (${mfCurrency === 'TRY' ? `₺${computedTRY.toLocaleString('tr-TR')}` : `${rawNum} ${mfCurrency} ≈ ₺${computedTRY.toLocaleString('tr-TR')}`}) canlı siteye eklendi!`,
+                            () => {
+                              setMfNumber('');
+                            }
                           );
                         }}
                       >
@@ -2438,7 +2492,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                         </div>
                         <div>
                           <label className="adm-field-lbl">Uçuş No</label>
-                          <input className="modal-input" required placeholder="KC920" value={mfNumber} onChange={(e) => setMfNumber(e.target.value.toUpperCase())} />
+                          <input className="modal-input" required placeholder="Örn: KC920" value={mfNumber} onChange={(e) => setMfNumber(e.target.value.toUpperCase())} />
                         </div>
                         <div>
                           <label className="adm-field-lbl">Kalkış (IATA)</label>
@@ -2447,6 +2501,10 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                         <div>
                           <label className="adm-field-lbl">Varış (IATA)</label>
                           <input className="modal-input" required placeholder="ALA" value={mfTo} onChange={(e) => setMfTo(e.target.value.toUpperCase())} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Uçuş Tarihi (Boş = Her Gün)</label>
+                          <input className="modal-input" type="date" value={mfDate} onChange={(e) => setMfDate(e.target.value)} />
                         </div>
                         <div>
                           <label className="adm-field-lbl">Kalkış Saati</label>
@@ -2458,15 +2516,42 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                         </div>
                         <div>
                           <label className="adm-field-lbl">Operatör (XML)</label>
-                          <input className="modal-input" placeholder="FUN&SUN / Kompas Tour" value={mfOperator} onChange={(e) => setMfOperator(e.target.value)} />
+                          <select className="modal-input" value={mfOperator} onChange={(e) => setMfOperator(e.target.value)}>
+                            {Array.from(
+                              new Set([
+                                'FUN&SUN (XML)',
+                                'Kompas Tour (XML)',
+                                'Selfie Travel (XML)',
+                                'Blok Koltuk (Özel)',
+                                ...operatorRules.filter((r) => r.product.toLowerCase().includes('uçak')).map((r) => r.operator),
+                              ])
+                            ).map((opName) => (
+                              <option key={opName} value={opName}>{opName}</option>
+                            ))}
+                          </select>
                         </div>
                         <div>
                           <label className="adm-field-lbl">Bagaj Hakkı</label>
                           <input className="modal-input" placeholder="20 kg Bagaj" value={mfBaggage} onChange={(e) => setMfBaggage(e.target.value)} />
                         </div>
                         <div>
-                          <label className="adm-field-lbl">Net Fiyat (₺)</label>
-                          <input className="modal-input" type="number" min={250} placeholder="6890" value={mfPrice} onChange={(e) => setMfPrice(e.target.value)} />
+                          <label className="adm-field-lbl">Para Birimi</label>
+                          <select className="modal-input" value={mfCurrency} onChange={(e) => setMfCurrency(e.target.value as 'EUR' | 'USD' | 'TRY')}>
+                            <option value="EUR">€ Euro (Canlı Kurdan ₺)</option>
+                            <option value="USD">$ Dolar (Canlı Kurdan ₺)</option>
+                            <option value="TRY">₺ Türk Lirası</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">
+                            Net Fiyat ({mfCurrency})
+                            {mfCurrency !== 'TRY' && Number(mfPrice) > 0 && (
+                              <span style={{ color: '#059669', marginLeft: 4 }}>
+                                ≈ ₺{Math.round(Number(mfPrice) * (mfCurrency === 'EUR' ? 1 / (fxSnapshot.rates.EUR || 0.0181) : 1 / (fxSnapshot.rates.USD || 0.0197))).toLocaleString('tr-TR')}
+                              </span>
+                            )}
+                          </label>
+                          <input className="modal-input" type="number" min={1} required placeholder={mfCurrency === 'TRY' ? '6890' : '150'} value={mfPrice} onChange={(e) => setMfPrice(e.target.value)} />
                         </div>
                         <div>
                           <label className="adm-field-lbl">Kontenjan (Koltuk)</label>

@@ -466,8 +466,10 @@ export const App: React.FC = () => {
             lang={lang}
             currency={currency}
             markup={markup}
+            isLoggedIn={Boolean(user)}
             manualFlights={publicCatalog.flights}
             operatorRules={publicCatalog.operators}
+            liveCoupons={publicCatalog.coupons}
             query={flightQuery}
             onChangeQuery={(next) => {
               setFlightQuery(next);
@@ -487,6 +489,7 @@ export const App: React.FC = () => {
             currency={currency}
             markup={markup}
             liveHotels={publicCatalog.hotels}
+            liveCoupons={publicCatalog.coupons}
             query={hotelQuery}
             onAddBooking={handleAddBooking}
             onBackHome={() => {
@@ -503,6 +506,7 @@ export const App: React.FC = () => {
             currency={currency}
             markup={markup}
             liveTransfers={publicCatalog.transfers}
+            liveCoupons={publicCatalog.coupons}
             query={transferQuery}
             onAddBooking={handleAddBooking}
             onBackHome={() => {

@@ -80,7 +80,7 @@ const catalogFields = {
   flights: {
     airline: 80, airlineCode: 8, flightNumber: 20, fromCode: 8, toCode: 8,
     departTime: 10, arriveTime: 10, duration: 24, operator: 60, baggage: 40,
-    priceTRY: 'integer', quota: 'integer', active: 'boolean',
+    flightDate: 'optional:16', priceTRY: 'integer', quota: 'integer', active: 'boolean',
   },
 };
 
@@ -102,7 +102,16 @@ function text(value, maximum, minimum = 1) {
 }
 
 export function normalizeSurname(value) {
-  return text(value, 80).toLocaleLowerCase('tr-TR').normalize('NFC');
+  return text(value, 80)
+    .replace(/[İIıi]/g, 'i')
+    .replace(/[Şş]/g, 's')
+    .replace(/[Ğğ]/g, 'g')
+    .replace(/[Üü]/g, 'u')
+    .replace(/[Öö]/g, 'o')
+    .replace(/[Çç]/g, 'c')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
 }
 
 export function normalizeEmail(value) {
@@ -244,6 +253,9 @@ function validateCatalogItems(section, items) {
       const value = item[key];
       if (typeof rule === 'number') {
         cleaned[key] = text(value, rule);
+      } else if (typeof rule === 'string' && rule.startsWith('optional:')) {
+        const maxLen = Number(rule.slice('optional:'.length)) || 32;
+        cleaned[key] = typeof value === 'string' ? value.trim().slice(0, maxLen) : '';
       } else {
         const valid = rule === 'boolean' ? typeof value === 'boolean' :
           Number.isInteger(value) && value >= 0 && value <= 100_000_000;
