@@ -82,10 +82,10 @@ export const App: React.FC = () => {
     } catch {
       /* ignore */
     }
-    // 1.5-second 0-100% eased preloader: plays once per browser session, skippable on click/tap
-    const DURATION_MS = 1450;
-    const HOLD_MS = 140;
-    const EXIT_MS = 480;
+    // 1.85-second cinematic 2-stage splash: Eagle Crest soars in first, then FlyToAspan wordmark glides in
+    const DURATION_MS = 1850;
+    const HOLD_MS = 180;
+    const EXIT_MS = 520;
     const startTime = performance.now();
     let rafId = 0;
     let holdTimer: number | undefined;
@@ -295,11 +295,20 @@ export const App: React.FC = () => {
   return (
     <div className="app-shell">
       {splashStage !== 'done' && (() => {
-        // Sequential left-to-right reveal of the full FlyToAspan logo:
-        // 0% -> 35%: Eagle crest at the head of the logo appears first
-        // 35% -> 75%: "FlyTo" reveals in sequence
-        // 75% -> 100%: "Aspan by infinitive travel" completes the full logo
-        const logoClipRight = Math.max(0, 100 - splashFloat * 100);
+        // Stage 1 (0% -> 42%): Golden Eagle Crest soars & lifts into place with ambient glow
+        const eagleT = Math.min(1, splashFloat / 0.42);
+        const eagleEase = 1 - Math.pow(1 - eagleT, 3);
+        const eagleY = (1 - eagleEase) * 26;
+        const eagleScale = 0.72 + eagleEase * 0.28;
+
+        // Stage 2 (38% -> 96%): "FlyToAspan by Infinitive Travel" wordmark glides in beside the eagle
+        const textT = Math.max(0, Math.min(1, (splashFloat - 0.38) / 0.58));
+        const textEase = 1 - Math.pow(1 - textT, 3);
+        const textClipRight = (1 - textEase) * 68;
+        const textX = (1 - textEase) * -14;
+
+        // Stage 3 (68% -> 100%): Subtle golden tagline fades in underneath
+        const tagT = Math.max(0, Math.min(1, (splashFloat - 0.68) / 0.32));
 
         return (
           <div
@@ -316,16 +325,40 @@ export const App: React.FC = () => {
             style={{ cursor: 'pointer' }}
             title="Geçmek için dokunun / Click to skip"
           >
-            {/* Centered Sequential Logo Reveal (No background glow/lines, pure start-to-finish logo reveal) */}
             <div
               className={`kv-splash-brand-stack ${splashStage === 'exiting' ? 'is-exiting' : ''}`}
               aria-hidden="true"
             >
               <div className="kv-splash-logo-stage">
                 <div
-                  className="kv-splash-logo-reveal"
+                  className="kv-splash-aura"
                   style={{
-                    clipPath: `inset(0 ${logoClipRight.toFixed(2)}% 0 0)`,
+                    opacity: eagleEase * 0.95,
+                    transform: `translateY(-50%) scale(${(0.65 + eagleEase * 0.45).toFixed(3)})`,
+                  }}
+                />
+                {/* Stage 1: Golden Eagle Crest flies in first */}
+                <div
+                  className="kv-splash-layer kv-splash-eagle-layer"
+                  style={{
+                    opacity: eagleEase,
+                    transform: `translateY(${eagleY.toFixed(2)}px) scale(${eagleScale.toFixed(3)})`,
+                    filter: `drop-shadow(0 0 ${(eagleEase * 16).toFixed(1)}px rgba(245, 205, 94, 0.38))`,
+                  }}
+                >
+                  <img
+                    src="/images/logo-dark.png"
+                    alt="FlyToAspan Eagle Crest"
+                    className="kv-splash-logo-live"
+                  />
+                </div>
+                {/* Stage 2: FlyToAspan wordmark smoothly unveils after the eagle */}
+                <div
+                  className="kv-splash-layer"
+                  style={{
+                    opacity: textEase,
+                    clipPath: `inset(0 ${textClipRight.toFixed(2)}% 0 32.5%)`,
+                    transform: `translateX(${textX.toFixed(2)}px)`,
                   }}
                 >
                   <img
@@ -334,6 +367,15 @@ export const App: React.FC = () => {
                     className="kv-splash-logo-live"
                   />
                 </div>
+              </div>
+              <div
+                className="kv-splash-tagline"
+                style={{
+                  opacity: tagT,
+                  transform: `translateY(${((1 - tagT) * 8).toFixed(2)}px)`,
+                }}
+              >
+                TÜRKİYE · KAZAKİSTAN · GLOBAL TRAVEL
               </div>
             </div>
 
@@ -545,6 +587,7 @@ export const App: React.FC = () => {
           {page === 'admin' && canManage && (
             <AdminPanelPage
               lang={lang}
+              onSelectLang={setLang}
               currency={currency}
               currentUser={user}
               markup={markup}

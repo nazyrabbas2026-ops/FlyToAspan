@@ -4917,25 +4917,55 @@ img {
 
 .kv-splash-logo-stage {
   position: relative;
-  width: min(82vw, 390px);
+  width: min(84vw, 410px);
+  aspect-ratio: 3.1 / 1;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.kv-splash-logo-reveal {
-  position: relative;
-  width: 100%;
+.kv-splash-aura {
+  position: absolute;
+  width: 240px;
+  height: 240px;
+  left: 6%;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(245, 205, 94, 0.28) 0%, rgba(25, 211, 224, 0.14) 48%, rgba(4, 21, 33, 0) 75%);
+  filter: blur(18px);
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.kv-splash-layer {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  will-change: clip-path;
+  will-change: transform, opacity, clip-path, filter;
+}
+
+.kv-splash-eagle-layer {
+  clip-path: inset(0 67.5% 0 0);
 }
 
 .kv-splash-logo-live {
   width: 100%;
   height: auto;
   object-fit: contain;
+}
+
+.kv-splash-tagline {
+  margin-top: 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(245, 205, 94, 0.88);
+  text-align: center;
+  will-change: opacity, transform;
 }
 
 .kv-splash-counter-wrap {
@@ -6826,4 +6856,77 @@ img {
     padding: 0 11px;
     font-size: 12px;
   }
+}
+
+
+/* ==================== ADMIN LANGUAGE SWITCHER & DATE PRESET BAR ==================== */
+.adm-lang-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+.adm-lang-btn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.adm-lang-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+.adm-lang-btn.active {
+  background: #f5cd5e;
+  color: #0b2233;
+}
+
+.adm-date-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, rgba(14, 165, 233, 0.08) 0%, rgba(0, 168, 181, 0.06) 100%);
+  border: 1.5px solid rgba(14, 165, 233, 0.22);
+}
+.adm-date-presets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.adm-date-chip {
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1.5px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.14s ease;
+}
+.adm-date-chip:hover {
+  border-color: #0284c7;
+  color: #0369a1;
+}
+.adm-date-chip.active {
+  background: #0284c7;
+  border-color: #0369a1;
+  color: #ffffff;
 }

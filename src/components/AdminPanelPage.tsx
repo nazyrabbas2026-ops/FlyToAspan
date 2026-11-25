@@ -124,6 +124,7 @@ function generateStrongPassword(): string {
 
 interface AdminPanelPageProps {
   lang?: LangCode;
+  onSelectLang?: (next: LangCode) => void;
   currency?: CurrencyCode;
   currentUser?: UserProfile | null;
   markup: AdminMarkupConfig;
@@ -318,8 +319,156 @@ const exampleCatalog: AdminCatalog = {
   ],
 };
 
+const ADMIN_I18N: Record<'TR' | 'EN' | 'RU', {
+  backToSite: string;
+  adminEyebrow: string;
+  teamEyebrow: string;
+  adminTitle: string;
+  teamTitle: string;
+  addTestBooking: string;
+  logout: string;
+  navLabel: string;
+  sections: Record<AdminSection, { label: string; description: string }>;
+  dateQuickLabel: string;
+  dateAll: string;
+  dateToday: string;
+  dateWeek: string;
+  dateMonth: string;
+  dateUpcoming: string;
+  dateReset: string;
+  searchLabel: string;
+  searchPh: string;
+  fromDate: string;
+  toDate: string;
+  sortBy: string;
+  allServices: string;
+  statusLabels: Record<BookingRecord['status'], string>;
+}> = {
+  TR: {
+    backToSite: 'Siteye Dön',
+    adminEyebrow: 'FLYTOASPAN · MERKEZ YÖNETİM PANELİ',
+    teamEyebrow: 'FLYTOASPAN · EKİP PORTALI',
+    adminTitle: 'Yönetici paneli',
+    teamTitle: 'Ekip & Satış Paneli',
+    addTestBooking: 'Deneme rezervasyonu ekle',
+    logout: 'Çıkış',
+    navLabel: 'Yönetim bölümü',
+    sections: {
+      dashboard: { label: 'Genel bakış', description: 'Kayıt özeti, bekleyen işler ve fiyat bilgileri.' },
+      bookings: { label: 'Rezervasyonlar', description: 'PNR ile arayın, tarih aralığına göre filtreleyin ve durumları güncelleyin.' },
+      finance: { label: 'Finans & CRM', description: 'Gelir-gider defteri, CRM teklifleri ve ekip liderliği.' },
+      pricing: { label: 'Fiyatlandırma & XML', description: 'Operatör XML kâr kurallarını ve komisyonları yönetin.' },
+      inventory: { label: 'Envanter & Manuel Uçuş', description: 'Manuel blok koltuk uçuşları, otel ve VIP transferleri yönetin.' },
+      coupons: { label: 'Kampanya ve kuponlar', description: 'Canlı indirim kuponlarını ekleyin, kapatın veya silin.' },
+      agents: { label: 'Bayiler ve üyeler', description: 'Alt acente onayları, cari kredi limitleri ve yetki matrisi.' },
+      apis: { label: 'Sağlayıcı bağlantıları', description: 'Buranus, Amadeus, otel ve ödeme API durumları.' },
+    },
+    dateQuickLabel: 'Hızlı Tarih Filtresi:',
+    dateAll: 'Tümü',
+    dateToday: 'Bugün',
+    dateWeek: 'Bu Hafta',
+    dateMonth: 'Bu Ay',
+    dateUpcoming: 'Gelecek Uçuşlar',
+    dateReset: 'Tarihi Sıfırla',
+    searchLabel: 'PNR / Yolcu / Rota Ara',
+    searchPh: 'Rezervasyon kodu, yolcu veya rota',
+    fromDate: 'Başlangıç Tarihi',
+    toDate: 'Bitiş Tarihi',
+    sortBy: 'Sıralama Ölçütü',
+    allServices: 'Tüm Hizmetler',
+    statusLabels: {
+      Onaylandı: 'Onaylandı',
+      Tamamlandı: 'Tamamlandı',
+      'İptal Talebi': 'İptal Talebi',
+      'İptal Edildi': 'İptal Edildi',
+      'İade Edildi': 'İade Edildi',
+    },
+  },
+  EN: {
+    backToSite: 'Back to Site',
+    adminEyebrow: 'FLYTOASPAN · CENTRAL OPERATIONS PORTAL',
+    teamEyebrow: 'FLYTOASPAN · SUB-AGENT PORTAL',
+    adminTitle: 'Admin Panel',
+    teamTitle: 'Team & Sales Panel',
+    addTestBooking: 'Add Test Booking',
+    logout: 'Sign Out',
+    navLabel: 'Management Menu',
+    sections: {
+      dashboard: { label: 'Overview', description: 'Sales summary, pending items, FX rates and quick actions.' },
+      bookings: { label: 'Bookings', description: 'Search by PNR, filter by date range, update status or download PDF.' },
+      finance: { label: 'Finance & CRM', description: 'Income/expense ledger, CRM quotes and sales analytics.' },
+      pricing: { label: 'Pricing & XML', description: 'Manage operator XML markup rules (FUN&SUN, Kompas, Selfie) and margins.' },
+      inventory: { label: 'Inventory & Flights', description: 'Manage manual charter block-seat flights, hotels and VIP transfers.' },
+      coupons: { label: 'Campaigns & Coupons', description: 'Create, toggle or delete live promo codes synced to checkout.' },
+      agents: { label: 'Agencies & Team', description: 'B2B agency approvals, credit limits and granular RBAC permissions.' },
+      apis: { label: 'Supplier APIs', description: 'Monitor Buranus, Amadeus, hotel and payment gateway connections.' },
+    },
+    dateQuickLabel: 'Quick Date Filter:',
+    dateAll: 'All Dates',
+    dateToday: 'Today',
+    dateWeek: 'This Week',
+    dateMonth: 'This Month',
+    dateUpcoming: 'Upcoming Flights',
+    dateReset: 'Reset Dates',
+    searchLabel: 'Search PNR / Passenger / Route',
+    searchPh: 'Booking code, passenger or route',
+    fromDate: 'From Date',
+    toDate: 'To Date',
+    sortBy: 'Sort By',
+    allServices: 'All Services',
+    statusLabels: {
+      Onaylandı: 'Confirmed',
+      Tamamlandı: 'Completed',
+      'İptal Talebi': 'Cancel Request',
+      'İptal Edildi': 'Cancelled',
+      'İade Edildi': 'Refunded',
+    },
+  },
+  RU: {
+    backToSite: 'На сайт',
+    adminEyebrow: 'FLYTOASPAN · ЦЕНТР УПРАВЛЕНИЯ И ОПЕРАЦИЙ',
+    teamEyebrow: 'FLYTOASPAN · ПОРТАЛ СУБАГЕНТА',
+    adminTitle: 'Панель управления',
+    teamTitle: 'Панель продаж',
+    addTestBooking: 'Тестовая бронь',
+    logout: 'Выход',
+    navLabel: 'Разделы панели',
+    sections: {
+      dashboard: { label: 'Обзор', description: 'Сводка продаж, статусы, курсы валют и быстрые действия.' },
+      bookings: { label: 'Бронирования', description: 'Поиск по PNR, фильтр по датам, смена статуса и PDF билет.' },
+      finance: { label: 'Финансы и CRM', description: 'Учет доходов/расходов, CRM предложения и аналитика.' },
+      pricing: { label: 'Ценообразование XML', description: 'Наценки операторов XML (FUN&SUN, Kompas, Selfie) и комиссии.' },
+      inventory: { label: 'Инвентарь и Рейсы', description: 'Ручные чартерные рейсы (блок мест), отели и VIP трансферы.' },
+      coupons: { label: 'Акции и купоны', description: 'Управление активными промокодами в реальном времени.' },
+      agents: { label: 'Агентства и команда', description: 'Заявки B2B агентств, кредитные лимиты и права доступа.' },
+      apis: { label: 'API поставщиков', description: 'Статус подключений Buranus, Amadeus, отелей и оплаты.' },
+    },
+    dateQuickLabel: 'Быстрый фильтр дат:',
+    dateAll: 'Все даты',
+    dateToday: 'Сегодня',
+    dateWeek: 'Эта неделя',
+    dateMonth: 'Этот месяц',
+    dateUpcoming: 'Предстоящие',
+    dateReset: 'Сбросить даты',
+    searchLabel: 'Поиск PNR / Пассажир / Маршрут',
+    searchPh: 'Код брони, пассажир или маршрут',
+    fromDate: 'Дата с',
+    toDate: 'Дата по',
+    sortBy: 'Сортировка',
+    allServices: 'Все услуги',
+    statusLabels: {
+      Onaylandı: 'Подтверждено',
+      Tamamlandı: 'Завершено',
+      'İptal Talebi': 'Запрос отмены',
+      'İptal Edildi': 'Отменено',
+      'İade Edildi': 'Возвращено',
+    },
+  },
+};
+
 export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   lang = 'TR',
+  onSelectLang,
   currency = 'TRY',
   currentUser = null,
   markup,
@@ -332,6 +481,14 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   onLogout,
   onBackHome,
 }) => {
+  const [localLang, setLocalLang] = useState<'TR' | 'EN' | 'RU'>(lang === 'EN' || lang === 'RU' ? lang : 'TR');
+  const activePanelLang: 'TR' | 'EN' | 'RU' = onSelectLang ? (lang === 'EN' || lang === 'RU' ? lang : 'TR') : localLang;
+  const setPanelLang = (next: 'TR' | 'EN' | 'RU') => {
+    setLocalLang(next);
+    onSelectLang?.(next);
+  };
+  const ui = ADMIN_I18N[activePanelLang];
+
   const isSuperAdmin = !currentUser || currentUser.role === 'admin';
   const userPerms = currentUser?.permissions ?? [];
   const canManageBookings = isSuperAdmin || userPerms.includes('bookings.manage');
@@ -715,7 +872,44 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
     };
   }, [bookings]);
 
-  const currentSection = ADMIN_SECTIONS.find(({ id }) => id === section)!;
+  const currentSectionBase = ADMIN_SECTIONS.find(({ id }) => id === section)!;
+  const currentSection = {
+    ...currentSectionBase,
+    label: ui.sections[section].label,
+    description: ui.sections[section].description,
+  };
+
+  const applyDatePreset = (preset: 'all' | 'today' | 'week' | 'month' | 'upcoming') => {
+    const now = new Date();
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    if (preset === 'all') {
+      setDateFrom('');
+      setDateTo('');
+      return;
+    }
+    if (preset === 'today') {
+      const t = fmt(now);
+      setDateFrom(t);
+      setDateTo(t);
+      return;
+    }
+    if (preset === 'week') {
+      const end = new Date(now);
+      end.setDate(end.getDate() + 7);
+      setDateFrom(fmt(now));
+      setDateTo(fmt(end));
+      return;
+    }
+    if (preset === 'month') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      setDateFrom(fmt(start));
+      setDateTo(fmt(end));
+      return;
+    }
+    setDateFrom(fmt(now));
+    setDateTo('');
+  };
 
   const resetBookingFilters = () => {
     setSearchQ('');
@@ -834,22 +1028,34 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
             <div>
               <button type="button" className="inner-back-btn" onClick={onBackHome}>
                 <ArrowLeft size={15} />
-                Siteye Dön
+                {ui.backToSite}
               </button>
               <div className="section-eyebrow on-dark">
-                {isSuperAdmin ? 'FLYTOASPAN · MERKEZ YÖNETİM PANELİ' : `FLYTOASPAN · EKİP PORTALI${currentUser?.companyName ? ` · ${currentUser.companyName}` : ''}`}
+                {isSuperAdmin ? ui.adminEyebrow : `${ui.teamEyebrow}${currentUser?.companyName ? ` · ${currentUser.companyName}` : ''}`}
               </div>
-              <h1 className="inner-h1">{isSuperAdmin ? 'Yönetici paneli' : 'Ekip & Satış Paneli'}</h1>
+              <h1 className="inner-h1">{isSuperAdmin ? ui.adminTitle : ui.teamTitle}</h1>
             </div>
 
             <div className="panel-actions">
+              <div className="adm-lang-switch" role="group" aria-label="Panel Language">
+                {(['TR', 'EN', 'RU'] as const).map((code) => (
+                  <button
+                    key={code}
+                    type="button"
+                    className={`adm-lang-btn ${activePanelLang === code ? 'active' : ''}`}
+                    onClick={() => setPanelLang(code)}
+                  >
+                    {code}
+                  </button>
+                ))}
+              </div>
               <button
                 type="button"
                 className="btn-gold-nav"
                 onClick={() => openBookings('ALL', true)}
               >
                 <Plus size={16} />
-                Deneme rezervasyonu ekle
+                {ui.addTestBooking}
               </button>
               <button
                 type="button"
@@ -857,7 +1063,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                 onClick={onLogout}
               >
                 <LogOut size={15} />
-                Çıkış
+                {ui.logout}
               </button>
             </div>
           </div>
@@ -890,10 +1096,12 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
 
           <div className="panel-layout">
             <PanelNavigation
-              label="Yönetim bölümü"
+              label={ui.navLabel}
               current={section}
               items={visibleSections.map((item) => ({
                 ...item,
+                label: ui.sections[item.id].label,
+                description: ui.sections[item.id].description,
                 count:
                   item.id === 'bookings'
                     ? bookings.length
@@ -1336,6 +1544,35 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                       </form>
                     )}
 
+                    {/* Quick Colorful Date Presets */}
+                    <div className="adm-date-bar">
+                      <div className="adm-date-presets">
+                        <span style={{ fontSize: 12, fontWeight: 800, color: '#0369a1', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                          <Calendar size={14} /> {ui.dateQuickLabel}
+                        </span>
+                        <button type="button" className={`adm-date-chip ${!dateFrom && !dateTo ? 'active' : ''}`} onClick={() => applyDatePreset('all')}>
+                          {ui.dateAll}
+                        </button>
+                        <button type="button" className="adm-date-chip" onClick={() => applyDatePreset('today')}>
+                          🟢 {ui.dateToday}
+                        </button>
+                        <button type="button" className="adm-date-chip" onClick={() => applyDatePreset('week')}>
+                          🔵 {ui.dateWeek}
+                        </button>
+                        <button type="button" className="adm-date-chip" onClick={() => applyDatePreset('month')}>
+                          🟣 {ui.dateMonth}
+                        </button>
+                        <button type="button" className="adm-date-chip" onClick={() => applyDatePreset('upcoming')}>
+                          🟠 {ui.dateUpcoming}
+                        </button>
+                      </div>
+                      {(dateFrom || dateTo) && (
+                        <button type="button" className="adm-btn adm-btn-red" style={{ height: 28, fontSize: 11.5 }} onClick={() => applyDatePreset('all')}>
+                          ✕ {ui.dateReset}
+                        </button>
+                      )}
+                    </div>
+
                     {/* Filter, Date Range & Sort Controls */}
                     <div
                       style={{
@@ -1353,13 +1590,13 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                       <div style={{ position: 'relative' }}>
                         <label htmlFor="admin-booking-search" style={{ fontSize: 11, fontWeight: 700, display: 'block', marginBottom: 3 }}>
                           <Search size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-                          PNR / Yolcu / Rota Ara
+                          {ui.searchLabel}
                         </label>
                         <input
                           id="admin-booking-search"
                           type="search"
                           className="modal-input"
-                          placeholder="Rezervasyon kodu, yolcu veya rota"
+                          placeholder={ui.searchPh}
                           value={searchQ}
                           onChange={(e) => setSearchQ(e.target.value)}
                         />
@@ -1369,7 +1606,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                       <div>
                         <label htmlFor="admin-booking-from" style={{ fontSize: 11, fontWeight: 700, display: 'block', marginBottom: 3 }}>
                           <Calendar size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-                          Başlangıç Tarihi
+                          {ui.fromDate}
                         </label>
                         <input
                           id="admin-booking-from"
@@ -1385,7 +1622,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                       <div>
                         <label htmlFor="admin-booking-to" style={{ fontSize: 11, fontWeight: 700, display: 'block', marginBottom: 3 }}>
                           <Calendar size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-                          Bitiş Tarihi
+                          {ui.toDate}
                         </label>
                         <input
                           id="admin-booking-to"
@@ -1401,7 +1638,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                       <div>
                         <label htmlFor="admin-booking-sort" style={{ fontSize: 11, fontWeight: 700, display: 'block', marginBottom: 3 }}>
                           <ArrowUpDown size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-                          Sıralama Ölçütü
+                          {ui.sortBy}
                         </label>
                         <select
                           id="admin-booking-sort"

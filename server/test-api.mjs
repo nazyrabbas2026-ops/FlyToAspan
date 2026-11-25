@@ -646,4 +646,111 @@ test('FlyToAspan API & Security Suite', async (t) => {
     assert.equal(trLookupUpper.status, 200);
     assert.equal(trLookupUpper.json.booking.pnr, subBooking.json.booking.pnr);
   });
+
+  await t.test('Concurrency Stress & Full Booking->CancelRequest->Cancel->Refund Lifecycle', async () => {
+    const adminLogin = await call(env.origin, '/api/auth/login', {
+      method: 'POST',
+      body: { email: 'ops@flytoaspan.com', password: 'AdminSuperSecret2026!' },
+    });
+    const adminCookie = adminLogin.cookie;
+
+    // 1. Two simultaneous requests with the SAME idempotencyKey -> must deduplicate to 1 PNR
+    const sharedKey = 'idem-double-click-race-2026';
+    const [race1, race2] = await Promise.all([
+      call(env.origin, '/api/bookings', {
+        method: 'POST',
+        body: {
+          type: 'Uçak',
+          title: 'İstanbul (IST) → Almatı (ALA)',
+          subtitle: 'Air Astana · KC918',
+          date: '2026-12-20',
+          passenger: 'Ali Veli',
+          lookupSurname: 'Veli',
+          price: 7010,
+          idempotencyKey: sharedKey,
+        },
+      }),
+      call(env.origin, '/api/bookings', {
+        method: 'POST',
+        body: {
+          type: 'Uçak',
+          title: 'İstanbul (IST) → Almatı (ALA)',
+          subtitle: 'Air Astana · KC918',
+          date: '2026-12-20',
+          passenger: 'Ali Veli',
+          lookupSurname: 'Veli',
+          price: 7010,
+          idempotencyKey: sharedKey,
+        },
+      }),
+    ]);
+    assert.ok(race1.status === 201 || race1.status === 200);
+    assert.ok(race2.status === 201 || race2.status === 200);
+    assert.equal(race1.json.booking.pnr, race2.json.booking.pnr);
+
+    // 2. Two different passengers booking the EXACT same flight at the EXACT same time
+    const [paxA, paxB] = await Promise.all([
+      call(env.origin, '/api/bookings', {
+        method: 'POST',
+        body: {
+          type: 'Uçak',
+          title: 'Antalya (AYT) → Almatı (ALA)',
+          subtitle: 'Turkish Airlines · TK3200',
+          date: '2026-12-15',
+          passenger: 'Murat Şahin',
+          lookupSurname: 'Şahin',
+          price: 14450,
+        },
+      }),
+      call(env.origin, '/api/bookings', {
+        method: 'POST',
+        body: {
+          type: 'Uçak',
+          title: 'Antalya (AYT) → Almatı (ALA)',
+          subtitle: 'Turkish Airlines · TK3200',
+          date: '2026-12-15',
+          passenger: 'Elena Petrova',
+          lookupSurname: 'Petrova',
+          price: 14450,
+        },
+      }),
+    ]);
+    assert.equal(paxA.status, 201);
+    assert.equal(paxB.status, 201);
+    assert.notEqual(paxA.json.booking.pnr, paxB.json.booking.pnr);
+
+    // 3. Full Lifecycle: Onaylandı -> İptal Talebi -> İptal Edildi -> İade Edildi
+    const bId = paxA.json.booking.id;
+    const stepReq = await call(env.origin, `/api/admin/bookings/${bId}`, {
+      method: 'PATCH',
+      cookie: adminCookie,
+      body: { status: 'İptal Talebi' },
+    });
+    assert.equal(stepReq.status, 200);
+    assert.equal(stepReq.json.booking.status, 'İptal Talebi');
+
+    const stepCancel = await call(env.origin, `/api/admin/bookings/${bId}`, {
+      method: 'PATCH',
+      cookie: adminCookie,
+      body: { status: 'İptal Edildi' },
+    });
+    assert.equal(stepCancel.status, 200);
+    assert.equal(stepCancel.json.booking.status, 'İptal Edildi');
+
+    const stepRefund = await call(env.origin, `/api/admin/bookings/${bId}`, {
+      method: 'PATCH',
+      cookie: adminCookie,
+      body: { status: 'İade Edildi' },
+    });
+    assert.equal(stepRefund.status, 200);
+    assert.equal(stepRefund.json.booking.status, 'İade Edildi');
+
+    // Turkish surname lookup still works after status transitions (SAHIN -> Şahin)
+    const lookupAfter = await call(env.origin, '/api/bookings/lookup', {
+      method: 'POST',
+      body: { pnr: paxA.json.booking.pnr, surname: 'SAHIN' },
+    });
+    assert.equal(lookupAfter.status, 200);
+    assert.equal(lookupAfter.json.booking.status, 'İade Edildi');
+  });
 });
