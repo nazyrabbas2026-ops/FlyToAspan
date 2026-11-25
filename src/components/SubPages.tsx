@@ -10,11 +10,14 @@ import {
   Ticket,
   CheckCircle2,
   AlertCircle,
+  Download,
+  XCircle,
 } from 'lucide-react';
-import { CAMPAIGNS, CHECKIN_AIRLINES, FAQ_ITEMS, formatDisplayDate } from '../data/mockData';
+import { CAMPAIGNS, CHECKIN_AIRLINES, FAQ_ITEMS, formatDisplayDate, formatPrice } from '../data/mockData';
 import { PHONE_DISPLAY, PHONE_HREF, WA_HREF } from '../i18n/translations';
-import { LangCode, SearchTab } from '../types';
+import { CurrencyCode, LangCode, SearchTab } from '../types';
 import { api, ApiError, apiMessage, type BookingLookup } from '../data/api';
+import { openBrandedEticketPdf } from '../utils/eticketPdf';
 
 const SUBPAGES_I18N: Record<
   LangCode,
@@ -523,12 +526,15 @@ export const HelpPage: React.FC<{ lang?: LangCode }> = ({ lang = 'TR' }) => {
   );
 };
 
-export const BookingOpsPage: React.FC<{ lang?: LangCode }> = ({ lang = 'TR' }) => {
+export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode }> = ({ lang = 'TR', currency = 'TRY' }) => {
   const [pnr, setPnr] = useState('');
   const [surname, setSurname] = useState('');
   const [matchedBooking, setMatchedBooking] = useState<BookingLookup | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelNotice, setCancelNotice] = useState('');
   const ui = SUBPAGES_I18N[lang];
 
   const handleLookup = async (e: React.FormEvent) => {
@@ -537,6 +543,8 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode }> = ({ lang = 'TR' }) =
     setPending(true);
     setMatchedBooking(null);
     setError('');
+    setConfirmCancel(false);
+    setCancelNotice('');
     try {
       const { booking } = await api.lookup(pnr, surname);
       setMatchedBooking(booking);
@@ -544,6 +552,23 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode }> = ({ lang = 'TR' }) =
       setError(cause instanceof ApiError && cause.status === 404 ? ui.notFoundErr : apiMessage(cause));
     } finally {
       setPending(false);
+    }
+  };
+
+  const handleCancelRequest = async () => {
+    if (!matchedBooking || cancelBusy) return;
+    setCancelBusy(true);
+    setError('');
+    setCancelNotice('');
+    try {
+      const { booking } = await api.lookupCancel(matchedBooking.pnr, surname);
+      setMatchedBooking(booking);
+      setConfirmCancel(false);
+      setCancelNotice('✓ İptal talebiniz başarıyla merkeze iletildi. Operasyon ekibimiz en kısa sürede işleme alacaktır.');
+    } catch (cause) {
+      setError(apiMessage(cause));
+    } finally {
+      setCancelBusy(false);
     }
   };
 
@@ -626,21 +651,134 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode }> = ({ lang = 'TR' }) =
               <div
                 role="status"
                 style={{
-                  marginTop: 18,
-                  padding: 16,
-                  borderRadius: 14,
-                  background: 'rgba(16,185,129,0.1)',
-                  border: '1px solid rgba(16,185,129,0.35)',
+                  marginTop: 20,
+                  padding: 18,
+                  borderRadius: 16,
+                  background: '#ffffff',
+                  border: '1.5px solid rgba(16,185,129,0.4)',
+                  boxShadow: '0 8px 24px rgba(4, 17, 29, 0.06)',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#047857' }}>
-                  <CheckCircle2 size={18} />
-                  {ui.foundTitle(matchedBooking.pnr)}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: '#047857', fontSize: 15 }}>
+                    <CheckCircle2 size={18} />
+                    {ui.foundTitle(matchedBooking.pnr)}
+                  </div>
+                  <span className={`status-badge ${matchedBooking.status === 'Onaylandı' || matchedBooking.status === 'Tamamlandı' ? 'ok' : 'warn'}`}>
+                    {matchedBooking.status}
+                  </span>
                 </div>
-                <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--aspan-text-body)' }}>
-                  {matchedBooking.title} ({formatDisplayDate(matchedBooking.date, lang)}
-                  {matchedBooking.returnDate && ` → ${formatDisplayDate(matchedBooking.returnDate, lang)}`}) ·{' '}
-                  {ui.statusLabel}: <strong>{matchedBooking.demo ? 'Deneme kaydı · ' : ''}{matchedBooking.status}</strong>.{' '}
+
+                <div style={{ fontWeight: 800, fontSize: 16.5, color: 'var(--aspan-text)', marginBottom: 4 }}>
+                  {matchedBooking.title}
+                </div>
+                {matchedBooking.subtitle && (
+                  <div style={{ fontSize: 13, color: 'var(--aspan-text-muted)', marginBottom: 12 }}>
+                    {matchedBooking.subtitle}
+                  </div>
+                )}
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                    gap: 10,
+                    padding: 12,
+                    borderRadius: 12,
+                    background: 'var(--aspan-bg-soft)',
+                    border: '1px solid var(--aspan-border)',
+                    marginBottom: 14,
+                    fontSize: 12.5,
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>Yolcu</div>
+                    <strong>{matchedBooking.passenger || surname.toUpperCase()}</strong>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>Seyahat Tarihi</div>
+                    <strong>
+                      {formatDisplayDate(matchedBooking.date, lang)}
+                      {matchedBooking.returnDate ? ` → ${formatDisplayDate(matchedBooking.returnDate, lang)}` : ''}
+                    </strong>
+                  </div>
+                  {(matchedBooking.departTime || matchedBooking.arriveTime) && (
+                    <div>
+                      <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>Uçuş Saatleri</div>
+                      <strong>{matchedBooking.departTime || '--:--'} → {matchedBooking.arriveTime || '--:--'}</strong>
+                    </div>
+                  )}
+                  {(matchedBooking.flightNumber || matchedBooking.airline) && (
+                    <div>
+                      <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>Havayolu / Uçuş</div>
+                      <strong>{[matchedBooking.airline, matchedBooking.flightNumber].filter(Boolean).join(' · ')}</strong>
+                    </div>
+                  )}
+                  {matchedBooking.baggage && (
+                    <div>
+                      <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>Bagaj</div>
+                      <strong>{matchedBooking.baggage}</strong>
+                    </div>
+                  )}
+                  <div>
+                    <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>Toplam Tutar</div>
+                    <strong style={{ color: 'var(--aspan-teal-deep)', fontSize: 14 }}>{formatPrice(matchedBooking.price, currency)}</strong>
+                  </div>
+                </div>
+
+                {cancelNotice && (
+                  <div className="adm-banner adm-banner-ok" style={{ marginBottom: 12 }}>
+                    <CheckCircle2 size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+                    <div>{cancelNotice}</div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="adm-btn adm-btn-green"
+                    style={{ height: 40, padding: '0 16px', fontSize: 13 }}
+                    onClick={() => openBrandedEticketPdf(matchedBooking, { currency, lang })}
+                  >
+                    <Download size={15} /> PDF E-Bilet / Voucher İndir
+                  </button>
+
+                  {matchedBooking.status === 'Onaylandı' && !confirmCancel && (
+                    <button
+                      type="button"
+                      className="adm-btn adm-btn-red"
+                      style={{ height: 40, padding: '0 16px', fontSize: 13 }}
+                      onClick={() => setConfirmCancel(true)}
+                    >
+                      <XCircle size={15} /> İptal Talebi Oluştur
+                    </button>
+                  )}
+
+                  {matchedBooking.status === 'Onaylandı' && confirmCancel && (
+                    <span className="adm-confirm-inline" style={{ padding: '6px 10px' }}>
+                      İptal talebi gönderilsin mi?
+                      <button
+                        type="button"
+                        className="adm-btn adm-btn-red-solid"
+                        style={{ height: 30, padding: '0 10px' }}
+                        disabled={cancelBusy}
+                        onClick={() => void handleCancelRequest()}
+                      >
+                        {cancelBusy ? 'Gönderiliyor...' : 'Evet, Gönder'}
+                      </button>
+                      <button
+                        type="button"
+                        className="adm-btn adm-btn-ghost"
+                        style={{ height: 30, padding: '0 10px' }}
+                        onClick={() => setConfirmCancel(false)}
+                      >
+                        Vazgeç
+                      </button>
+                    </span>
+                  )}
+                </div>
+
+                <p style={{ margin: '12px 0 0', fontSize: 12, color: 'var(--aspan-text-muted)' }}>
                   {ui.supportHint} <strong>{PHONE_DISPLAY}</strong>
                 </p>
               </div>

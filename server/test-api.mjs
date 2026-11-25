@@ -784,6 +784,16 @@ test('FlyToAspan API & Security Suite', async (t) => {
     });
     assert.equal(lookupAfter.status, 200);
     assert.equal(lookupAfter.json.booking.status, 'İade Edildi');
+    assert.equal(lookupAfter.json.booking.passenger, 'Murat Şahin');
+    assert.equal(lookupAfter.json.booking.price, 14450);
+
+    // Public PNR+Surname Cancel Request (works for unregistered guests, B2C & corporate!)
+    const guestCancelOk = await call(env.origin, '/api/bookings/lookup-cancel', {
+      method: 'POST',
+      body: { pnr: paxB.json.booking.pnr, surname: 'PETROVA' },
+    });
+    assert.equal(guestCancelOk.status, 200);
+    assert.equal(guestCancelOk.json.booking.status, 'İptal Talebi');
   });
 
   await t.test('Exhaustive 15-Permission RBAC Matrix (Every Checkbox Verified ON vs OFF)', async () => {

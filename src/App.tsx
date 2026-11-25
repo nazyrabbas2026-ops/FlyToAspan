@@ -568,7 +568,7 @@ export const App: React.FC = () => {
         )}
         {page === 'checkin' && <OnlineCheckInPage lang={lang} />}
         {page === 'help' && <HelpPage lang={lang} />}
-        {page === 'booking-ops' && <BookingOpsPage lang={lang} />}
+        {page === 'booking-ops' && <BookingOpsPage lang={lang} currency={currency} />}
 
         <Suspense fallback={<div style={{ padding: '140px 20px', textAlign: 'center', fontWeight: 700, color: 'var(--aspan-text-muted)' }}>FlyToAspan…</div>}>
           {page === 'tour-results' && (

@@ -52,7 +52,7 @@ export interface Registration {
   requestedModules?: string[];
 }
 
-export type BookingLookup = Pick<BookingRecord, 'pnr' | 'title' | 'date' | 'returnDate' | 'type' | 'status' | 'demo'>;
+export type BookingLookup = BookingRecord;
 
 export interface AdminCatalog {
   rules: { id: string; carrier: string; route: string; rule: string }[];
@@ -87,6 +87,9 @@ export const api = {
   ),
   lookup: (pnr: string, surname: string, signal?: AbortSignal) => request<{ booking: BookingLookup }>(
     '/bookings/lookup', 'POST', { pnr, surname }, signal
+  ),
+  lookupCancel: (pnr: string, surname: string) => request<{ booking: BookingLookup }>(
+    '/bookings/lookup-cancel', 'POST', { pnr, surname }
   ),
   cancel: (id: string) => request<{ booking: BookingRecord }>(`/bookings/${encodeURIComponent(id)}/cancel`, 'POST'),
   setStatus: (id: string, status: BookingRecord['status']) => request<{ booking: BookingRecord }>(

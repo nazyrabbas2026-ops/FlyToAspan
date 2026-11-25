@@ -583,8 +583,24 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const surname = normalizeSurname(body.surname);
         const row = db.prepare('SELECT * FROM bookings WHERE pnr = ? AND surname = ?').get(pnr, surname);
         if (!row) fail(404, 'Bu kod ve soyadla eşleşen rezervasyon bulunamadı.');
-        const { title, date, returnDate, status, type, demo } = bookingRecord(row);
-        send(res, 200, { booking: { pnr, title, date, returnDate, status, type, demo } });
+        send(res, 200, { booking: bookingRecord(row) });
+      } else if (method === 'POST' && path === '/api/bookings/lookup-cancel') {
+        throttle(`lookup:${ip}`, 24);
+        const body = await readJson(req);
+        const pnr = text(body.pnr, 24, 5).toUpperCase();
+        const surname = normalizeSurname(body.surname);
+        const row = db.prepare(`
+          UPDATE bookings SET status = 'İptal Talebi'
+          WHERE pnr = ? AND surname = ? AND status = 'Onaylandı'
+          RETURNING *
+        `).get(pnr, surname);
+        if (!row) {
+          const exists = db.prepare('SELECT status FROM bookings WHERE pnr = ? AND surname = ?').get(pnr, surname);
+          if (!exists) fail(404, 'Bu kod ve soyadla eşleşen rezervasyon bulunamadı.');
+          fail(409, `Bu rezervasyon zaten "${exists.status}" durumunda olduğu için yeni iptal talebi oluşturulamaz.`);
+        }
+        writeAuditLog(db, { actorEmail: user?.email || `guest:${pnr}`, action: 'public:pnr_cancel_request', target: pnr, ip });
+        send(res, 200, { booking: bookingRecord(row) });
       } else if (method === 'GET' && path === '/api/bookings') {
         if (!user) fail(401, 'Oturum açın.');
         const rows = db.prepare('SELECT * FROM bookings WHERE owner_id = ? OR sold_by_user_id = ? ORDER BY created_at DESC, id DESC').all(user.id, user.id);
