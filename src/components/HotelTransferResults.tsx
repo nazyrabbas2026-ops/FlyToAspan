@@ -332,7 +332,7 @@ export const HotelResultsPage: React.FC<{
                     <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)', marginBottom: 16 }}>
                       {h.boardType} · {ui.freeCancel} · {h.nights} {ui.nights}
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                       <div>
                         <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)' }}>
                           {ui.totalPrice}
@@ -568,7 +568,7 @@ export const TransferResultsPage: React.FC<{
                     <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)', marginBottom: 16 }}>
                       {tr.capacity} · {tr.baggage} · {tr.category}
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                       <div>
                         <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)' }}>
                           {ui.fixedVehiclePrice}

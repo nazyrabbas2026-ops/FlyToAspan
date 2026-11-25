@@ -2075,30 +2075,32 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
 
                               return (
                                 <tr key={op.id} className={!op.active ? 'is-inactive' : ''}>
-                                  <td>
+                                  <td data-label="Operatör (XML)">
                                     <strong style={{ fontSize: 14 }}>{op.operator}</strong>
                                   </td>
-                                  <td>
+                                  <td data-label="Ürün Tipi">
                                     <span className="pkg-pill">{op.product}</span>
                                   </td>
-                                  <td>
+                                  <td data-label="Kâr Kuralı">
                                     <span className={`status-badge ${op.markupType === 'NET' || op.markupValue === 0 ? 'ok' : 'warn'}`}>
                                       {badgeText}
                                     </span>
                                   </td>
-                                  <td>
-                                    <span style={{ color: 'var(--aspan-text-muted)', fontWeight: 600 }}>{sampleNetEur} €</span>{' '}
-                                    → <strong style={{ color: 'var(--aspan-teal-deep)' }}>{saleEur} €</strong>{' '}
-                                    <span style={{ fontSize: 11.5, color: '#059669', fontWeight: 700 }}>
-                                      ({saleEur === sampleNetEur ? 'NET' : `+${saleEur - sampleNetEur} €`})
+                                  <td data-label="Geliş → Satış">
+                                    <span>
+                                      <span style={{ color: 'var(--aspan-text-muted)', fontWeight: 600 }}>{sampleNetEur} €</span>{' '}
+                                      → <strong style={{ color: 'var(--aspan-teal-deep)' }}>{saleEur} €</strong>{' '}
+                                      <span style={{ fontSize: 11.5, color: '#059669', fontWeight: 700 }}>
+                                        ({saleEur === sampleNetEur ? 'NET' : `+${saleEur - sampleNetEur} €`})
+                                      </span>
                                     </span>
                                   </td>
-                                  <td>
+                                  <td data-label="Durum">
                                     <span className={`status-badge ${op.active ? 'ok' : 'warn'}`}>
                                       {op.active ? '● Aktif' : '○ Pasif'}
                                     </span>
                                   </td>
-                                  <td>
+                                  <td data-label="İşlemler">
                                     <div className="adm-actions">
                                       {op.markupType === 'EUR' && (
                                         <>
@@ -2301,32 +2303,38 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                               const isConfirming = pendingCatalogDelete?.section === 'flights' && pendingCatalogDelete.id === mf.id;
                               return (
                                 <tr key={mf.id} className={!mf.active ? 'is-inactive' : ''}>
-                                  <td>
-                                    <span className="uf-airport-code">{mf.fromCode} → {mf.toCode}</span>
-                                    <div style={{ marginTop: 4 }}><span className="pkg-pill">{mf.flightNumber}</span></div>
-                                  </td>
-                                  <td>
-                                    <strong>{mf.airline}</strong>
-                                    <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>
-                                      {mf.departTime} → {mf.arriveTime} ({mf.duration})
+                                  <td data-label="Parkur & Uçuş">
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                      <span className="uf-airport-code">{mf.fromCode} → {mf.toCode}</span>
+                                      <span className="pkg-pill">{mf.flightNumber}</span>
                                     </div>
                                   </td>
-                                  <td><span className="pkg-pill">{mf.operator}</span></td>
-                                  <td>
-                                    <div>{mf.baggage}</div>
-                                    <div style={{ fontSize: 12, color: '#0369a1', fontWeight: 700 }}>{mf.quota} Koltuk</div>
+                                  <td data-label="Havayolu & Saat">
+                                    <div>
+                                      <strong>{mf.airline}</strong>
+                                      <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>
+                                        {mf.departTime} → {mf.arriveTime} ({mf.duration})
+                                      </div>
+                                    </div>
                                   </td>
-                                  <td>
-                                    <strong style={{ fontSize: 15, color: 'var(--aspan-teal-deep)' }}>
+                                  <td data-label="Operatör (XML)"><span className="pkg-pill">{mf.operator}</span></td>
+                                  <td data-label="Bagaj / Koltuk">
+                                    <div>
+                                      <div>{mf.baggage}</div>
+                                      <div style={{ fontSize: 12, color: '#0369a1', fontWeight: 700 }}>{mf.quota} Koltuk</div>
+                                    </div>
+                                  </td>
+                                  <td data-label="Taban Fiyat">
+                                    <strong style={{ fontSize: 15, color: 'var(--aspan-teal-deep)', whiteSpace: 'nowrap' }}>
                                       {formatPrice(mf.priceTRY, currency)}
                                     </strong>
                                   </td>
-                                  <td>
+                                  <td data-label="Durum">
                                     <span className={`status-badge ${mf.active ? 'ok' : 'warn'}`}>
                                       {mf.active ? '● Satışta' : '○ Pasif'}
                                     </span>
                                   </td>
-                                  <td>
+                                  <td data-label="İşlemler">
                                     <div className="adm-actions">
                                       <button
                                         type="button"
@@ -2500,23 +2508,25 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                               const isConfirming = pendingCatalogDelete?.section === 'transfers' && pendingCatalogDelete.id === tr.id;
                               return (
                                 <tr key={tr.id} className={!tr.active ? 'is-inactive' : ''}>
-                                  <td><span className="pkg-pill">{tr.city}</span></td>
-                                  <td>
-                                    <strong>{tr.vehicle}</strong>
-                                    <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>{tr.route}</div>
+                                  <td data-label="Şehir"><span className="pkg-pill">{tr.city}</span></td>
+                                  <td data-label="Araç & Güzergâh">
+                                    <div>
+                                      <strong>{tr.vehicle}</strong>
+                                      <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>{tr.route}</div>
+                                    </div>
                                   </td>
-                                  <td style={{ fontSize: 12.5 }}>{tr.capacity} · {tr.baggage}</td>
-                                  <td>
-                                    <strong style={{ fontSize: 15, color: 'var(--aspan-teal-deep)' }}>
+                                  <td data-label="Kapasite" style={{ fontSize: 12.5 }}>{tr.capacity} · {tr.baggage}</td>
+                                  <td data-label="Satış Fiyatı">
+                                    <strong style={{ fontSize: 15, color: 'var(--aspan-teal-deep)', whiteSpace: 'nowrap' }}>
                                       {formatPrice(tr.price + (draft.transferAddTRY - DEFAULT_MARKUP.transferAddTRY), currency)}
                                     </strong>
                                   </td>
-                                  <td>
+                                  <td data-label="Durum">
                                     <span className={`status-badge ${tr.active ? 'ok' : 'warn'}`}>
                                       {tr.active ? '● Aktif' : '○ Pasif'}
                                     </span>
                                   </td>
-                                  <td>
+                                  <td data-label="İşlemler">
                                     <div className="adm-actions">
                                       <button
                                         type="button"
@@ -2686,23 +2696,25 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                               const isConfirming = pendingCatalogDelete?.section === 'hotels' && pendingCatalogDelete.id === h.id;
                               return (
                                 <tr key={h.id} className={!h.active ? 'is-inactive' : ''}>
-                                  <td><span className="pkg-pill">{h.city}</span></td>
-                                  <td>
-                                    <strong>{h.name}</strong>
-                                    <div style={{ fontSize: 12, color: '#d97706' }}>{'★'.repeat(Math.min(5, Math.max(1, h.stars)))}</div>
+                                  <td data-label="Şehir"><span className="pkg-pill">{h.city}</span></td>
+                                  <td data-label="Otel Adı">
+                                    <div>
+                                      <strong>{h.name}</strong>
+                                      <div style={{ fontSize: 12, color: '#d97706' }}>{'★'.repeat(Math.min(5, Math.max(1, h.stars)))}</div>
+                                    </div>
                                   </td>
-                                  <td style={{ fontSize: 12.5 }}>{h.boardType} · {h.nights} Gece</td>
-                                  <td>
-                                    <strong style={{ fontSize: 15, color: 'var(--aspan-teal-deep)' }}>
+                                  <td data-label="Pansiyon / Gece" style={{ fontSize: 12.5 }}>{h.boardType} · {h.nights} Gece</td>
+                                  <td data-label="Satış Fiyatı">
+                                    <strong style={{ fontSize: 15, color: 'var(--aspan-teal-deep)', whiteSpace: 'nowrap' }}>
                                       {formatPrice(Math.round(h.price * (1 + (draft.hotelPercent - DEFAULT_MARKUP.hotelPercent) / 100)), currency)}
                                     </strong>
                                   </td>
-                                  <td>
+                                  <td data-label="Durum">
                                     <span className={`status-badge ${h.active ? 'ok' : 'warn'}`}>
                                       {h.active ? '● Aktif' : '○ Pasif'}
                                     </span>
                                   </td>
-                                  <td>
+                                  <td data-label="İşlemler">
                                     <div className="adm-actions">
                                       <button
                                         type="button"
@@ -2878,16 +2890,16 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                             const isConfirming = pendingCatalogDelete?.section === 'coupons' && pendingCatalogDelete.id === c.id;
                             return (
                               <tr key={c.id} className={!c.active ? 'is-inactive' : ''}>
-                                <td><span className="uf-airport-code">{c.code}</span></td>
-                                <td><span className="pkg-pill">{c.category}</span></td>
-                                <td><strong>{c.title}</strong></td>
-                                <td style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)' }}>{c.validUntil}</td>
-                                <td>
+                                <td data-label="Kupon Kodu"><span className="uf-airport-code">{c.code}</span></td>
+                                <td data-label="Kategori"><span className="pkg-pill">{c.category}</span></td>
+                                <td data-label="Kampanya"><strong>{c.title}</strong></td>
+                                <td data-label="Geçerlilik" style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)' }}>{c.validUntil}</td>
+                                <td data-label="Durum">
                                   <span className={`status-badge ${c.active ? 'ok' : 'warn'}`}>
                                     {c.active ? '● Aktif' : '○ Pasif'}
                                   </span>
                                 </td>
-                                <td>
+                                <td data-label="İşlemler">
                                   <div className="adm-actions">
                                     <button
                                       type="button"
