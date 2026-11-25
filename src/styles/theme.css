@@ -6930,3 +6930,90 @@ img {
   border-color: #0369a1;
   color: #ffffff;
 }
+
+
+/* ==========================================================================
+   OBSIDIAN CARBON BLACK & CHAMPAGNE GOLD THEME (100% REVERSIBLE TRIAL)
+   ========================================================================== */
+:root {
+  --aspan-ink: #080a0f;
+  --aspan-dark: #0f131b;
+  --aspan-dark-2: #19202d;
+  --aspan-dark-3: #252e40;
+
+  --aspan-teal: #c99a45;
+  --aspan-teal-bright: #f2cf7e;
+  --aspan-teal-deep: #9c7222;
+  --aspan-teal-soft: rgba(201, 154, 69, 0.13);
+
+  --aspan-sky: #e0b768;
+  --aspan-sky-light: #f4d898;
+  --aspan-sky-soft: #faf5e8;
+
+  --aspan-gold: #deb45c;
+  --aspan-gold-bright: #f5d484;
+  --aspan-gold-deep: #b0832b;
+  --aspan-gold-grad: linear-gradient(135deg, #f5d484 0%, #c89434 100%);
+  --aspan-gold-ink: #161106;
+
+  --aspan-bg-soft: #f6f4ef;
+  --aspan-bg-pill: #efeae0;
+  --aspan-border: #e3dcd0;
+  --aspan-text: #11141c;
+  --aspan-text-body: #3e4452;
+  --aspan-text-muted: #666d7c;
+
+  --shadow-nav: 0 18px 50px -22px rgba(0, 0, 0, 0.88), inset 0 1px 0 rgba(224, 183, 104, 0.26);
+  --shadow-search: 0 36px 84px -32px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(224, 183, 104, 0.22);
+  --shadow-pop: 0 24px 60px -16px rgba(8, 10, 15, 0.26), 0 0 0 1px rgba(201, 154, 69, 0.22);
+}
+
+body {
+  background: #f9f8f5;
+}
+
+.kv-splash-overlay {
+  background: radial-gradient(ellipse 70% 55% at 50% 42%, #181d29 0%, #090b10 70%, #05070a 100%);
+}
+
+.kv-splash-hairline-fill {
+  background: linear-gradient(90deg, #c89434 0%, #f5d484 100%);
+}
+
+.hero-section {
+  background:
+    radial-gradient(ellipse 68% 300px at 50% 155px, rgba(214, 174, 86, 0.16), transparent 72%),
+    linear-gradient(180deg, #080a0f 0%, #111621 52%, #080a0f 100%);
+}
+
+.hero-map-band::before {
+  background: radial-gradient(circle, rgba(224, 183, 104, 0.24) 1.1px, transparent 1.6px) center / 18px 15px;
+}
+
+.inner-hero {
+  background:
+    radial-gradient(840px 340px at 50% 100%, rgba(214, 174, 86, 0.22) 0%, transparent 72%),
+    linear-gradient(180deg, #080a0f 0%, #151b27 100%);
+}
+
+.transfers-section {
+  background:
+    radial-gradient(660px 300px at 80% 15%, rgba(214, 174, 86, 0.2) 0%, transparent 65%),
+    linear-gradient(180deg, #090c12 0%, #151a25 100%);
+}
+
+.uff-footer {
+  background: linear-gradient(180deg, #0c1018 0%, #06080c 100%);
+}
+
+.exec-prefooter-card {
+  background:
+    radial-gradient(560px 260px at 85% 15%, rgba(214, 174, 86, 0.18) 0%, transparent 65%),
+    linear-gradient(135deg, #0b0e15 0%, #171d29 100%);
+  border-color: rgba(214, 174, 86, 0.28);
+}
+
+.adm-date-bar {
+  background: linear-gradient(90deg, rgba(214, 174, 86, 0.11) 0%, rgba(17, 20, 28, 0.04) 100%);
+  border-color: rgba(214, 174, 86, 0.34);
+}
