@@ -624,6 +624,38 @@ test('FlyToAspan API & Security Suite', async (t) => {
     assert.equal(subCancelReq.status, 200);
     assert.equal(subCancelReq.json.booking.status, 'İptal Talebi');
 
+    // Regression: Sub-agent creating booking via /api/admin/bookings MUST persist after refresh,
+    // appear in both /api/admin/bookings AND /api/bookings (Rezervasyonlarım), and allow İptal Talebi!
+    const subPanelBk = await call(env.origin, '/api/admin/bookings', {
+      method: 'POST',
+      cookie: agentCookie,
+      body: {
+        type: 'Uçak',
+        title: 'İstanbul (IST) → Almatı (ALA)',
+        subtitle: 'Air Astana · KC918',
+        date: '2026-12-29',
+        passenger: 'Jalia Coşkun',
+        lookupSurname: 'Coşkun',
+        price: 1500,
+      },
+    });
+    assert.equal(subPanelBk.status, 201);
+    const panelBkId = subPanelBk.json.booking.id;
+
+    const subAdminListAfter = await call(env.origin, '/api/admin/bookings', { cookie: agentCookie });
+    assert.ok(subAdminListAfter.json.bookings.some((b) => b.id === panelBkId));
+
+    const subMemberListAfter = await call(env.origin, '/api/bookings', { cookie: agentCookie });
+    assert.ok(subMemberListAfter.json.bookings.some((b) => b.id === panelBkId));
+
+    const subPanelCancelReq = await call(env.origin, `/api/admin/bookings/${panelBkId}`, {
+      method: 'PATCH',
+      cookie: agentCookie,
+      body: { status: 'İptal Talebi' },
+    });
+    assert.equal(subPanelCancelReq.status, 200);
+    assert.equal(subPanelCancelReq.json.booking.status, 'İptal Talebi');
+
     const subForceCancel = await call(env.origin, `/api/admin/bookings/${subBooking.json.booking.id}`, {
       method: 'PATCH',
       cookie: agentCookie,

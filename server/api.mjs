@@ -581,7 +581,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         send(res, 200, { booking: { pnr, title, date, returnDate, status, type, demo } });
       } else if (method === 'GET' && path === '/api/bookings') {
         if (!user) fail(401, 'Oturum açın.');
-        const rows = db.prepare('SELECT * FROM bookings WHERE owner_id = ? ORDER BY created_at DESC, id DESC').all(user.id);
+        const rows = db.prepare('SELECT * FROM bookings WHERE owner_id = ? OR sold_by_user_id = ? ORDER BY created_at DESC, id DESC').all(user.id, user.id);
         send(res, 200, { bookings: rows.map(bookingRecord) });
       } else if (method === 'POST' && (path === '/api/bookings' || path === '/api/admin/bookings')) {
         throttle(`create-booking:${user?.id ?? ip}`, 120);
@@ -595,7 +595,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         }
         // B2B Organization Credit Limit check & auto-deduction
         let orgRow = null;
-        if (path === '/api/bookings' && user?.organization_id) {
+        if (user && user.role !== 'admin' && user.organization_id) {
           orgRow = db.prepare('SELECT * FROM organizations WHERE id = ?').get(user.organization_id);
           if (orgRow && orgRow.status === 'suspended') {
             fail(403, 'Bağlı olduğunuz şirket hesabı askıya alınmıştır.');
@@ -607,7 +607,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
             }
           }
         }
-        const booking = newDemoBooking(db, body, path === '/api/bookings' ? user : null);
+        const booking = newDemoBooking(db, body, user ?? null);
         if (orgRow && orgRow.credit_limit > 0) {
           const debitAmt = Math.round(booking.price);
           db.prepare('UPDATE organizations SET used_credit = used_credit + ? WHERE id = ?').run(debitAmt, orgRow.id);
@@ -642,9 +642,9 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         if (!user) fail(401, 'Oturum açın.');
         const id = path.split('/')[3];
         const row = db.prepare(`
-          UPDATE bookings SET status = 'İptal Talebi' WHERE id = ? AND owner_id = ? AND status = 'Onaylandı'
+          UPDATE bookings SET status = 'İptal Talebi' WHERE id = ? AND (owner_id = ? OR sold_by_user_id = ?) AND status = 'Onaylandı'
           RETURNING *
-        `).get(id, user.id);
+        `).get(id, user.id, user.id);
         if (!row) fail(404, 'İptal talebine uygun bir rezervasyon bulunamadı.');
         send(res, 200, { booking: bookingRecord(row) });
       } else if (method === 'GET' && path === '/api/admin/bookings') {
@@ -686,8 +686,10 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const id = path.split('/').at(-1);
         const existingBk = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id);
         if (!existingBk) fail(404, 'Rezervasyon bulunamadı.');
-        if (user.role !== 'admin' && existingBk.organization_id !== user.organization_id && existingBk.owner_id !== user.id && existingBk.sold_by_user_id !== user.id) {
-          fail(403, 'Başka bir şirketin rezervasyonuna müdahale edemezsiniz.');
+        const sameOrg = Boolean(user.organization_id && existingBk.organization_id === user.organization_id);
+        const isOwnBk = existingBk.owner_id === user.id || existingBk.sold_by_user_id === user.id;
+        if (user.role !== 'admin' && !isOwnBk && !(sameOrg && hasPerm(user, 'bookings.view_org'))) {
+          fail(403, 'Başka bir şirketin veya kullanıcının rezervasyonuna müdahale edemezsiniz.');
         }
         if (method === 'DELETE') {
           if (user.role !== 'admin') fail(403, 'Kayıt silme yetkisi sadece Süper Admin içindir.');
