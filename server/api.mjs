@@ -397,13 +397,19 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const staffCatalogWrite = method === 'PUT' && /^\/api\/admin\/catalog\/(rules|coupons|agencies|hotels|transfers|tours|operators|flights)$/.test(path);
         const staffPricingRoute = path === '/api/admin/pricing' && hasPerm(user, 'pricing.edit');
         const staffFxRoute = path === '/api/admin/fx' && hasPerm(user, 'fx.manage');
+        const staffTeamRoute =
+          hasPerm(user, 'team.manage') &&
+          (path === '/api/admin/users' ||
+            /^\/api\/admin\/users\/[a-f0-9]{32}\/(approve|permissions|status)$/.test(path) ||
+            path === '/api/admin/organizations' ||
+            /^\/api\/admin\/organizations\/[a-f0-9]{24}(\/(ledger|payment))?$/.test(path));
         let allowedStaff = false;
         if (canAccessPanel(user)) {
-          if (staffBookingRoute || staffCatalogRead || staffPricingRoute || staffFxRoute) allowedStaff = true;
+          if (staffBookingRoute || staffCatalogRead || staffPricingRoute || staffFxRoute || staffTeamRoute) allowedStaff = true;
           if (staffCatalogWrite) {
             const sec = path.split('/')[4];
             if ((sec === 'hotels' || sec === 'transfers' || sec === 'tours') && hasPerm(user, 'inventory.manage')) allowedStaff = true;
-            if (sec === 'flights' && (hasPerm(user, 'flights.manual') || hasPerm(user, 'inventory.manage'))) allowedStaff = true;
+            if (sec === 'flights' && hasPerm(user, 'flights.manual')) allowedStaff = true;
             if ((sec === 'rules' || sec === 'operators') && hasPerm(user, 'pricing.edit')) allowedStaff = true;
             if (sec === 'coupons' && hasPerm(user, 'coupons.manage')) allowedStaff = true;
           }
@@ -593,6 +599,19 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           send(res, 200, { booking: idempotencyCache.get(idemKey).booking, deduplicated: true });
           return true;
         }
+        // Enforce granular .sell permissions for staff/sub-agent accounts (B2C members with [] perms can buy freely)
+        if (user && user.role !== 'admin' && canAccessPanel(user)) {
+          const sellPermByType = {
+            Uçak: 'flights.sell',
+            Otel: 'hotels.sell',
+            Transfer: 'transfers.sell',
+            Tur: 'tours.sell',
+          };
+          const neededSellPerm = sellPermByType[body.type];
+          if (neededSellPerm && !hasPerm(user, neededSellPerm)) {
+            fail(403, `${body.type} satışı yapma yetkiniz bulunmuyor (${neededSellPerm}).`);
+          }
+        }
         // B2B Organization Credit Limit check & auto-deduction
         let orgRow = null;
         if (user && user.role !== 'admin' && user.organization_id) {
@@ -660,8 +679,10 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           rows = db.prepare(`${selectJoin} ORDER BY b.created_at DESC, b.id DESC LIMIT ?`).all(limitParam);
         } else if (hasPerm(user, 'bookings.view_org') && user.organization_id) {
           rows = db.prepare(`${selectJoin} WHERE b.organization_id = ? ORDER BY b.created_at DESC, b.id DESC LIMIT ?`).all(user.organization_id, limitParam);
-        } else {
+        } else if (hasPerm(user, 'bookings.view_own') || hasPerm(user, 'bookings.manage') || hasPerm(user, 'bookings.cancel_request')) {
           rows = db.prepare(`${selectJoin} WHERE b.owner_id = ? OR b.sold_by_user_id = ? ORDER BY b.created_at DESC, b.id DESC LIMIT ?`).all(user.id, user.id, limitParam);
+        } else {
+          rows = [];
         }
         send(res, 200, { bookings: rows.map(bookingRecord) });
       } else if (method === 'GET' && path === '/api/admin/catalog') {

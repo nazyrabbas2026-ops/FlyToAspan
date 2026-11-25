@@ -785,4 +785,175 @@ test('FlyToAspan API & Security Suite', async (t) => {
     assert.equal(lookupAfter.status, 200);
     assert.equal(lookupAfter.json.booking.status, 'İade Edildi');
   });
+
+  await t.test('Exhaustive 15-Permission RBAC Matrix (Every Checkbox Verified ON vs OFF)', async () => {
+    const adminLogin = await call(env.origin, '/api/auth/login', {
+      method: 'POST',
+      body: { email: 'ops@flytoaspan.com', password: 'AdminSuperSecret2026!' },
+    });
+    const adminCookie = adminLogin.cookie;
+
+    // Create a dedicated test staff user
+    const orgR = await call(env.origin, '/api/admin/organizations', {
+      method: 'POST',
+      cookie: adminCookie,
+      body: { name: 'RBAC Matrix Acente', type: 'agency', creditLimitTRY: 500000, allowedModules: ['flights', 'hotels', 'transfers', 'tours'] },
+    });
+    const orgId = orgR.json.organization.id;
+
+    await call(env.origin, '/api/auth/register', {
+      method: 'POST',
+      body: { email: 'rbac15@test.com', firstName: 'Rbac', lastName: 'Tester', companyName: 'RBAC Matrix Acente', phone: '+905310009988', accountType: 'corporate' },
+    });
+    const uList = await call(env.origin, '/api/admin/users', { cookie: adminCookie });
+    const staff = uList.json.users.find((u) => u.email === 'rbac15@test.com');
+    await call(env.origin, `/api/admin/users/${staff.id}/approve`, {
+      method: 'POST',
+      cookie: adminCookie,
+      body: { password: 'RbacMatrixPass2026!', organizationId: orgId, permissions: ['flights.sell'] },
+    });
+    const staffLogin = await call(env.origin, '/api/auth/login', {
+      method: 'POST',
+      body: { email: 'rbac15@test.com', password: 'RbacMatrixPass2026!' },
+    });
+    const sCookie = staffLogin.cookie;
+
+    const setPerms = async (perms) => {
+      const r = await call(env.origin, `/api/admin/users/${staff.id}/permissions`, {
+        method: 'PATCH',
+        cookie: adminCookie,
+        body: { permissions: perms },
+      });
+      assert.equal(r.status, 200);
+    };
+
+    // 1-4: flights.sell, hotels.sell, transfers.sell, tours.sell
+    await setPerms(['flights.sell']);
+    const sellFlightOk = await call(env.origin, '/api/admin/bookings', {
+      method: 'POST', cookie: sCookie,
+      body: { type: 'Uçak', title: 'IST → ALA', subtitle: 'KC', date: '2026-12-20', passenger: 'Test Pax', lookupSurname: 'Pax', price: 2000 },
+    });
+    assert.equal(sellFlightOk.status, 201);
+    const sellHotelDeny = await call(env.origin, '/api/admin/bookings', {
+      method: 'POST', cookie: sCookie,
+      body: { type: 'Otel', title: 'Rixos', subtitle: '2g', date: '2026-12-20', passenger: 'Test Pax', lookupSurname: 'Pax', price: 2000 },
+    });
+    assert.equal(sellHotelDeny.status, 403);
+    const sellTransferDeny = await call(env.origin, '/api/admin/bookings', {
+      method: 'POST', cookie: sCookie,
+      body: { type: 'Transfer', title: 'IST → Taksim', subtitle: 'VIP', date: '2026-12-20', passenger: 'Test Pax', lookupSurname: 'Pax', price: 1200 },
+    });
+    assert.equal(sellTransferDeny.status, 403);
+    const sellTourDeny = await call(env.origin, '/api/admin/bookings', {
+      method: 'POST', cookie: sCookie,
+      body: { type: 'Tur', title: 'Kapadokya', subtitle: '2g', date: '2026-12-20', passenger: 'Test Pax', lookupSurname: 'Pax', price: 3000 },
+    });
+    assert.equal(sellTourDeny.status, 403);
+
+    await setPerms(['flights.sell', 'hotels.sell', 'transfers.sell', 'tours.sell']);
+    assert.equal((await call(env.origin, '/api/admin/bookings', {
+      method: 'POST', cookie: sCookie,
+      body: { type: 'Otel', title: 'Rixos', subtitle: '2g', date: '2026-12-20', passenger: 'Test Pax', lookupSurname: 'Pax', price: 2000 },
+    })).status, 201);
+    assert.equal((await call(env.origin, '/api/admin/bookings', {
+      method: 'POST', cookie: sCookie,
+      body: { type: 'Transfer', title: 'IST → Taksim', subtitle: 'VIP', date: '2026-12-20', passenger: 'Test Pax', lookupSurname: 'Pax', price: 1200 },
+    })).status, 201);
+    assert.equal((await call(env.origin, '/api/admin/bookings', {
+      method: 'POST', cookie: sCookie,
+      body: { type: 'Tur', title: 'Kapadokya', subtitle: '2g', date: '2026-12-20', passenger: 'Test Pax', lookupSurname: 'Pax', price: 3000 },
+    })).status, 201);
+
+    // 5-6: bookings.view_own vs none vs bookings.view_org
+    const listWithoutView = await call(env.origin, '/api/admin/bookings', { cookie: sCookie });
+    assert.equal(listWithoutView.json.bookings.length, 0);
+
+    await setPerms(['bookings.view_own']);
+    const listWithOwn = await call(env.origin, '/api/admin/bookings', { cookie: sCookie });
+    assert.ok(listWithOwn.json.bookings.length >= 4);
+
+    // 7-8: bookings.cancel_request vs bookings.manage
+    const bkId = sellFlightOk.json.booking.id;
+    assert.equal((await call(env.origin, `/api/admin/bookings/${bkId}`, {
+      method: 'PATCH', cookie: sCookie, body: { status: 'İptal Talebi' },
+    })).status, 403);
+
+    await setPerms(['bookings.view_own', 'bookings.cancel_request']);
+    assert.equal((await call(env.origin, `/api/admin/bookings/${bkId}`, {
+      method: 'PATCH', cookie: sCookie, body: { status: 'İptal Talebi' },
+    })).status, 200);
+    assert.equal((await call(env.origin, `/api/admin/bookings/${bkId}`, {
+      method: 'PATCH', cookie: sCookie, body: { status: 'İptal Edildi' },
+    })).status, 403);
+
+    await setPerms(['bookings.view_own', 'bookings.manage']);
+    assert.equal((await call(env.origin, `/api/admin/bookings/${bkId}`, {
+      method: 'PATCH', cookie: sCookie, body: { status: 'İptal Edildi' },
+    })).status, 200);
+    assert.equal((await call(env.origin, `/api/admin/bookings/${bkId}`, {
+      method: 'PATCH', cookie: sCookie, body: { status: 'İade Edildi' },
+    })).status, 200);
+
+    // 9: flights.manual (separate from inventory.manage!)
+    assert.equal((await call(env.origin, '/api/admin/catalog/flights', {
+      method: 'PUT', cookie: sCookie, body: { revision: 1, items: [] },
+    })).status, 403);
+    await setPerms(['flights.manual']);
+    const mfRev = (await call(env.origin, '/api/admin/catalog', { cookie: sCookie })).json.catalog.flights?.revision ?? 0;
+    assert.equal((await call(env.origin, '/api/admin/catalog/flights', {
+      method: 'PUT', cookie: sCookie, body: { revision: mfRev, items: [] },
+    })).status, 200);
+    // flights.manual alone CANNOT edit hotels!
+    assert.equal((await call(env.origin, '/api/admin/catalog/hotels', {
+      method: 'PUT', cookie: sCookie, body: { revision: 0, items: [] },
+    })).status, 403);
+
+    // 10: inventory.manage (hotels/transfers/tours, CANNOT edit flights!)
+    await setPerms(['inventory.manage']);
+    const hRev = (await call(env.origin, '/api/admin/catalog', { cookie: sCookie })).json.catalog.hotels?.revision ?? 0;
+    assert.equal((await call(env.origin, '/api/admin/catalog/hotels', {
+      method: 'PUT', cookie: sCookie, body: { revision: hRev, items: [] },
+    })).status, 200);
+    assert.equal((await call(env.origin, '/api/admin/catalog/flights', {
+      method: 'PUT', cookie: sCookie, body: { revision: mfRev + 1, items: [] },
+    })).status, 403);
+
+    // 11: pricing.edit
+    assert.equal((await call(env.origin, '/api/admin/pricing', {
+      method: 'PATCH', cookie: sCookie, body: { domesticAddTRY: 200, centralAsiaPercent: 7, intlPercent: 5, hotelPercent: 8, transferAddTRY: 150 },
+    })).status, 403);
+    await setPerms(['pricing.edit']);
+    assert.equal((await call(env.origin, '/api/admin/pricing', {
+      method: 'PATCH', cookie: sCookie, body: { domesticAddTRY: 200, centralAsiaPercent: 7, intlPercent: 5, hotelPercent: 8, transferAddTRY: 150 },
+    })).status, 200);
+
+    // 12: fx.manage
+    assert.equal((await call(env.origin, '/api/admin/fx', {
+      method: 'PATCH', cookie: sCookie, body: { usdTry: 51, eurTry: 56, tryKzt: 9, tryRub: 1.6 },
+    })).status, 403);
+    await setPerms(['fx.manage']);
+    assert.equal((await call(env.origin, '/api/admin/fx', {
+      method: 'PATCH', cookie: sCookie, body: { usdTry: 51, eurTry: 56, tryKzt: 9, tryRub: 1.6 },
+    })).status, 200);
+
+    // 13: coupons.manage
+    assert.equal((await call(env.origin, '/api/admin/catalog/coupons', {
+      method: 'PUT', cookie: sCookie, body: { revision: 0, items: [] },
+    })).status, 403);
+    await setPerms(['coupons.manage']);
+    const cRev = (await call(env.origin, '/api/admin/catalog', { cookie: sCookie })).json.catalog.coupons?.revision ?? 0;
+    assert.equal((await call(env.origin, '/api/admin/catalog/coupons', {
+      method: 'PUT', cookie: sCookie, body: { revision: cRev, items: [] },
+    })).status, 200);
+
+    // 14-15: team.manage (users & orgs allowed, role promotion to admin still 403!)
+    assert.equal((await call(env.origin, '/api/admin/users', { cookie: sCookie })).status, 403);
+    await setPerms(['team.manage']);
+    assert.equal((await call(env.origin, '/api/admin/users', { cookie: sCookie })).status, 200);
+    assert.equal((await call(env.origin, '/api/admin/organizations', { cookie: sCookie })).status, 200);
+    // Privilege escalation guard: team.manage CANNOT promote to Super Admin!
+    assert.equal((await call(env.origin, `/api/admin/users/${staff.id}/role`, {
+      method: 'PATCH', cookie: sCookie, body: { role: 'admin' },
+    })).status, 403);
+  });
 });

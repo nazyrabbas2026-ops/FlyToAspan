@@ -491,13 +491,21 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
 
   const isSuperAdmin = !currentUser || currentUser.role === 'admin';
   const userPerms = currentUser?.permissions ?? [];
+  const canSellFlight = isSuperAdmin || userPerms.includes('flights.sell');
+  const canSellHotel = isSuperAdmin || userPerms.includes('hotels.sell');
+  const canSellTransfer = isSuperAdmin || userPerms.includes('transfers.sell');
+  const canSellTour = isSuperAdmin || userPerms.includes('tours.sell');
+  const canSellAny = canSellFlight || canSellHotel || canSellTransfer || canSellTour;
   const canManageBookings = isSuperAdmin || userPerms.includes('bookings.manage');
   const canCancelRequest = isSuperAdmin || canManageBookings || userPerms.includes('bookings.cancel_request');
   const canEditFx = isSuperAdmin || userPerms.includes('fx.manage');
   const canEditPricing = isSuperAdmin || userPerms.includes('pricing.edit');
   const canManageCoupons = isSuperAdmin || userPerms.includes('coupons.manage');
   const canManageApis = isSuperAdmin || userPerms.includes('apis.manage');
-  const canManageInventory = isSuperAdmin || userPerms.includes('inventory.manage') || userPerms.includes('flights.manual');
+  const canManageManualFlights = isSuperAdmin || userPerms.includes('flights.manual');
+  const canManageHotelTransfer = isSuperAdmin || userPerms.includes('inventory.manage');
+  const canManageInventory = canManageManualFlights || canManageHotelTransfer;
+  const canManageTeam = isSuperAdmin || userPerms.includes('team.manage');
   const visibleSections = useMemo(
     () =>
       ADMIN_SECTIONS.filter((item) => {
@@ -509,10 +517,11 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
         if (item.id === 'pricing') return canEditPricing;
         if (item.id === 'inventory') return canManageInventory;
         if (item.id === 'coupons') return canManageCoupons;
+        if (item.id === 'agents') return canManageTeam;
         if (item.id === 'apis') return canManageApis;
         return false;
       }),
-    [isSuperAdmin, userPerms, canEditPricing, canManageInventory, canManageCoupons, canManageApis]
+    [isSuperAdmin, userPerms, canEditPricing, canManageInventory, canManageCoupons, canManageTeam, canManageApis]
   );
 
   const [section, setSection] = useState<AdminSection>('dashboard');
@@ -662,7 +671,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
     api.adminCatalog(controller.signal)
       .then(({ catalog }) => { if (!controller.signal.aborted) setCatalog(catalog); })
       .catch(() => { /* staff without catalog access */ });
-    if (isSuperAdmin) {
+    if (canManageTeam) {
       api.adminUsers(controller.signal)
         .then(({ users }) => { if (!controller.signal.aborted) setSiteUsers(users); })
         .catch(() => { /* ignore if not ready */ });
@@ -671,17 +680,17 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
         .catch(() => { /* ignore if not ready */ });
     }
     const refreshBadges = () => {
-      if (!isSuperAdmin || document.visibilityState !== 'visible') return;
+      if (!canManageTeam || document.visibilityState !== 'visible') return;
       api.adminUsers(controller.signal)
         .then(({ users }) => { if (!controller.signal.aborted) setSiteUsers(users); })
         .catch(() => { /* ignore transient network blip */ });
     };
-    const pollId = isSuperAdmin ? window.setInterval(refreshBadges, 15_000) : null;
+    const pollId = canManageTeam ? window.setInterval(refreshBadges, 15_000) : null;
     return () => {
       controller.abort();
       if (pollId !== null) window.clearInterval(pollId);
     };
-  }, [isSuperAdmin]);
+  }, [canManageTeam]);
 
   const pendingUsers = useMemo(
     () => siteUsers.filter((u) => u.status === 'pending'),
@@ -1049,14 +1058,16 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                   </button>
                 ))}
               </div>
-              <button
-                type="button"
-                className="btn-gold-nav"
-                onClick={() => openBookings('ALL', true)}
-              >
-                <Plus size={16} />
-                {ui.addTestBooking}
-              </button>
+              {canSellAny && (
+                <button
+                  type="button"
+                  className="btn-gold-nav"
+                  onClick={() => openBookings('ALL', true)}
+                >
+                  <Plus size={16} />
+                  {ui.addTestBooking}
+                </button>
+              )}
               <button
                 type="button"
                 className="btn-logout-nav"
@@ -1463,9 +1474,9 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                               value={manType}
                               onChange={(e) => setManType(e.target.value as 'Uçak' | 'Otel' | 'Transfer')}
                             >
-                              <option value="Uçak">✈️ Uçak Bileti</option>
-                              <option value="Otel">🏨 Otel Konaklama</option>
-                              <option value="Transfer">🚘 VIP Transfer</option>
+                              {canSellFlight && <option value="Uçak">✈️ Uçak Bileti</option>}
+                              {canSellHotel && <option value="Otel">🏨 Otel Konaklama</option>}
+                              {canSellTransfer && <option value="Transfer">🚘 VIP Transfer</option>}
                             </select>
                           </div>
                           <div>
@@ -1901,7 +1912,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                 </select>
                               )}
 
-                              {canManageBookings && (
+                              {isSuperAdmin && (
                                 <button
                                   type="button"
                                   className="drawer-close"
@@ -2506,6 +2517,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
               {section === 'inventory' && (
                 <>
                   {/* MANUAL FLIGHTS / CHARTER BLOCK SEATS */}
+                  {canManageManualFlights && (
                   <div className="panel-card" style={{ border: '1.5px solid rgba(16,185,129,0.45)' }}>
                     <strong style={{ fontSize: 18, display: 'block', marginBottom: 6 }}>
                       ✈ Manuel Uçuş &amp; Blok Koltuk Envanteri
@@ -2802,6 +2814,10 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                       </form>
                     </div>
                   </div>
+                  )}
+
+                  {canManageHotelTransfer && (
+                  <>
                   <div className="panel-card">
                     <strong style={{ fontSize: 18, display: 'block', marginBottom: 10 }}>
                       VIP Havalimanı Transfer Filosu (Canlı Vitrin Yönetimi)
@@ -3172,6 +3188,8 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                       </form>
                     </div>
                   </div>
+                  </>
+                  )}
                 </>
               )}
 
