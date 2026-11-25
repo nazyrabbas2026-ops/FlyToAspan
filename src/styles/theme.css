@@ -7019,3 +7019,30 @@ body {
   background: linear-gradient(90deg, rgba(15, 163, 177, 0.09) 0%, rgba(214, 174, 86, 0.11) 100%);
   border-color: rgba(214, 174, 86, 0.35);
 }
+
+
+/* Unified Midnight Aviation Navy & Champagne Gold for remaining dark bands */
+.ufd-section {
+  background:
+    radial-gradient(720px 380px at 12% 10%, rgba(15, 163, 177, 0.2) 0%, rgba(15, 163, 177, 0) 68%),
+    radial-gradient(620px 360px at 90% 12%, rgba(214, 174, 86, 0.24) 0%, rgba(214, 174, 86, 0) 65%),
+    linear-gradient(145deg, #04111d 0%, #092136 52%, #0c2c47 100%);
+}
+
+.gds-luxury-loader {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(214, 174, 86, 0.22), transparent 55%),
+    linear-gradient(155deg, #04111d 0%, #0a243a 62%, #061829 100%);
+  border-color: rgba(214, 174, 86, 0.28);
+}
+
+.gds-route-visual {
+  background: linear-gradient(135deg, #04111d 0%, #0c2b45 100%);
+  border: 1px solid rgba(214, 174, 86, 0.22);
+}
+
+.site-splash-overlay {
+  background:
+    radial-gradient(640px 380px at 50% 42%, rgba(214, 174, 86, 0.18) 0%, transparent 70%),
+    linear-gradient(180deg, #04111d 0%, #0a243a 52%, #04111d 100%);
+}
