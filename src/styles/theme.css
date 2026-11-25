@@ -6933,87 +6933,89 @@ img {
 
 
 /* ==========================================================================
-   OBSIDIAN CARBON BLACK & CHAMPAGNE GOLD THEME (100% REVERSIBLE TRIAL)
+   MIDNIGHT AVIATION NAVY & CHAMPAGNE GOLD THEME (100% REVERSIBLE TRIAL)
    ========================================================================== */
 :root {
-  --aspan-ink: #080a0f;
-  --aspan-dark: #0f131b;
-  --aspan-dark-2: #19202d;
-  --aspan-dark-3: #252e40;
+  --aspan-ink: #04111d;
+  --aspan-dark: #071c2e;
+  --aspan-dark-2: #0d2b45;
+  --aspan-dark-3: #143d5e;
 
-  --aspan-teal: #c99a45;
-  --aspan-teal-bright: #f2cf7e;
-  --aspan-teal-deep: #9c7222;
-  --aspan-teal-soft: rgba(201, 154, 69, 0.13);
+  --aspan-teal: #0fa3b1;
+  --aspan-teal-bright: #38d6e2;
+  --aspan-teal-deep: #0b7a85;
+  --aspan-teal-soft: rgba(15, 163, 177, 0.11);
 
-  --aspan-sky: #e0b768;
-  --aspan-sky-light: #f4d898;
+  --aspan-sky: #d6ae56;
+  --aspan-sky-light: #f0d084;
   --aspan-sky-soft: #faf5e8;
 
-  --aspan-gold: #deb45c;
-  --aspan-gold-bright: #f5d484;
-  --aspan-gold-deep: #b0832b;
-  --aspan-gold-grad: linear-gradient(135deg, #f5d484 0%, #c89434 100%);
-  --aspan-gold-ink: #161106;
+  --aspan-gold: #d6ae56;
+  --aspan-gold-bright: #f2cf7a;
+  --aspan-gold-deep: #ad842e;
+  --aspan-gold-grad: linear-gradient(135deg, #f2cf7a 0%, #c49535 100%);
+  --aspan-gold-ink: #081523;
 
-  --aspan-bg-soft: #f6f4ef;
-  --aspan-bg-pill: #efeae0;
-  --aspan-border: #e3dcd0;
-  --aspan-text: #11141c;
-  --aspan-text-body: #3e4452;
-  --aspan-text-muted: #666d7c;
+  --aspan-bg-soft: #f7f5f0;
+  --aspan-bg-pill: #eee9de;
+  --aspan-border: #e1dacb;
+  --aspan-text: #0a1b2b;
+  --aspan-text-body: #3c5063;
+  --aspan-text-muted: #5d7184;
 
-  --shadow-nav: 0 18px 50px -22px rgba(0, 0, 0, 0.88), inset 0 1px 0 rgba(224, 183, 104, 0.26);
-  --shadow-search: 0 36px 84px -32px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(224, 183, 104, 0.22);
-  --shadow-pop: 0 24px 60px -16px rgba(8, 10, 15, 0.26), 0 0 0 1px rgba(201, 154, 69, 0.22);
+  --shadow-nav: 0 18px 50px -22px rgba(4, 17, 29, 0.88), inset 0 1px 0 rgba(214, 174, 86, 0.28);
+  --shadow-search: 0 36px 84px -32px rgba(4, 17, 29, 0.68), 0 0 0 1px rgba(214, 174, 86, 0.24);
+  --shadow-pop: 0 24px 60px -16px rgba(4, 17, 29, 0.24), 0 0 0 1px rgba(214, 174, 86, 0.22);
 }
 
 body {
-  background: #f9f8f5;
+  background: #f9f8f4;
 }
 
 .kv-splash-overlay {
-  background: radial-gradient(ellipse 70% 55% at 50% 42%, #181d29 0%, #090b10 70%, #05070a 100%);
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 42%, #0e2e4a 0%, #061828 65%, #030d17 100%);
 }
 
 .kv-splash-hairline-fill {
-  background: linear-gradient(90deg, #c89434 0%, #f5d484 100%);
+  background: linear-gradient(90deg, #0fa3b1 0%, #f2cf7a 100%);
 }
 
 .hero-section {
   background:
-    radial-gradient(ellipse 68% 300px at 50% 155px, rgba(214, 174, 86, 0.16), transparent 72%),
-    linear-gradient(180deg, #080a0f 0%, #111621 52%, #080a0f 100%);
+    radial-gradient(ellipse 68% 300px at 72% 24%, rgba(214, 174, 86, 0.18), transparent 68%),
+    radial-gradient(ellipse 62% 280px at 22% 72%, rgba(15, 163, 177, 0.16), transparent 68%),
+    linear-gradient(160deg, #04111d 0%, #0a243a 52%, #051524 100%);
 }
 
 .hero-map-band::before {
-  background: radial-gradient(circle, rgba(224, 183, 104, 0.24) 1.1px, transparent 1.6px) center / 18px 15px;
+  background: radial-gradient(circle, rgba(214, 174, 86, 0.26) 1.1px, transparent 1.6px) center / 18px 15px;
 }
 
 .inner-hero {
   background:
-    radial-gradient(840px 340px at 50% 100%, rgba(214, 174, 86, 0.22) 0%, transparent 72%),
-    linear-gradient(180deg, #080a0f 0%, #151b27 100%);
+    radial-gradient(840px 340px at 55% 100%, rgba(214, 174, 86, 0.22) 0%, transparent 72%),
+    linear-gradient(180deg, #04111d 0%, #0b263e 100%);
 }
 
 .transfers-section {
   background:
     radial-gradient(660px 300px at 80% 15%, rgba(214, 174, 86, 0.2) 0%, transparent 65%),
-    linear-gradient(180deg, #090c12 0%, #151a25 100%);
+    linear-gradient(180deg, #051422 0%, #0c2942 100%);
 }
 
 .uff-footer {
-  background: linear-gradient(180deg, #0c1018 0%, #06080c 100%);
+  background: linear-gradient(180deg, #071929 0%, #030d16 100%);
 }
 
 .exec-prefooter-card {
   background:
-    radial-gradient(560px 260px at 85% 15%, rgba(214, 174, 86, 0.18) 0%, transparent 65%),
-    linear-gradient(135deg, #0b0e15 0%, #171d29 100%);
-  border-color: rgba(214, 174, 86, 0.28);
+    radial-gradient(560px 260px at 85% 15%, rgba(214, 174, 86, 0.2) 0%, transparent 65%),
+    linear-gradient(135deg, #061726 0%, #0d2b45 100%);
+  border-color: rgba(214, 174, 86, 0.3);
 }
 
 .adm-date-bar {
-  background: linear-gradient(90deg, rgba(214, 174, 86, 0.11) 0%, rgba(17, 20, 28, 0.04) 100%);
-  border-color: rgba(214, 174, 86, 0.34);
+  background: linear-gradient(90deg, rgba(15, 163, 177, 0.09) 0%, rgba(214, 174, 86, 0.11) 100%);
+  border-color: rgba(214, 174, 86, 0.35);
 }
