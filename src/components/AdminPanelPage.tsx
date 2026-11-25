@@ -64,24 +64,29 @@ const PERMISSION_OPTIONS: { id: StaffPermission; label: string }[] = [
   { id: 'tours.sell', label: 'Tur Satışı' },
   { id: 'bookings.view_own', label: 'Kendi Satışlarını Gör' },
   { id: 'bookings.view_org', label: 'Şirket Satışlarını Gör' },
-  { id: 'bookings.manage', label: 'İptal / İade / Yapıldı' },
+  { id: 'bookings.cancel_request', label: 'İptal Talebi Oluştur' },
+  { id: 'bookings.manage', label: 'Doğrudan İptal / İade / Yapıldı' },
+  { id: 'flights.manual', label: 'Manuel Uçuş Ekle' },
   { id: 'inventory.manage', label: 'Otel & Transfer Yönet' },
-  { id: 'pricing.edit', label: 'Fiyat / Komisyon' },
+  { id: 'pricing.edit', label: 'Komisyon & XML Fiyat Ayarı' },
+  { id: 'fx.manage', label: 'Döviz Kuru Ayarı' },
+  { id: 'coupons.manage', label: 'Kupon & Kampanya Yönetimi' },
+  { id: 'apis.manage', label: 'API Bağlantı Ayarları' },
   { id: 'team.manage', label: 'Ekip Yönetimi' },
 ];
 
 const ROLE_PRESETS: { label: string; perms: StaffPermission[] }[] = [
   {
-    label: 'Satış Temsilcisi',
-    perms: ['flights.sell', 'hotels.sell', 'transfers.sell', 'bookings.view_own'],
+    label: 'Alt Acente / Satış',
+    perms: ['flights.sell', 'hotels.sell', 'transfers.sell', 'tours.sell', 'bookings.view_own', 'bookings.cancel_request'],
   },
   {
     label: 'Operasyon Uzmanı',
-    perms: ['flights.sell', 'hotels.sell', 'transfers.sell', 'bookings.view_org', 'bookings.manage'],
+    perms: ['flights.sell', 'hotels.sell', 'transfers.sell', 'tours.sell', 'bookings.view_org', 'bookings.cancel_request', 'bookings.manage'],
   },
   {
     label: 'Şirket Yöneticisi',
-    perms: ['flights.sell', 'hotels.sell', 'transfers.sell', 'tours.sell', 'bookings.view_org', 'bookings.manage', 'inventory.manage', 'team.manage'],
+    perms: ['flights.sell', 'hotels.sell', 'transfers.sell', 'tours.sell', 'bookings.view_org', 'bookings.cancel_request', 'bookings.manage', 'inventory.manage', 'flights.manual', 'team.manage'],
   },
 ];
 
@@ -145,7 +150,7 @@ const ADMIN_SECTIONS = [
   { id: 'bookings', label: 'Rezervasyonlar', description: 'Rezervasyon koduyla arayın, durumları güncelleyin veya rapor alın.', icon: <Ticket size={18} /> },
   { id: 'finance', label: 'Finans & CRM', description: 'Günlük gelir-gider grafikleri, 360° satış/uçuş defteri, ekip liderliği ve CRM takip listesi.', icon: <BarChart3 size={18} /> },
   { id: 'pricing', label: 'Fiyatlandırma', description: 'Hizmet bedellerini ve komisyonları ayarlayıp örnek fiyatları karşılaştırın.', icon: <Sliders size={18} /> },
-  { id: 'inventory', label: 'Otel ve transfer', description: 'Vitrindeki örnek otel ve transfer listelerini inceleyin.', icon: <CarTaxiFront size={18} /> },
+  { id: 'inventory', label: 'Envanter & Manuel Uçuş', description: 'Otel, VIP transfer ve manuel blok koltuk uçuşlarını yönetin.', icon: <CarTaxiFront size={18} /> },
   { id: 'coupons', label: 'Kampanya ve kuponlar', description: 'Deneme kuponlarını ve paneldeki durumlarını yönetin.', icon: <Tag size={18} /> },
   { id: 'agents', label: 'Bayiler ve üyeler', description: 'Örnek kurumsal hesapları, limitleri ve mil bakiyelerini inceleyin.', icon: <Users size={18} /> },
   { id: 'apis', label: 'Sağlayıcı bağlantıları', description: 'Uçuş, otel ve ödeme bağlantılarının durumunu takip edin.', icon: <Plug size={18} /> },
@@ -285,6 +290,30 @@ const exampleCatalog: AdminCatalog = {
     { id: 'tour-ala-1', city: 'ALMATI', title: 'Almatı & Shymbulak Kültür Turu', duration: '4 Gece 5 Gün', quota: 14, price: 24900, active: true },
     { id: 'tour-cap-2', city: 'KAPADOKYA', title: 'Kapadokya Mağara Otel & Balon Turu', duration: '2 Gece 3 Gün', quota: 10, price: 9850, active: true },
   ],
+  operators: [
+    { id: 'op-funsun', operator: 'FUN&SUN (XML)', product: 'Uçak Bileti', markupType: 'NET', markupValue: 0, active: true },
+    { id: 'op-kompas', operator: 'Kompas Tour (XML)', product: 'Uçak Bileti', markupType: 'EUR', markupValue: 10, active: true },
+    { id: 'op-selfie', operator: 'Selfie Travel (XML)', product: 'Uçak Bileti', markupType: 'EUR', markupValue: 10, active: true },
+    { id: 'op-all-tours', operator: 'Tüm Operatörler (XML)', product: 'Tur Paketi', markupType: 'NET', markupValue: 0, active: true },
+  ],
+  flights: [
+    {
+      id: 'mf-1',
+      airline: 'Air Astana Charter',
+      airlineCode: 'KC',
+      flightNumber: 'KC918',
+      fromCode: 'IST',
+      toCode: 'ALA',
+      departTime: '09:30',
+      arriveTime: '17:00',
+      duration: '5s 30dk',
+      operator: 'Kompas Tour (XML)',
+      baggage: '20 kg Bagaj',
+      priceTRY: 6450,
+      quota: 12,
+      active: true,
+    },
+  ],
 };
 
 export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
@@ -302,6 +331,13 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
 }) => {
   const isSuperAdmin = !currentUser || currentUser.role === 'admin';
   const userPerms = currentUser?.permissions ?? [];
+  const canManageBookings = isSuperAdmin || userPerms.includes('bookings.manage');
+  const canCancelRequest = isSuperAdmin || canManageBookings || userPerms.includes('bookings.cancel_request');
+  const canEditFx = isSuperAdmin || userPerms.includes('fx.manage');
+  const canEditPricing = isSuperAdmin || userPerms.includes('pricing.edit');
+  const canManageCoupons = isSuperAdmin || userPerms.includes('coupons.manage');
+  const canManageApis = isSuperAdmin || userPerms.includes('apis.manage');
+  const canManageInventory = isSuperAdmin || userPerms.includes('inventory.manage') || userPerms.includes('flights.manual');
   const visibleSections = useMemo(
     () =>
       ADMIN_SECTIONS.filter((item) => {
@@ -310,11 +346,13 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
         if (item.id === 'bookings') {
           return userPerms.some((p) => p.startsWith('bookings.') || p.endsWith('.sell'));
         }
-        if (item.id === 'pricing') return userPerms.includes('pricing.edit');
-        if (item.id === 'inventory') return userPerms.includes('inventory.manage');
+        if (item.id === 'pricing') return canEditPricing;
+        if (item.id === 'inventory') return canManageInventory;
+        if (item.id === 'coupons') return canManageCoupons;
+        if (item.id === 'apis') return canManageApis;
         return false;
       }),
-    [isSuperAdmin, userPerms]
+    [isSuperAdmin, userPerms, canEditPricing, canManageInventory, canManageCoupons, canManageApis]
   );
 
   const [section, setSection] = useState<AdminSection>('dashboard');
@@ -324,10 +362,31 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   const [busy, setBusy] = useState(false);
   const [catalog, setCatalog] = useState<AdminCatalogState | null>(null);
   const airlineRules = catalog?.rules?.items ?? exampleCatalog.rules;
+  const operatorRules = catalog?.operators?.items ?? exampleCatalog.operators;
+  const manualFlights = catalog?.flights?.items ?? exampleCatalog.flights;
   const coupons = catalog?.coupons?.items ?? exampleCatalog.coupons;
   const managedHotels = catalog?.hotels?.items ?? exampleCatalog.hotels;
   const managedTransfers = catalog?.transfers?.items ?? exampleCatalog.transfers;
   const catalogWritable = catalog !== null && !busy;
+
+  // New Operator XML Pricing rule state
+  const [newOpName, setNewOpName] = useState('');
+  const [newOpProduct, setNewOpProduct] = useState('Uçak Bileti');
+  const [newOpMarkupType, setNewOpMarkupType] = useState<'NET' | 'EUR' | 'TRY' | 'PERCENT'>('EUR');
+  const [newOpMarkupVal, setNewOpMarkupVal] = useState('10');
+
+  // New Manual Flight form state
+  const [mfAirline, setMfAirline] = useState('Air Astana');
+  const [mfCode, setMfCode] = useState('KC');
+  const [mfNumber, setMfNumber] = useState('KC920');
+  const [mfFrom, setMfFrom] = useState('IST');
+  const [mfTo, setMfTo] = useState('ALA');
+  const [mfDep, setMfDep] = useState('10:30');
+  const [mfArr, setMfArr] = useState('18:00');
+  const [mfOperator, setMfOperator] = useState('Kompas Tour (XML)');
+  const [mfBaggage, setMfBaggage] = useState('20 kg Bagaj');
+  const [mfPrice, setMfPrice] = useState('6890');
+  const [mfQuota, setMfQuota] = useState('10');
   const [fxSnapshot, setFxSnapshot] = useState(() => getLiveRatesSnapshot());
   const [fxLoading, setFxLoading] = useState(false);
   const [fxManualMode, setFxManualMode] = useState(false);
@@ -975,7 +1034,8 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                     </div>
                   </div>
 
-                  {/* Live & Manual Currency Exchange Bar */}
+                  {/* Live & Manual Currency Exchange Bar — STRICTLY SUPER ADMIN / fx.manage ONLY */}
+                  {canEditFx && (
                   <form className="panel-card" onSubmit={handleSaveManualFx}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1075,11 +1135,12 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                       </label>
                     </div>
                   </form>
+                  )}
 
-                  {/* Quick Jump Cards */}
+                  {/* Quick Jump Cards — STRICTLY FILTERED BY PERMISSIONS */}
                   <div className="panel-card">
                     <strong style={{ fontSize: 16.5, display: 'block', marginBottom: 12 }}>
-                      Hızlı Yönetici İşlemleri
+                      {isSuperAdmin ? 'Hızlı Yönetici İşlemleri' : 'Hızlı İşlemler'}
                     </strong>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 210px), 1fr))', gap: 12 }}>
                       <button
@@ -1087,33 +1148,39 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                         className="drawer-link"
                         onClick={() => setSection('bookings')}
                       >
-                        <span>🎫 PNR &amp; Tarih Sıralama</span>
+                        <span>🎫 PNR &amp; Rezervasyonlar</span>
                         <span>→</span>
                       </button>
-                      <button
-                        type="button"
-                        className="drawer-link"
-                        onClick={() => setSection('pricing')}
-                      >
-                        <span>💰 Komisyon &amp; Kâr Ayarla</span>
-                        <span>→</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="drawer-link"
-                        onClick={() => setSection('coupons')}
-                      >
-                        <span>🎁 Yeni İndirim Kuponu Aç</span>
-                        <span>→</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="drawer-link"
-                        onClick={() => setSection('apis')}
-                      >
-                        <span>🔌 Buranus &amp; GDS API Ayarı</span>
-                        <span>→</span>
-                      </button>
+                      {canEditPricing && (
+                        <button
+                          type="button"
+                          className="drawer-link"
+                          onClick={() => setSection('pricing')}
+                        >
+                          <span>💰 Komisyon &amp; XML Fiyat Ayarla</span>
+                          <span>→</span>
+                        </button>
+                      )}
+                      {canManageCoupons && (
+                        <button
+                          type="button"
+                          className="drawer-link"
+                          onClick={() => setSection('coupons')}
+                        >
+                          <span>🎁 Yeni İndirim Kuponu Aç</span>
+                          <span>→</span>
+                        </button>
+                      )}
+                      {canManageApis && (
+                        <button
+                          type="button"
+                          className="drawer-link"
+                          onClick={() => setSection('apis')}
+                        >
+                          <span>🔌 Buranus &amp; GDS API Ayarı</span>
+                          <span>→</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </>
@@ -1492,7 +1559,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                 {formatPrice(b.price, currency)}
                               </strong>
 
-                              {b.status !== 'Tamamlandı' && (
+                              {canManageBookings && b.status !== 'Tamamlandı' && (
                                 <button
                                   type="button"
                                   className="uf-quick-pill"
@@ -1506,6 +1573,20 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                   ✓ Yapıldı
                                 </button>
                               )}
+                              {!canManageBookings && canCancelRequest && b.status === 'Onaylandı' && (
+                                <button
+                                  type="button"
+                                  className="uf-quick-pill"
+                                  disabled={busy}
+                                  style={{ background: 'rgba(245,158,11,0.14)', color: '#B45309', borderColor: '#F59E0B' }}
+                                  onClick={() => void runAction(async () => {
+                                    await onUpdateBookingStatus(b.id, 'İptal Talebi');
+                                    flash(`${b.pnr} için merkeze iptal talebi iletildi.`);
+                                  })}
+                                >
+                                  İptal Talebi Oluştur
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 className="uf-quick-pill"
@@ -1514,7 +1595,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                 <Download size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
                                 PDF E-Bilet
                               </button>
-                              {b.status !== 'İptal Edildi' && (
+                              {canManageBookings && b.status !== 'İptal Edildi' && (
                                 <button
                                   type="button"
                                   className="uf-quick-pill"
@@ -1528,7 +1609,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                   ✕ İptal
                                 </button>
                               )}
-                              {b.status !== 'İade Edildi' && (
+                              {canManageBookings && b.status !== 'İade Edildi' && (
                                 <button
                                   type="button"
                                   className="uf-quick-pill"
@@ -1543,44 +1624,48 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                 </button>
                               )}
 
-                              <select
-                                aria-label={`${b.pnr} durumunu değiştir`}
-                                value={b.status}
-                                disabled={busy}
-                                onChange={(event) => {
-                                  const status = event.target.value as BookingRecord['status'];
-                                  void runAction(async () => {
-                                    await onUpdateBookingStatus(b.id, status);
-                                    flash('Rezervasyon durumu güncellendi.');
-                                  });
-                                }}
-                                style={{
-                                  height: 36,
-                                  padding: '0 10px',
-                                  borderRadius: 10,
-                                  border: `1.5px solid ${vis.border}`,
-                                  background: '#ffffff',
-                                  color: vis.badgeColor,
-                                  fontWeight: 800,
-                                  fontSize: 12,
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                {Object.entries(STATUS_VISUALS).map(([value, status]) => (
-                                  <option key={value} value={value}>{status.label}</option>
-                                ))}
-                              </select>
+                              {canManageBookings && (
+                                <select
+                                  aria-label={`${b.pnr} durumunu değiştir`}
+                                  value={b.status}
+                                  disabled={busy}
+                                  onChange={(event) => {
+                                    const status = event.target.value as BookingRecord['status'];
+                                    void runAction(async () => {
+                                      await onUpdateBookingStatus(b.id, status);
+                                      flash('Rezervasyon durumu güncellendi.');
+                                    });
+                                  }}
+                                  style={{
+                                    height: 36,
+                                    padding: '0 10px',
+                                    borderRadius: 10,
+                                    border: `1.5px solid ${vis.border}`,
+                                    background: '#ffffff',
+                                    color: vis.badgeColor,
+                                    fontWeight: 800,
+                                    fontSize: 12,
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  {Object.entries(STATUS_VISUALS).map(([value, status]) => (
+                                    <option key={value} value={value}>{status.label}</option>
+                                  ))}
+                                </select>
+                              )}
 
-                              <button
-                                type="button"
-                                className="drawer-close"
-                                style={{ background: '#ffffff' }}
-                                title="Kaydı Sil"
-                                aria-label={`${b.pnr} kaydını sil`}
-                                onClick={() => setPendingDeletion(b.id)}
-                              >
-                                <Trash2 size={14} />
-                              </button>
+                              {canManageBookings && (
+                                <button
+                                  type="button"
+                                  className="drawer-close"
+                                  style={{ background: '#ffffff' }}
+                                  title="Kaydı Sil"
+                                  aria-label={`${b.pnr} kaydını sil`}
+                                  onClick={() => setPendingDeletion(b.id)}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
                             </div>
                             {pendingDeletion === b.id && (
                               <div className="panel-delete-confirm">
@@ -1925,12 +2010,248 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                       </button>
                     </form>
                   </div>
+
+                  {/* OPERATOR XML PRICING ENGINE (FUN&SUN, KOMPAS TOUR, SELFIE TRAVEL, NET TOURS) */}
+                  <div className="panel-card" style={{ border: '1.5px solid rgba(0,168,181,0.4)' }}>
+                    <strong style={{ fontSize: 17.5, display: 'block', marginBottom: 4 }}>
+                      Operatör XML Bazlı Fiyatlandırma &amp; Net Kâr Kuralları
+                    </strong>
+                    <p style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)', marginTop: 0, marginBottom: 14 }}>
+                      FUN&amp;SUN, Kompas Tour, Selfie Travel ve tüm operatörlerden XML ile gelen bilet ve tur paketlerine ayrı ayrı NET, +€ (Euro), +₺ veya +% kuralı tanımlayın.
+                    </p>
+                    {operatorRules.map((op) => {
+                      const badgeText =
+                        op.markupType === 'NET' || op.markupValue === 0
+                          ? 'NET Fiyat (+0 € · Kâr Eklenmez)'
+                          : op.markupType === 'EUR'
+                            ? `+${op.markupValue} € Ekle`
+                            : op.markupType === 'TRY'
+                              ? `+₺${op.markupValue} Ekle`
+                              : `+%${op.markupValue} Komisyon`;
+                      return (
+                        <div
+                          key={op.id}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '11px 0',
+                            borderBottom: '1px solid var(--aspan-border)',
+                            flexWrap: 'wrap',
+                            gap: 10,
+                            opacity: op.active ? 1 : 0.55,
+                          }}
+                        >
+                          <div>
+                            <span className="pkg-pill">{op.product}</span>{' '}
+                            <strong style={{ fontSize: 14.5 }}>{op.operator}</strong>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span className={`status-badge ${op.markupType === 'NET' ? 'ok' : 'warn'}`}>{badgeText}</span>
+                            <button
+                              type="button"
+                              className="uf-quick-pill"
+                              disabled={!catalogWritable}
+                              onClick={() => saveCatalog(
+                                'operators',
+                                operatorRules.map((r) => (r.id === op.id ? { ...r, active: !r.active } : r)),
+                                `${op.operator} XML kuralı güncellendi.`
+                              )}
+                            >
+                              {op.active ? 'Pasifleştir' : 'Aktifleştir'}
+                            </button>
+                            <button
+                              type="button"
+                              className="drawer-close"
+                              disabled={!catalogWritable}
+                              aria-label={`${op.operator} sil`}
+                              onClick={() => saveCatalog(
+                                'operators',
+                                operatorRules.filter((r) => r.id !== op.id),
+                                `${op.operator} XML kuralı silindi.`
+                              )}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    <form
+                      className="panel-form-grid"
+                      style={{ marginTop: 14 }}
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (!newOpName.trim()) return;
+                        saveCatalog(
+                          'operators',
+                          [
+                            ...operatorRules,
+                            {
+                              id: crypto.randomUUID(),
+                              operator: newOpName.trim(),
+                              product: newOpProduct,
+                              markupType: newOpMarkupType,
+                              markupValue: newOpMarkupType === 'NET' ? 0 : Math.max(0, Math.round(Number(newOpMarkupVal) || 0)),
+                              active: true,
+                            },
+                          ],
+                          'Yeni operatör XML kuralı kaydedildi.',
+                          () => {
+                            setNewOpName('');
+                            setNewOpMarkupVal('10');
+                          }
+                        );
+                      }}
+                    >
+                      <input className="modal-input" required placeholder="Operatör (Örn: FUN&SUN, Kompas Tour)" value={newOpName} onChange={(e) => setNewOpName(e.target.value)} />
+                      <select className="modal-input" value={newOpProduct} onChange={(e) => setNewOpProduct(e.target.value)}>
+                        <option value="Uçak Bileti">Uçak Bileti</option>
+                        <option value="Tur Paketi">Tur Paketi</option>
+                        <option value="Otel">Otel</option>
+                        <option value="Transfer">Transfer</option>
+                      </select>
+                      <select className="modal-input" value={newOpMarkupType} onChange={(e) => setNewOpMarkupType(e.target.value as 'NET' | 'EUR' | 'TRY' | 'PERCENT')}>
+                        <option value="NET">NET (Kâr Eklenmez)</option>
+                        <option value="EUR">+ Euro (€)</option>
+                        <option value="TRY">+ TL (₺)</option>
+                        <option value="PERCENT">+ Yüzde (%)</option>
+                      </select>
+                      <input
+                        className="modal-input"
+                        type="number"
+                        min={0}
+                        disabled={newOpMarkupType === 'NET'}
+                        placeholder="Değer (Örn: 10)"
+                        value={newOpMarkupType === 'NET' ? '0' : newOpMarkupVal}
+                        onChange={(e) => setNewOpMarkupVal(e.target.value)}
+                      />
+                      <button type="submit" className="btn-gold-nav" style={{ borderRadius: 12 }} disabled={!catalogWritable}>
+                        <Plus size={15} /> XML Kuralı Ekle
+                      </button>
+                    </form>
+                  </div>
                 </>
               )}
 
-              {/* ==================== MODULE 4: INVENTORY (HOTELS & VIP TRANSFERS — FULL CRUD) ==================== */}
+              {/* ==================== MODULE 4: INVENTORY (MANUAL FLIGHTS, HOTELS & VIP TRANSFERS) ==================== */}
               {section === 'inventory' && (
                 <>
+                  {/* MANUAL FLIGHTS / CHARTER BLOCK SEATS */}
+                  <div className="panel-card" style={{ border: '1.5px solid rgba(16,185,129,0.4)' }}>
+                    <strong style={{ fontSize: 17.5, display: 'block', marginBottom: 4 }}>
+                      ✈ Manuel Uçuş &amp; Blok Koltuk Envanteri (Canlı Siteye Yansır)
+                    </strong>
+                    <p style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)', marginTop: 0, marginBottom: 14 }}>
+                      Eklediğiniz aktif manuel/charter uçuşlar müşteriler ilgili rotayı aradığında doğrudan sonuç listesinde görünür ve satılabilir.
+                    </p>
+                    {manualFlights.map((mf) => (
+                      <div
+                        key={mf.id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '12px 0',
+                          borderBottom: '1px solid var(--aspan-border)',
+                          flexWrap: 'wrap',
+                          gap: 10,
+                          opacity: mf.active ? 1 : 0.55,
+                        }}
+                      >
+                        <div>
+                          <span className="uf-airport-code">{mf.fromCode} → {mf.toCode}</span>{' '}
+                          <span className="pkg-pill">{mf.flightNumber}</span>{' '}
+                          <span className="pkg-pill">{mf.operator}</span>{' '}
+                          <span className={`status-badge ${mf.active ? 'ok' : 'warn'}`}>{mf.active ? 'Satışta' : 'Pasif'}</span>
+                          <div style={{ fontWeight: 800, fontSize: 14.5, marginTop: 4 }}>
+                            {mf.airline} · {mf.departTime} → {mf.arriveTime} ({mf.duration})
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>
+                            {mf.baggage} · Kontenjan: <strong>{mf.quota} Koltuk</strong>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <strong style={{ fontSize: 16, color: 'var(--aspan-teal-deep)' }}>
+                            {formatPrice(mf.priceTRY, currency)}
+                          </strong>
+                          <button
+                            type="button"
+                            className="uf-quick-pill"
+                            disabled={!catalogWritable}
+                            onClick={() => saveCatalog(
+                              'flights',
+                              manualFlights.map((r) => (r.id === mf.id ? { ...r, active: !r.active } : r)),
+                              `${mf.flightNumber} uçuş durumu güncellendi.`
+                            )}
+                          >
+                            {mf.active ? 'Pasifleştir' : 'Aktifleştir'}
+                          </button>
+                          <button
+                            type="button"
+                            className="drawer-close"
+                            disabled={!catalogWritable}
+                            aria-label={`${mf.flightNumber} sil`}
+                            onClick={() => saveCatalog(
+                              'flights',
+                              manualFlights.filter((r) => r.id !== mf.id),
+                              `${mf.flightNumber} manuel uçuşu silindi.`
+                            )}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    <form
+                      className="panel-form-grid"
+                      style={{ marginTop: 14 }}
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (!mfAirline.trim() || !mfNumber.trim() || !mfFrom.trim() || !mfTo.trim()) return;
+                        saveCatalog(
+                          'flights',
+                          [
+                            ...manualFlights,
+                            {
+                              id: crypto.randomUUID(),
+                              airline: mfAirline.trim(),
+                              airlineCode: mfCode.trim().toUpperCase().slice(0, 3) || 'FT',
+                              flightNumber: mfNumber.trim().toUpperCase(),
+                              fromCode: mfFrom.trim().toUpperCase().slice(0, 3),
+                              toCode: mfTo.trim().toUpperCase().slice(0, 3),
+                              departTime: mfDep.trim() || '10:00',
+                              arriveTime: mfArr.trim() || '14:00',
+                              duration: 'Direkt Charter',
+                              operator: mfOperator.trim() || 'Blok Koltuk',
+                              baggage: mfBaggage.trim() || '20 kg Bagaj',
+                              priceTRY: Math.max(250, Math.round(Number(mfPrice) || 5500)),
+                              quota: Math.max(1, Math.round(Number(mfQuota) || 10)),
+                              active: true,
+                            },
+                          ],
+                          'Yeni manuel uçuş canlı siteye eklendi!'
+                        );
+                      }}
+                    >
+                      <input className="modal-input" required placeholder="Havayolu (Örn: Air Astana)" value={mfAirline} onChange={(e) => setMfAirline(e.target.value)} />
+                      <input className="modal-input" required placeholder="Kod (KC)" value={mfCode} onChange={(e) => setMfCode(e.target.value.toUpperCase())} />
+                      <input className="modal-input" required placeholder="Uçuş No (KC920)" value={mfNumber} onChange={(e) => setMfNumber(e.target.value.toUpperCase())} />
+                      <input className="modal-input" required placeholder="Kalkış (IST)" value={mfFrom} onChange={(e) => setMfFrom(e.target.value.toUpperCase())} />
+                      <input className="modal-input" required placeholder="Varış (ALA)" value={mfTo} onChange={(e) => setMfTo(e.target.value.toUpperCase())} />
+                      <input className="modal-input" required placeholder="Kalkış Saati (10:30)" value={mfDep} onChange={(e) => setMfDep(e.target.value)} />
+                      <input className="modal-input" required placeholder="Varış Saati (18:00)" value={mfArr} onChange={(e) => setMfArr(e.target.value)} />
+                      <input className="modal-input" placeholder="Operatör (FUN&SUN / Kompas)" value={mfOperator} onChange={(e) => setMfOperator(e.target.value)} />
+                      <input className="modal-input" placeholder="Bagaj (20 kg Bagaj)" value={mfBaggage} onChange={(e) => setMfBaggage(e.target.value)} />
+                      <input className="modal-input" type="number" min={250} placeholder="Fiyat (TL)" value={mfPrice} onChange={(e) => setMfPrice(e.target.value)} />
+                      <input className="modal-input" type="number" min={1} placeholder="Kontenjan" value={mfQuota} onChange={(e) => setMfQuota(e.target.value)} />
+                      <button type="submit" className="btn-gold-nav" style={{ borderRadius: 12 }} disabled={!catalogWritable}>
+                        <Plus size={15} /> Manuel Uçuş Ekle
+                      </button>
+                    </form>
+                  </div>
                   <div className="panel-card">
                     <strong style={{ fontSize: 17.5, display: 'block', marginBottom: 12 }}>
                       VIP Havalimanı Transfer Filosu — Tam Yönetim (Ekle / Fiyat / Durum / Sil)

@@ -61,6 +61,12 @@ export interface AdminCatalog {
   hotels: { id: string; city: string; name: string; stars: number; boardType: string; nights: number; price: number; active: boolean }[];
   transfers: { id: string; city: string; vehicle: string; route: string; capacity: string; baggage: string; price: number; active: boolean }[];
   tours: { id: string; city: string; title: string; duration: string; quota: number; price: number; active: boolean }[];
+  operators: { id: string; operator: string; product: string; markupType: 'NET' | 'EUR' | 'TRY' | 'PERCENT'; markupValue: number; active: boolean }[];
+  flights: {
+    id: string; airline: string; airlineCode: string; flightNumber: string; fromCode: string; toCode: string;
+    departTime: string; arriveTime: string; duration: string; operator: string; baggage: string;
+    priceTRY: number; quota: number; active: boolean;
+  }[];
 }
 
 export type AdminCatalogState = {
@@ -88,6 +94,7 @@ export const api = {
   ),
   deleteBooking: (id: string) => request<{ ok: true }>(`/admin/bookings/${encodeURIComponent(id)}`, 'DELETE'),
   pricing: (signal?: AbortSignal) => request<{ markup: AdminMarkupConfig | null }>('/pricing', 'GET', undefined, signal),
+  publicCatalog: (signal?: AbortSignal) => request<{ catalog: Partial<AdminCatalog> }>('/catalog', 'GET', undefined, signal),
   updatePricing: (markup: AdminMarkupConfig) => request<{ markup: AdminMarkupConfig }>('/admin/pricing', 'PATCH', markup),
   updateFx: (fx: { usdTry: number; eurTry: number; tryKzt: number; tryRub: number }) =>
     request<{ rates: Record<string, number>; updatedAt: string; manual: boolean }>('/admin/fx', 'PATCH', fx),
@@ -144,7 +151,7 @@ export const api = {
   adminAuditLogs: (signal?: AbortSignal) => request<{ logs: AuditLogEntry[] }>('/admin/audit', 'GET', undefined, signal),
 };
 
-export type BookingDraft = Pick<BookingRecord, 'type' | 'title' | 'subtitle' | 'date' | 'returnDate' | 'passenger' | 'price'> & {
+export type BookingDraft = Pick<BookingRecord, 'type' | 'title' | 'subtitle' | 'date' | 'returnDate' | 'passenger' | 'price' | 'departTime' | 'arriveTime' | 'flightNumber' | 'airline' | 'baggage' | 'cabin' | 'duration'> & {
   lookupSurname: string;
   idempotencyKey?: string;
 };

@@ -538,5 +538,104 @@ test('FlyToAspan API & Security Suite', async (t) => {
     assert.equal(qConv.json.quote.status, 'Onaylandı');
     assert.ok(qConv.json.booking.pnr);
     assert.equal(qConv.json.quote.convertedPnr, qConv.json.booking.pnr);
+
+    // 8. Public catalog sync (coupons, operator XML pricing, manual flights) & sub-agent RBAC
+    const opSave = await call(env.origin, '/api/admin/catalog/operators', {
+      method: 'PUT',
+      cookie: adminCookie,
+      body: {
+        revision: 0,
+        items: [
+          { id: 'op-funsun', operator: 'FUN&SUN', product: 'Uçak Bileti', markupType: 'NET', markupValue: 0, active: true },
+          { id: 'op-kompas', operator: 'Kompas Tour', product: 'Uçak Bileti', markupType: 'EUR', markupValue: 10, active: true },
+        ],
+      },
+    });
+    assert.equal(opSave.status, 200);
+
+    const mfSave = await call(env.origin, '/api/admin/catalog/flights', {
+      method: 'PUT',
+      cookie: adminCookie,
+      body: {
+        revision: 0,
+        items: [
+          {
+            id: 'mf-1',
+            airline: 'SCAT Airlines',
+            airlineCode: 'DV',
+            flightNumber: 'DV781',
+            fromCode: 'AYT',
+            toCode: 'ALA',
+            departTime: '23:15',
+            arriveTime: '06:40',
+            duration: '5s 25d',
+            baggage: '20 kg + 8 kg',
+            priceTRY: 6200,
+            quota: 8,
+            operator: 'FUN&SUN',
+            active: true,
+          },
+        ],
+      },
+    });
+    assert.equal(mfSave.status, 200);
+
+    const pubCat = await call(env.origin, '/api/catalog');
+    assert.equal(pubCat.status, 200);
+    assert.equal(pubCat.json.catalog.operators.length, 2);
+    assert.equal(pubCat.json.catalog.flights.length, 1);
+    assert.equal(pubCat.json.catalog.flights[0].flightNumber, 'DV781');
+
+    // Sub-agent with bookings.cancel_request CAN submit 'İptal Talebi', CANNOT force 'İptal Edildi' or edit FX
+    const grantCancelReq = await call(env.origin, `/api/admin/users/${can.id}/permissions`, {
+      method: 'PATCH',
+      cookie: adminCookie,
+      body: { permissions: ['flights.sell', 'bookings.view_own', 'bookings.cancel_request'] },
+    });
+    assert.equal(grantCancelReq.status, 200);
+
+    const subBooking = await call(env.origin, '/api/bookings', {
+      method: 'POST',
+      cookie: agentCookie,
+      body: {
+        type: 'Uçak',
+        title: 'Antalya (AYT) → Almatı (ALA)',
+        subtitle: 'SCAT Airlines · DV781',
+        date: '2026-12-28',
+        passenger: 'Yusuf Coşkun',
+        lookupSurname: 'Coşkun',
+        price: 3000,
+        departTime: '23:15',
+        arriveTime: '06:40',
+        flightNumber: 'DV781',
+        airline: 'SCAT Airlines',
+        baggage: '20 kg + 8 kg',
+      },
+    });
+    assert.equal(subBooking.status, 201);
+    assert.equal(subBooking.json.booking.departTime, '23:15');
+    assert.equal(subBooking.json.booking.arriveTime, '06:40');
+
+    const subCancelReq = await call(env.origin, `/api/admin/bookings/${subBooking.json.booking.id}`, {
+      method: 'PATCH',
+      cookie: agentCookie,
+      body: { status: 'İptal Talebi' },
+    });
+    assert.equal(subCancelReq.status, 200);
+    assert.equal(subCancelReq.json.booking.status, 'İptal Talebi');
+
+    const subForceCancel = await call(env.origin, `/api/admin/bookings/${subBooking.json.booking.id}`, {
+      method: 'PATCH',
+      cookie: agentCookie,
+      body: { status: 'İptal Edildi' },
+    });
+    assert.equal(subForceCancel.status, 403);
+
+    const subFxTry = await call(env.origin, '/api/admin/fx', {
+      method: 'PATCH',
+      cookie: agentCookie,
+      body: { usdTry: 10, eurTry: 10, tryKzt: 10, tryRub: 10 },
+    });
+    assert.equal(subFxTry.status, 403);
   });
 });

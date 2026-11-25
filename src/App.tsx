@@ -15,7 +15,7 @@ import { AuthModals } from './components/AuthModals';
 import { AdminLoginGate } from './components/AdminLoginGate';
 import { DEFAULT_MARKUP, FlightDeal, refreshLiveExchangeRates } from './data/mockData';
 import { addCalendarDays, toCalendarDate } from './data/calendarDates';
-import { api, apiMessage, type BookingDraft } from './data/api';
+import { api, apiMessage, type AdminCatalog, type BookingDraft } from './data/api';
 import { flightSearchHref, hrefForPage, parseFlightSearch, readSiteRoute } from './data/routes';
 
 const MemberPanel = lazy(() =>
@@ -55,6 +55,7 @@ export const App: React.FC = () => {
   const [, setFxVersion] = useState(0);
   const [legalDoc, updateLegalDoc] = useState(() => readSiteRoute(window.location.pathname).legalDoc);
   const [markup, setMarkup] = useState<AdminMarkupConfig>(DEFAULT_MARKUP);
+  const [publicCatalog, setPublicCatalog] = useState<Partial<AdminCatalog>>({});
   const [authMode, setAuthMode] = useState<'login' | 'register' | null>(null);
   const [activeTab, setActiveTab] = useState<SearchTab>('flight');
   const [initialDate] = useState(() => toCalendarDate(new Date()));
@@ -142,6 +143,9 @@ export const App: React.FC = () => {
     api.pricing(controller.signal)
       .then(({ markup }) => setMarkup(markup ?? DEFAULT_MARKUP))
       .catch((error) => { if (!controller.signal.aborted) setNotice(apiMessage(error)); });
+    api.publicCatalog(controller.signal)
+      .then(({ catalog }) => { if (!controller.signal.aborted) setPublicCatalog(catalog ?? {}); })
+      .catch(() => { /* fallback to defaults */ });
     return () => controller.abort();
   }, []);
 
@@ -418,6 +422,7 @@ export const App: React.FC = () => {
               lang={lang}
               currency={currency}
               markup={markup}
+              liveCatalog={publicCatalog}
               onSelectDeal={handleSelectDeal}
               onSelectHotelCity={(city) => {
                 setHotelQuery((prev) => ({ ...prev, destination: city }));
@@ -455,6 +460,7 @@ export const App: React.FC = () => {
             lang={lang}
             currency={currency}
             markup={markup}
+            manualFlights={publicCatalog.flights}
             query={flightQuery}
             onChangeQuery={(next) => {
               setFlightQuery(next);

@@ -28,7 +28,7 @@ import {
   generateFlights,
 } from '../data/mockData';
 import { addCalendarDays, toCalendarDate } from '../data/calendarDates';
-import { api, apiMessage, type BookingDraft } from '../data/api';
+import { api, apiMessage, type AdminCatalog, type BookingDraft } from '../data/api';
 import type { SavedPassengerRecord } from '../types';
 import { openBrandedEticketPdf } from '../utils/eticketPdf';
 import {
@@ -43,6 +43,7 @@ interface FlightResultsPageProps {
   lang?: LangCode;
   currency?: CurrencyCode;
   markup?: AdminMarkupConfig;
+  manualFlights?: AdminCatalog['flights'];
   query: FlightSearchQuery;
   onChangeQuery?: (next: FlightSearchQuery) => void;
   onBackHome: () => void;
@@ -608,6 +609,7 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
   lang = 'TR',
   currency = 'TRY',
   markup = DEFAULT_MARKUP,
+  manualFlights = [],
   query,
   onChangeQuery,
   onBackHome,
@@ -652,10 +654,60 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
   const paxWeight = query.adults + query.children * 0.75 + query.infants * 0.1;
   const calcPaxFare = (unitTRY: number) => Math.round(unitTRY * paxWeight);
   const isRoundTrip = query.tripType === 'roundtrip';
-  const outboundFlights = useMemo(
-    () => generateFlights(query.fromCode, query.toCode, query.departDate, query.cabin, lang, markup, currency),
-    [query.fromCode, query.toCode, query.departDate, query.cabin, lang, markup, currency]
-  );
+  const outboundFlights = useMemo(() => {
+    const generated = generateFlights(query.fromCode, query.toCode, query.departDate, query.cabin, lang, markup, currency);
+    const fromObj = AIRPORTS.find((a) => a.code === query.fromCode);
+    const toObj = AIRPORTS.find((a) => a.code === query.toCode);
+    const custom: FlightResult[] = manualFlights
+      .filter((mf) => mf.active && mf.fromCode.toUpperCase() === query.fromCode.toUpperCase() && mf.toCode.toUpperCase() === query.toCode.toUpperCase())
+      .map((mf) => {
+        const [dh = '10', dm = '00'] = mf.departTime.split(':');
+        const [ah = '14', am = '00'] = mf.arriveTime.split(':');
+        const depMins = Number(dh) * 60 + Number(dm);
+        const arrMins = Number(ah) * 60 + Number(am);
+        const durMins = arrMins > depMins ? arrMins - depMins : (24 * 60 - depMins + arrMins);
+        const nextDay = arrMins < depMins ? 1 : 0;
+        return {
+          id: `manual-${mf.id}`,
+          airline: `${mf.airline} (${mf.operator})`,
+          airlineCode: mf.airlineCode.toUpperCase(),
+          airlineColor: '#00A8B5',
+          flightNumber: mf.flightNumber.toUpperCase(),
+          fromCode: mf.fromCode.toUpperCase(),
+          fromCity: fromObj?.city || mf.fromCode.toUpperCase(),
+          toCode: mf.toCode.toUpperCase(),
+          toCity: toObj?.city || mf.toCode.toUpperCase(),
+          departureDate: query.departDate,
+          arrivalDate: addCalendarDays(query.departDate, nextDay),
+          departTime: mf.departTime,
+          arriveTime: mf.arriveTime,
+          departMinutes: depMins,
+          arriveMinutes: arrMins,
+          durationMinutes: durMins,
+          durationLabel: mf.duration || `${Math.floor(durMins / 60)}sa ${durMins % 60}dk`,
+          stops: 0,
+          seatsLeft: mf.quota,
+          basePrice: mf.priceTRY,
+          packages: [
+            {
+              id: `man-eco-${mf.id}`,
+              name: `${mf.operator} Blok Koltuk`,
+              cabin: 'ECONOMY',
+              priceDelta: 0,
+              cabinBag: '8 kg kabin bagajı',
+              checkedBag: mf.baggage || '20 kg bagaj',
+              refundable: false,
+              refundText: 'Operatör kuralları',
+              changeable: true,
+              changeText: 'Operatör koşullarına göre',
+              meal: 'Standart ikram',
+              seat: 'Standart koltuk',
+            },
+          ],
+        };
+      });
+    return [...custom, ...generated];
+  }, [query.fromCode, query.toCode, query.departDate, query.cabin, lang, markup, currency, manualFlights]);
   const inboundFlights = useMemo(
     () =>
       isRoundTrip
@@ -917,6 +969,7 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
       setBookingPending(true);
       setBookingError('');
       try {
+        const firstLeg = bookingLegs[0];
         const booking = await onAddBooking({
           type: 'Uçak',
           title: bookingTitle,
@@ -928,6 +981,13 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
             : `${firstName} ${lookupSurname}`,
           lookupSurname,
           price: bookingTotal,
+          departTime: firstLeg?.flight.departTime,
+          arriveTime: firstLeg?.flight.arriveTime,
+          flightNumber: firstLeg?.flight.flightNumber,
+          airline: firstLeg?.flight.airline,
+          baggage: firstLeg ? `${firstLeg.pkg.cabinBag} + ${firstLeg.pkg.checkedBag}` : undefined,
+          cabin: firstLeg?.pkg.cabin === 'BUSINESS' ? 'Business Class' : 'Ekonomi',
+          duration: firstLeg?.flight.durationLabel,
           idempotencyKey: checkoutIdemKey,
         });
         setConfirmedBooking(booking);

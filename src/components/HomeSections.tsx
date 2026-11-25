@@ -34,11 +34,13 @@ import {
 } from '../data/mockData';
 import { PHONE_DISPLAY, PHONE_HREF, PHONE_SHORT, TRANSLATIONS, WA_HREF } from '../i18n/translations';
 import { AdminMarkupConfig, CurrencyCode, LangCode, PageView } from '../types';
+import type { AdminCatalog } from '../data/api';
 
 interface HomeSectionsProps {
   lang: LangCode;
   currency?: CurrencyCode;
   markup?: AdminMarkupConfig;
+  liveCatalog?: Partial<AdminCatalog>;
   onSelectDeal: (deal: FlightDeal) => void;
   onSelectHotelCity: (city: string) => void;
   onSelectTransferCity: (city: string) => void;
@@ -638,6 +640,7 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
   lang,
   currency = 'TRY',
   markup = DEFAULT_MARKUP,
+  liveCatalog,
   onSelectDeal,
   onSelectHotelCity,
   onSelectTransferCity,
@@ -653,17 +656,29 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
   const [destTab, setDestTab] = useState<'domestic' | 'intl'>('domestic');
   const [openFaq, setOpenFaq] = useState<number>(0);
 
-  const wideCampaigns = CAMPAIGNS.filter((c) => c.wide);
-  const sideCampaigns = CAMPAIGNS.filter((c) => !c.wide);
-  const curLeft = wideCampaigns[leftSlide % wideCampaigns.length];
-  const curRight = sideCampaigns[rightSlide % sideCampaigns.length];
-  const formatCampaignText = (c: { badge: string; title: string; subtitle: string }) => ({
-    ...c,
-    title: c.title.replace(/350\s*TL/gi, formatPrice(350, currency)),
-    subtitle: c.subtitle.replace(/350\s*TL/gi, formatPrice(350, currency)),
-  });
-  const curLeftText = formatCampaignText(loc.campaigns[curLeft.id] || curLeft);
-  const curRightText = formatCampaignText(loc.campaigns[curRight.id] || curRight);
+  const liveCampaigns = liveCatalog?.coupons
+    ? liveCatalog.coupons
+        .filter((c) => c.active)
+        .map((c, idx) => {
+          const base = CAMPAIGNS.find((m) => m.id === c.id || m.code === c.code) ?? CAMPAIGNS[idx % CAMPAIGNS.length];
+          return { ...base, id: c.id, code: c.code, title: c.title, category: c.category as typeof base.category, validUntil: c.validUntil, wide: idx % 2 === 0 };
+        })
+    : CAMPAIGNS;
+  const effectiveCampaigns = liveCampaigns.length > 0 ? liveCampaigns : [];
+  const wideCampaigns = effectiveCampaigns.filter((c) => c.wide);
+  const sideCampaigns = effectiveCampaigns.filter((c) => !c.wide);
+  const curLeft = wideCampaigns.length > 0 ? wideCampaigns[leftSlide % wideCampaigns.length] : effectiveCampaigns[0];
+  const curRight = sideCampaigns.length > 0 ? sideCampaigns[rightSlide % sideCampaigns.length] : effectiveCampaigns[0];
+  const formatCampaignText = (c?: { badge: string; title: string; subtitle: string }) =>
+    c
+      ? {
+          ...c,
+          title: c.title.replace(/350\s*TL/gi, formatPrice(350, currency)),
+          subtitle: c.subtitle.replace(/350\s*TL/gi, formatPrice(350, currency)),
+        }
+      : { badge: '', title: '', subtitle: '' };
+  const curLeftText = formatCampaignText(curLeft ? (loc.campaigns[curLeft.id] || curLeft) : undefined);
+  const curRightText = formatCampaignText(curRight ? (loc.campaigns[curRight.id] || curRight) : undefined);
 
   const flightDeals = getFlightDeals(lang, markup);
   const featuredDeal = flightDeals[0];
@@ -672,14 +687,44 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
 
   const hotelMult = 1 + (markup.hotelPercent - DEFAULT_MARKUP.hotelPercent) / 100;
   const transferDiff = markup.transferAddTRY - DEFAULT_MARKUP.transferAddTRY;
-  const featuredHotel = {
-    ...HOTEL_DEALS[0],
-    price: Math.max(990, Math.round(HOTEL_DEALS[0].price * hotelMult)),
-  };
-  const otherHotels = HOTEL_DEALS.slice(1).map((h) => ({
-    ...h,
-    price: Math.max(990, Math.round(h.price * hotelMult)),
-  }));
+  const activeHotelsList = liveCatalog?.hotels
+    ? liveCatalog.hotels
+        .filter((h) => h.active)
+        .map((h, idx) => {
+          const base = HOTEL_DEALS.find((m) => m.id === h.id) ?? HOTEL_DEALS[idx % HOTEL_DEALS.length];
+          return {
+            ...base,
+            id: h.id,
+            city: h.city,
+            name: h.name,
+            stars: h.stars,
+            boardType: h.boardType,
+            nights: h.nights,
+            price: Math.max(500, Math.round(h.price * hotelMult)),
+          };
+        })
+    : HOTEL_DEALS.map((h) => ({ ...h, price: Math.max(990, Math.round(h.price * hotelMult)) }));
+
+  const featuredHotel = activeHotelsList[0];
+  const otherHotels = activeHotelsList.slice(1);
+
+  const activeTransfersList = liveCatalog?.transfers
+    ? liveCatalog.transfers
+        .filter((tr) => tr.active)
+        .map((tr, idx) => {
+          const base = TRANSFER_DEALS.find((m) => m.id === tr.id) ?? TRANSFER_DEALS[idx % TRANSFER_DEALS.length];
+          return {
+            ...base,
+            id: tr.id,
+            city: tr.city,
+            vehicle: tr.vehicle,
+            route: tr.route,
+            capacity: tr.capacity,
+            baggage: tr.baggage,
+            price: tr.price,
+          };
+        })
+    : TRANSFER_DEALS;
 
   const trCity = (name: string) => loc.cities[name] || name;
   const trBoard = (bt: string) => loc.boardTypes[bt] || bt;
@@ -715,6 +760,7 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
       </section>
 
       {/* 2. CAMPAIGNS SLIDER */}
+      {curLeft && curRight && (
       <section className="ufc-section">
         <div className="container">
           <div className="section-head-row">
@@ -842,6 +888,7 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
           </div>
         </div>
       </section>
+      )}
 
       {/* 3. FIRSAT RADARI */}
       <section className="ufd-section" id="firsat-radari">
@@ -996,6 +1043,7 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
             <p className="section-sub-right">{t.hotelsSub}</p>
           </div>
 
+          {featuredHotel && (
           <div className="hotels-split">
             <div className="hotel-featured-card">
               <img src={featuredHotel.image} alt={featuredHotel.name} />
@@ -1063,6 +1111,7 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
               ))}
             </div>
           </div>
+          )}
         </div>
       </section>
 
@@ -1078,7 +1127,7 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
           </div>
 
           <div className="transfers-grid">
-            {TRANSFER_DEALS.map((tr) => {
+            {activeTransfersList.map((tr) => {
               const trLoc = loc.transfers[tr.id];
               return (
                 <div

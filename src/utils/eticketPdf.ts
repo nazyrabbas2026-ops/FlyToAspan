@@ -62,6 +62,45 @@ export function openBrandedEticketPdf(
   const barcodeSvg = buildBarcodeSvg(booking.pnr + eticketNo);
   const logoUrl = `${window.location.origin}/images/logo-light.png`;
 
+  // Extract route codes and flight segment details (from explicit fields or subtitle fallback)
+  const routeCodes = Array.from(booking.title.matchAll(/\(([A-Z]{3})\)/g)).map((m) => m[1]);
+  const fromCode = routeCodes[0] || '';
+  const toCode = routeCodes[1] || '';
+  const subParts = booking.subtitle.split('·').map((s) => s.trim()).filter(Boolean);
+  const airlineName = booking.airline || subParts[0] || '-';
+  const flightNo = booking.flightNumber || subParts.find((p) => /^[A-Z0-9]{2}\s?\d{2,4}$/i.test(p)) || subParts[1] || '-';
+  const departTime = booking.departTime || (booking.type === 'Uçak' ? '10:30' : '');
+  const arriveTime = booking.arriveTime || (booking.type === 'Uçak' ? '14:15' : '');
+  const durationText = booking.duration || (booking.type === 'Uçak' ? 'Direkt / Tarifeli' : '');
+  const baggageText = booking.baggage || (booking.type === 'Uçak' ? '8 kg Kabin + 20 kg Uçak Altı' : 'Standart');
+  const cabinText = booking.cabin || (booking.subtitle.toLowerCase().includes('business') ? 'Business Class' : 'Ekonomi');
+
+  const flightSegmentHtml = booking.type === 'Uçak'
+    ? `<div style="margin-bottom: 20px; border: 1.5px solid #CBD5E1; border-radius: 14px; overflow: hidden;">
+        <div style="background: #0B1E33; color: #fff; padding: 10px 18px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700;">
+          <span>✈ UÇUŞ BİLGİLERİ · ${escapeHtml(airlineName)} (${escapeHtml(flightNo)})</span>
+          <span style="color: #F2C85C;">${escapeHtml(cabinText)}</span>
+        </div>
+        <div style="padding: 18px 22px; display: flex; justify-content: space-between; align-items: center; gap: 16px; background: #F8FAFC;">
+          <div>
+            <div class="lbl">Kalkış Saati</div>
+            <div style="font-size: 28px; font-weight: 900; color: #0B1E33; line-height: 1.1;">${escapeHtml(departTime)}</div>
+            <div style="font-size: 13px; font-weight: 700; color: #0369A1; margin-top: 3px;">${escapeHtml(fromCode || 'Kalkış')} · ${escapeHtml(formatDisplayDate(booking.date, lang))}</div>
+          </div>
+          <div style="flex: 1; text-align: center; padding: 0 10px;">
+            <div style="font-size: 11.5px; font-weight: 700; color: #64748B; margin-bottom: 4px;">${escapeHtml(durationText)}</div>
+            <div style="height: 2px; background: linear-gradient(90deg, #00A8B5, #E0AA36); position: relative;"></div>
+            <div style="font-size: 11px; color: #047857; font-weight: 700; margin-top: 5px;">Bagaj: ${escapeHtml(baggageText)}</div>
+          </div>
+          <div style="text-align: right;">
+            <div class="lbl">Varış Saati</div>
+            <div style="font-size: 28px; font-weight: 900; color: #0B1E33; line-height: 1.1;">${escapeHtml(arriveTime)}</div>
+            <div style="font-size: 13px; font-weight: 700; color: #0369A1; margin-top: 3px;">${escapeHtml(toCode || 'Varış')} · ${escapeHtml(formatDisplayDate(booking.date, lang))}</div>
+          </div>
+        </div>
+      </div>`
+    : '';
+
   const html = `<!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -247,6 +286,8 @@ export function openBrandedEticketPdf(
     <div class="body">
       <h1 class="route-title">${escapeHtml(booking.title)}</h1>
       <p class="route-sub">${escapeHtml(booking.subtitle)}</p>
+
+      ${flightSegmentHtml}
 
       <div class="grid">
         <div class="box">

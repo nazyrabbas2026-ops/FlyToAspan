@@ -28,9 +28,14 @@ const VALID_PERMISSIONS = new Set([
   'tours.sell',
   'bookings.view_own',
   'bookings.view_org',
+  'bookings.cancel_request',
   'bookings.manage',
   'inventory.manage',
+  'flights.manual',
   'pricing.edit',
+  'fx.manage',
+  'coupons.manage',
+  'apis.manage',
   'team.manage',
 ]);
 const VALID_MODULES = new Set(['flights', 'hotels', 'transfers', 'tours']);
@@ -71,6 +76,12 @@ const catalogFields = {
   hotels: { city: 60, name: 120, stars: 'integer', boardType: 60, nights: 'integer', price: 'integer', active: 'boolean' },
   transfers: { city: 60, vehicle: 120, route: 140, capacity: 48, baggage: 48, price: 'integer', active: 'boolean' },
   tours: { city: 60, title: 140, duration: 48, quota: 'integer', price: 'integer', active: 'boolean' },
+  operators: { operator: 80, product: 32, markupType: 16, markupValue: 'integer', active: 'boolean' },
+  flights: {
+    airline: 80, airlineCode: 8, flightNumber: 20, fromCode: 8, toCode: 8,
+    departTime: 10, arriveTime: 10, duration: 24, operator: 60, baggage: 40,
+    priceTRY: 'integer', quota: 'integer', active: 'boolean',
+  },
 };
 
 class RequestError extends Error {
@@ -186,6 +197,13 @@ function newDemoBooking(db, body, owner) {
     subtitle: text(body.subtitle, 320),
     passenger: text(body.passenger, 150, 2),
     price: Math.round(body.price * 100) / 100,
+    departTime: typeof body.departTime === 'string' ? body.departTime.trim().slice(0, 10) : undefined,
+    arriveTime: typeof body.arriveTime === 'string' ? body.arriveTime.trim().slice(0, 10) : undefined,
+    flightNumber: typeof body.flightNumber === 'string' ? body.flightNumber.trim().slice(0, 24) : undefined,
+    airline: typeof body.airline === 'string' ? body.airline.trim().slice(0, 60) : undefined,
+    baggage: typeof body.baggage === 'string' ? body.baggage.trim().slice(0, 60) : undefined,
+    cabin: typeof body.cabin === 'string' ? body.cabin.trim().slice(0, 32) : undefined,
+    duration: typeof body.duration === 'string' ? body.duration.trim().slice(0, 24) : undefined,
     demo: true,
   };
   const id = randomBytes(16).toString('hex');
@@ -361,10 +379,25 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
       const token = sessionToken(req, cookieName);
       const user = getSessionUser(token);
       if (path.startsWith('/api/admin/')) {
-        const staffBookingRoute = path === '/api/admin/bookings' || /^\/api\/admin\/bookings\/[a-f0-9]{32}$/.test(path);
         const isSuperAdmin = user?.role === 'admin' && (user.status || 'active') === 'active';
-        if (!isSuperAdmin && !(staffBookingRoute && canAccessPanel(user))) {
-          fail(user ? 403 : 401, 'Bu işlem için yönetici veya yetkili ekip girişi gerekiyor.');
+        const staffBookingRoute = path === '/api/admin/bookings' || /^\/api\/admin\/bookings\/[a-f0-9]{32}$/.test(path);
+        const staffCatalogRead = method === 'GET' && path === '/api/admin/catalog';
+        const staffCatalogWrite = method === 'PUT' && /^\/api\/admin\/catalog\/(rules|coupons|agencies|hotels|transfers|tours|operators|flights)$/.test(path);
+        const staffPricingRoute = path === '/api/admin/pricing' && hasPerm(user, 'pricing.edit');
+        const staffFxRoute = path === '/api/admin/fx' && hasPerm(user, 'fx.manage');
+        let allowedStaff = false;
+        if (canAccessPanel(user)) {
+          if (staffBookingRoute || staffCatalogRead || staffPricingRoute || staffFxRoute) allowedStaff = true;
+          if (staffCatalogWrite) {
+            const sec = path.split('/')[4];
+            if ((sec === 'hotels' || sec === 'transfers' || sec === 'tours') && hasPerm(user, 'inventory.manage')) allowedStaff = true;
+            if (sec === 'flights' && (hasPerm(user, 'flights.manual') || hasPerm(user, 'inventory.manage'))) allowedStaff = true;
+            if ((sec === 'rules' || sec === 'operators') && hasPerm(user, 'pricing.edit')) allowedStaff = true;
+            if (sec === 'coupons' && hasPerm(user, 'coupons.manage')) allowedStaff = true;
+          }
+        }
+        if (!isSuperAdmin && !allowedStaff) {
+          fail(user ? 403 : 401, 'Bu işlem için yönetici veya ilgili ekip yetkisi gerekiyor.');
         }
       }
 
@@ -491,6 +524,10 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         });
       } else if (method === 'GET' && path === '/api/pricing') {
         send(res, 200, { markup: readMarkup() });
+      } else if (method === 'GET' && path === '/api/catalog') {
+        const rows = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'catalog:%'").all();
+        const catalog = Object.fromEntries(rows.map(({ key, value }) => [key.slice('catalog:'.length), JSON.parse(value).items]));
+        send(res, 200, { catalog });
       } else if (method === 'GET' && path === '/api/fx') {
         send(res, 200, await readFxRates());
       } else if (method === 'POST' && path === '/api/bookings/lookup') {
@@ -591,7 +628,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const rows = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'catalog:%'").all();
         const catalog = Object.fromEntries(rows.map(({ key, value }) => [key.slice('catalog:'.length), JSON.parse(value)]));
         send(res, 200, { catalog });
-      } else if (method === 'PUT' && /^\/api\/admin\/catalog\/(rules|coupons|agencies|hotels|transfers|tours)$/.test(path)) {
+      } else if (method === 'PUT' && /^\/api\/admin\/catalog\/(rules|coupons|agencies|hotels|transfers|tours|operators|flights)$/.test(path)) {
         const section = path.split('/')[4];
         const key = 'catalog:' + section;
         const body = await readJson(req);
@@ -607,12 +644,9 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         send(res, 200, { entry });
       } else if ((method === 'PATCH' || method === 'DELETE') && /^\/api\/admin\/bookings\/[a-f0-9]{32}$/.test(path)) {
         const id = path.split('/').at(-1);
-        if (user.role !== 'admin' && !hasPerm(user, 'bookings.manage')) {
-          fail(403, 'Rezervasyon durumu değiştirme yetkiniz yok.');
-        }
         const existingBk = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id);
         if (!existingBk) fail(404, 'Rezervasyon bulunamadı.');
-        if (user.role !== 'admin' && existingBk.organization_id !== user.organization_id && existingBk.owner_id !== user.id) {
+        if (user.role !== 'admin' && existingBk.organization_id !== user.organization_id && existingBk.owner_id !== user.id && existingBk.sold_by_user_id !== user.id) {
           fail(403, 'Başka bir şirketin rezervasyonuna müdahale edemezsiniz.');
         }
         if (method === 'DELETE') {
@@ -623,6 +657,11 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         } else {
           const { status } = await readJson(req);
           if (!statuses.includes(status)) fail(400, 'Rezervasyon durumu geçersiz.');
+          const canDirectManage = user.role === 'admin' || hasPerm(user, 'bookings.manage');
+          const canCancelReq = status === 'İptal Talebi' && existingBk.status === 'Onaylandı' && (canDirectManage || hasPerm(user, 'bookings.cancel_request'));
+          if (!canDirectManage && !canCancelReq) {
+            fail(403, 'Bu rezervasyon durumunu değiştirme yetkiniz yok.');
+          }
           const row = db.prepare('UPDATE bookings SET status = ? WHERE id = ? RETURNING *').get(status, id);
           writeAuditLog(db, { actorEmail: user.email, action: 'admin:booking_status', target: `${row.pnr}:${status}`, ip });
           send(res, 200, { booking: bookingRecord(row) });

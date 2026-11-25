@@ -65,9 +65,14 @@ export type StaffPermission =
   | 'tours.sell'
   | 'bookings.view_own'
   | 'bookings.view_org'
+  | 'bookings.cancel_request'
   | 'bookings.manage'
   | 'inventory.manage'
+  | 'flights.manual'
   | 'pricing.edit'
+  | 'fx.manage'
+  | 'coupons.manage'
+  | 'apis.manage'
   | 'team.manage';
 
 export interface Organization {
@@ -149,6 +154,13 @@ export interface BookingRecord {
   invoiceCompany?: string;
   invoiceTaxNo?: string;
   price: number;
+  departTime?: string;
+  arriveTime?: string;
+  flightNumber?: string;
+  airline?: string;
+  baggage?: string;
+  cabin?: string;
+  duration?: string;
   createdAt?: number;
   sellerName?: string | null;
   sellerEmail?: string | null;
