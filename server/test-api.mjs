@@ -956,7 +956,46 @@ test('FlyToAspan API & Security Suite', async (t) => {
       method: 'PUT', cookie: sCookie, body: { revision: cRev, items: [] },
     })).status, 200);
 
-    // 14-15: team.manage (users & orgs allowed, role promotion to admin still 403!)
+    // 14-15: apis.manage (providers CRUD & server-info) + team.manage
+    assert.equal((await call(env.origin, '/api/admin/catalog/providers', {
+      method: 'PUT', cookie: sCookie, body: { revision: 0, items: [] },
+    })).status, 403);
+    await setPerms(['apis.manage']);
+    const pSave = await call(env.origin, '/api/admin/catalog/providers', {
+      method: 'PUT',
+      cookie: sCookie,
+      body: {
+        revision: 0,
+        items: [{
+          id: 'prov-test-1',
+          name: 'Kompas XML',
+          protocol: 'SAMO XML',
+          category: 'Tur Operatörü',
+          apiUrl: 'https://online.kompastour.com/export/default.php',
+          xmlFeedUrl: 'https://online.kompastour.com/export/flights.xml',
+          apiKey: 'secret-key-123',
+          username: 'infinitive',
+          password: 'secret-password',
+          agentCode: 'KMP-01',
+          docsUrl: 'https://doku.samo.ru',
+          whitelistIp: '1.2.3.4',
+          mode: 'Test / Sandbox',
+          active: true,
+        }],
+      },
+    });
+    assert.equal(pSave.status, 200);
+    // Security check: providers (with API keys/passwords) MUST NEVER leak on public GET /api/catalog!
+    const pubCatCheck = await call(env.origin, '/api/catalog');
+    assert.equal(pubCatCheck.status, 200);
+    assert.equal('providers' in pubCatCheck.json.catalog, false);
+    // SSRF guard: localhost test URL must be rejected with 400
+    const ssrfTry = await call(env.origin, '/api/admin/providers/test', {
+      method: 'POST', cookie: sCookie, body: { url: 'https://127.0.0.1:8080/secret' },
+    });
+    assert.equal(ssrfTry.status, 400);
+
+    // team.manage (users & orgs allowed, role promotion to admin still 403!)
     assert.equal((await call(env.origin, '/api/admin/users', { cookie: sCookie })).status, 403);
     await setPerms(['team.manage']);
     assert.equal((await call(env.origin, '/api/admin/users', { cookie: sCookie })).status, 200);

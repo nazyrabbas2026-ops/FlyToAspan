@@ -82,6 +82,12 @@ const catalogFields = {
     departTime: 10, arriveTime: 10, duration: 24, operator: 60, baggage: 40,
     flightDate: 'optional:16', priceTRY: 'integer', quota: 'integer', active: 'boolean',
   },
+  providers: {
+    name: 100, protocol: 24, category: 32, apiUrl: 240,
+    xmlFeedUrl: 'optional:240', apiKey: 'optional:180', username: 'optional:100',
+    password: 'optional:120', agentCode: 'optional:64', docsUrl: 'optional:240',
+    whitelistIp: 'optional:80', mode: 24, active: 'boolean',
+  },
 };
 
 class RequestError extends Error {
@@ -394,9 +400,10 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const isSuperAdmin = user?.role === 'admin' && (user.status || 'active') === 'active';
         const staffBookingRoute = path === '/api/admin/bookings' || /^\/api\/admin\/bookings\/[a-f0-9]{32}$/.test(path);
         const staffCatalogRead = method === 'GET' && path === '/api/admin/catalog';
-        const staffCatalogWrite = method === 'PUT' && /^\/api\/admin\/catalog\/(rules|coupons|agencies|hotels|transfers|tours|operators|flights)$/.test(path);
+        const staffCatalogWrite = method === 'PUT' && /^\/api\/admin\/catalog\/(rules|coupons|agencies|hotels|transfers|tours|operators|flights|providers)$/.test(path);
         const staffPricingRoute = path === '/api/admin/pricing' && hasPerm(user, 'pricing.edit');
         const staffFxRoute = path === '/api/admin/fx' && hasPerm(user, 'fx.manage');
+        const staffApiRoute = (path === '/api/admin/server-info' || path === '/api/admin/providers/test') && hasPerm(user, 'apis.manage');
         const staffTeamRoute =
           hasPerm(user, 'team.manage') &&
           (path === '/api/admin/users' ||
@@ -405,13 +412,14 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
             /^\/api\/admin\/organizations\/[a-f0-9]{24}(\/(ledger|payment))?$/.test(path));
         let allowedStaff = false;
         if (canAccessPanel(user)) {
-          if (staffBookingRoute || staffCatalogRead || staffPricingRoute || staffFxRoute || staffTeamRoute) allowedStaff = true;
+          if (staffBookingRoute || staffCatalogRead || staffPricingRoute || staffFxRoute || staffApiRoute || staffTeamRoute) allowedStaff = true;
           if (staffCatalogWrite) {
             const sec = path.split('/')[4];
             if ((sec === 'hotels' || sec === 'transfers' || sec === 'tours') && hasPerm(user, 'inventory.manage')) allowedStaff = true;
             if (sec === 'flights' && hasPerm(user, 'flights.manual')) allowedStaff = true;
             if ((sec === 'rules' || sec === 'operators') && hasPerm(user, 'pricing.edit')) allowedStaff = true;
             if (sec === 'coupons' && hasPerm(user, 'coupons.manage')) allowedStaff = true;
+            if (sec === 'providers' && hasPerm(user, 'apis.manage')) allowedStaff = true;
           }
         }
         if (!isSuperAdmin && !allowedStaff) {
@@ -543,7 +551,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
       } else if (method === 'GET' && path === '/api/pricing') {
         send(res, 200, { markup: readMarkup() });
       } else if (method === 'GET' && path === '/api/catalog') {
-        const rows = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'catalog:%'").all();
+        const rows = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'catalog:%' AND key != 'catalog:providers'").all();
         const catalog = Object.fromEntries(rows.map(({ key, value }) => [key.slice('catalog:'.length), JSON.parse(value).items]));
         if (!('operators' in catalog)) {
           catalog.operators = [
@@ -705,7 +713,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const rows = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'catalog:%'").all();
         const catalog = Object.fromEntries(rows.map(({ key, value }) => [key.slice('catalog:'.length), JSON.parse(value)]));
         send(res, 200, { catalog });
-      } else if (method === 'PUT' && /^\/api\/admin\/catalog\/(rules|coupons|agencies|hotels|transfers|tours|operators|flights)$/.test(path)) {
+      } else if (method === 'PUT' && /^\/api\/admin\/catalog\/(rules|coupons|agencies|hotels|transfers|tours|operators|flights|providers)$/.test(path)) {
         const section = path.split('/')[4];
         const key = 'catalog:' + section;
         const body = await readJson(req);
@@ -1045,6 +1053,63 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const id = path.split('/').at(-1);
         db.prepare('DELETE FROM crm_quotes WHERE id = ?').run(id);
         send(res, 200, { ok: true });
+      } else if (method === 'GET' && path === '/api/admin/server-info') {
+        let outboundIp = process.env.FLYTOASPAN_PUBLIC_IP || '';
+        if (!outboundIp) {
+          try {
+            const ctrl = new AbortController();
+            const tmr = setTimeout(() => ctrl.abort(), 2500);
+            const r = await fetch('https://api.ipify.org?format=json', { signal: ctrl.signal });
+            clearTimeout(tmr);
+            if (r.ok) {
+              const d = await r.json();
+              if (typeof d?.ip === 'string') outboundIp = d.ip;
+            }
+          } catch { /* fallback below */ }
+        }
+        send(res, 200, {
+          outboundIp: outboundIp || 'Sunucu IP (Render Outbound IP listesini kontrol edin)',
+          host: req.headers.host || 'flytoaspan.onrender.com',
+          protocol: 'HTTPS / TLS 1.3',
+        });
+      } else if (method === 'POST' && path === '/api/admin/providers/test') {
+        const body = await readJson(req);
+        const rawUrl = text(body.url, 240, 8);
+        let parsed;
+        try { parsed = new URL(rawUrl); } catch { fail(400, 'Geçerli bir HTTPS adresi girin.'); }
+        if (parsed.protocol !== 'https:') fail(400, 'Güvenlik gereği yalnızca HTTPS adresleri test edilebilir.');
+        const hostLower = parsed.hostname.toLowerCase();
+        if (
+          hostLower === 'localhost' ||
+          hostLower.endsWith('.local') ||
+          /^127\.|^10\.|^192\.168\.|^169\.254\.|^172\.(1[6-9]|2\d|3[01])\.|^\[?::1\]?/.test(hostLower)
+        ) {
+          fail(400, 'Yerel veya özel ağ adresleri test edilemez.');
+        }
+        const started = Date.now();
+        try {
+          const ctrl = new AbortController();
+          const tmr = setTimeout(() => ctrl.abort(), 4000);
+          const probe = await fetch(parsed.toString(), { method: 'HEAD', redirect: 'manual', signal: ctrl.signal });
+          clearTimeout(tmr);
+          const latencyMs = Date.now() - started;
+          send(res, 200, {
+            ok: probe.status < 500,
+            status: probe.status,
+            latencyMs,
+            message: `Sunucu yanıt verdi (HTTP ${probe.status} · ${latencyMs} ms).`,
+          });
+        } catch (err) {
+          const latencyMs = Date.now() - started;
+          send(res, 200, {
+            ok: false,
+            status: 0,
+            latencyMs,
+            message: err?.name === 'AbortError'
+              ? 'Zaman aşımı (4 sn) — sunucu IP Whitelist veya VPN istiyor olabilir.'
+              : 'Bağlantı kurulamadı — URL veya IP Whitelist ayarını kontrol edin.',
+          });
+        }
       } else if (method === 'GET' && path === '/api/admin/audit') {
         const rows = db.prepare('SELECT id, actor_email, action, target, ip, created_at FROM audit_logs ORDER BY created_at DESC LIMIT 150').all();
         send(res, 200, { logs: rows });

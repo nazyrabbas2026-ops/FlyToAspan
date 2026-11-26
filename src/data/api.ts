@@ -67,6 +67,11 @@ export interface AdminCatalog {
     departTime: string; arriveTime: string; duration: string; operator: string; baggage: string;
     flightDate?: string; priceTRY: number; quota: number; active: boolean;
   }[];
+  providers: {
+    id: string; name: string; protocol: string; category: string; apiUrl: string;
+    xmlFeedUrl?: string; apiKey?: string; username?: string; password?: string;
+    agentCode?: string; docsUrl?: string; whitelistIp?: string; mode: string; active: boolean;
+  }[];
 }
 
 export type AdminCatalogState = {
@@ -152,6 +157,8 @@ export const api = {
     request<{ quote: CrmQuote; booking: BookingRecord }>(`/admin/crm/quotes/${encodeURIComponent(id)}/convert`, 'POST'),
   deleteCrmQuote: (id: string) => request<{ ok: true }>(`/admin/crm/quotes/${encodeURIComponent(id)}`, 'DELETE'),
   adminAuditLogs: (signal?: AbortSignal) => request<{ logs: AuditLogEntry[] }>('/admin/audit', 'GET', undefined, signal),
+  adminServerInfo: (signal?: AbortSignal) => request<{ outboundIp: string; host: string; protocol: string }>('/admin/server-info', 'GET', undefined, signal),
+  testProviderConnection: (url: string) => request<{ ok: boolean; status: number; latencyMs: number; message: string }>('/admin/providers/test', 'POST', { url }),
 };
 
 export type BookingDraft = Pick<BookingRecord, 'type' | 'title' | 'subtitle' | 'date' | 'returnDate' | 'passenger' | 'price' | 'departTime' | 'arriveTime' | 'flightNumber' | 'airline' | 'baggage' | 'cabin' | 'duration'> & {

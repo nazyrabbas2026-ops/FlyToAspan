@@ -317,6 +317,104 @@ const exampleCatalog: AdminCatalog = {
       active: true,
     },
   ],
+  providers: [
+    {
+      id: 'prov-funsun',
+      name: 'FUN&SUN (SAMO-Tour XML)',
+      protocol: 'SAMO XML',
+      category: 'Tur Operatörü & Charter',
+      apiUrl: 'https://online.funsun.kz/export/default.php?samo_action=api',
+      xmlFeedUrl: 'https://online.funsun.kz/export/flights.xml',
+      apiKey: '',
+      username: 'infinitive_tr',
+      password: '',
+      agentCode: 'FS-INF-2026',
+      docsUrl: 'https://doku.samo.ru/doku.php?id=onlinest:api',
+      whitelistIp: '',
+      mode: 'Beklemede',
+      active: true,
+    },
+    {
+      id: 'prov-kompas',
+      name: 'Kompas Tour (SAMO XML)',
+      protocol: 'SAMO XML',
+      category: 'Tur Operatörü & Charter',
+      apiUrl: 'https://online.kompastour.com/export/default.php?samo_action=api',
+      xmlFeedUrl: 'https://online.kompastour.com/export/flights.xml',
+      apiKey: '',
+      username: 'infinitive_kz',
+      password: '',
+      agentCode: 'KMP-FTA-01',
+      docsUrl: 'https://doku.samo.ru/doku.php?id=onlinest:api',
+      whitelistIp: '',
+      mode: 'Beklemede',
+      active: true,
+    },
+    {
+      id: 'prov-selfie',
+      name: 'Selfie Travel (XML)',
+      protocol: 'XML / SOAP',
+      category: 'Tur Operatörü & Charter',
+      apiUrl: 'https://online.selfietravel.kz/export/default.php?samo_action=api',
+      xmlFeedUrl: '',
+      apiKey: '',
+      username: '',
+      password: '',
+      agentCode: 'SLF-FTA-01',
+      docsUrl: '',
+      whitelistIp: '',
+      mode: 'Beklemede',
+      active: true,
+    },
+    {
+      id: 'prov-buranus',
+      name: 'Buranus B2B & Charter API',
+      protocol: 'REST JSON',
+      category: 'Uçak & Charter',
+      apiUrl: 'https://agent.buranus.com/api/v1',
+      xmlFeedUrl: '',
+      apiKey: '',
+      username: '',
+      password: '',
+      agentCode: 'INF-6199-TR',
+      docsUrl: 'https://agent.buranus.com',
+      whitelistIp: '',
+      mode: 'Beklemede',
+      active: true,
+    },
+    {
+      id: 'prov-amadeus',
+      name: 'Amadeus GDS Global Flight API',
+      protocol: 'REST JSON',
+      category: 'Uçak & GDS',
+      apiUrl: 'https://api.amadeus.com/v2/shopping/flight-offers',
+      xmlFeedUrl: '',
+      apiKey: '',
+      username: '',
+      password: '',
+      agentCode: 'AMA-IST-9021',
+      docsUrl: 'https://developers.amadeus.com/self-service',
+      whitelistIp: '',
+      mode: 'Test / Sandbox',
+      active: true,
+    },
+    {
+      id: 'prov-pos',
+      name: 'iyzico / PayTR 3D Secure POS',
+      protocol: 'POS 3D',
+      category: 'Sanal POS',
+      apiUrl: 'https://api.iyzipay.com/payment/3dsecure',
+      xmlFeedUrl: '',
+      apiKey: '',
+      username: '',
+      password: '',
+      agentCode: 'POS-MERCHANT-90531',
+      docsUrl: 'https://docs.iyzico.com',
+      whitelistIp: '',
+      mode: 'Test / Sandbox',
+      active: true,
+    },
+  ],
 };
 
 const ADMIN_I18N: Record<'TR' | 'EN' | 'RU', {
@@ -536,7 +634,31 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   const coupons = catalog?.coupons?.items ?? exampleCatalog.coupons;
   const managedHotels = catalog?.hotels?.items ?? exampleCatalog.hotels;
   const managedTransfers = catalog?.transfers?.items ?? exampleCatalog.transfers;
+  const managedProviders = catalog?.providers?.items ?? exampleCatalog.providers;
   const catalogWritable = catalog !== null && !busy;
+
+  // Inline manual price editing for Operator XML rules
+  const [editingOpId, setEditingOpId] = useState<string | null>(null);
+  const [editOpType, setEditOpType] = useState<'NET' | 'EUR' | 'TRY' | 'PERCENT'>('EUR');
+  const [editOpVal, setEditOpVal] = useState('10');
+
+  // Supplier XML / API Hub state
+  const [serverInfo, setServerInfo] = useState<{ outboundIp: string; host: string; protocol: string } | null>(null);
+  const [revealedSecrets, setRevealedSecrets] = useState<Record<string, boolean>>({});
+  const [providerTestResults, setProviderTestResults] = useState<Record<string, { ok: boolean; message: string; testing?: boolean }>>({});
+  const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
+  const [provName, setProvName] = useState('');
+  const [provProtocol, setProvProtocol] = useState('SAMO XML');
+  const [provCategory, setProvCategory] = useState('Tur Operatörü & Charter');
+  const [provMode, setProvMode] = useState('Test / Sandbox');
+  const [provApiUrl, setProvApiUrl] = useState('');
+  const [provXmlFeedUrl, setProvXmlFeedUrl] = useState('');
+  const [provApiKey, setProvApiKey] = useState('');
+  const [provUsername, setProvUsername] = useState('');
+  const [provPassword, setProvPassword] = useState('');
+  const [provAgentCode, setProvAgentCode] = useState('');
+  const [provDocsUrl, setProvDocsUrl] = useState('');
+  const [provWhitelistIp, setProvWhitelistIp] = useState('');
 
   // New Operator XML Pricing rule state
   const [newOpName, setNewOpName] = useState('');
@@ -626,51 +748,21 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
 
   // Module 6: B2B Agencies & Members Management
 
-  // Module 7: Supplier APIs (Buranus, Amadeus, BookingAgora, iyzico)
-  const [apiConnectors] = useState([
-    {
-      id: 'api-buranus',
-      name: 'Buranus B2B & Charter API (agent.buranus.com)',
-      desc: 'Tarifeli + Charter uçuşlar, otel ve VIP havalimanı transfer tedarik bağlantısı',
-      endpoint: 'https://agent.buranus.com/api/v1',
-      agentCode: 'INF-6199-TR',
-      mode: 'Hazır (API Anahtarı Bekleniyor)',
-      enabled: true,
-    },
-    {
-      id: 'api-amadeus',
-      name: 'Amadeus GDS Global Flight API',
-      desc: '500+ uluslararası tarifeli havayolu anlık koltuk ve PNR biletleme servisi',
-      endpoint: 'https://api.amadeus.com/v2/shopping/flight-offers',
-      agentCode: 'AMA-IST-9021',
-      mode: 'Test Modu Aktif',
-      enabled: true,
-    },
-    {
-      id: 'api-agora',
-      name: 'BookingAgora / BiletBank B2B XML',
-      desc: 'Türkiye yerel konsolidatör THY, Pegasus, AJet, Air Astana NDC bağlantısı',
-      endpoint: 'https://xml.bookingagora.com/service',
-      agentCode: 'AGORA-FTA-01',
-      mode: 'Test Modu Aktif',
-      enabled: true,
-    },
-    {
-      id: 'api-pos',
-      name: 'iyzico / PayTR 3D Secure Sanal POS',
-      desc: 'Visa, Mastercard, Troy, Kaspi & Mir 3D Secure tahsilat ve otomatik iade',
-      endpoint: 'https://api.iyzipay.com/payment/3dsecure',
-      agentCode: 'POS-MERCHANT-90531',
-      mode: '3D Secure Simülasyon Aktif',
-      enabled: true,
-    },
-  ]);
-
   useEffect(() => {
     const controller = new AbortController();
     api.adminCatalog(controller.signal)
       .then(({ catalog }) => { if (!controller.signal.aborted) setCatalog(catalog); })
       .catch(() => { /* staff without catalog access */ });
+    if (canManageApis) {
+      api.adminServerInfo(controller.signal)
+        .then((info) => {
+          if (!controller.signal.aborted) {
+            setServerInfo(info);
+            setProvWhitelistIp((prev) => prev || (info.outboundIp.includes('.') ? info.outboundIp : ''));
+          }
+        })
+        .catch(() => { /* ignore */ });
+    }
     if (canManageTeam) {
       api.adminUsers(controller.signal)
         .then(({ users }) => { if (!controller.signal.aborted) setSiteUsers(users); })
@@ -690,7 +782,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
       controller.abort();
       if (pollId !== null) window.clearInterval(pollId);
     };
-  }, [canManageTeam]);
+  }, [canManageTeam, canManageApis]);
 
   const pendingUsers = useMemo(
     () => siteUsers.filter((u) => u.status === 'pending'),
@@ -2332,9 +2424,34 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                     <span className="pkg-pill">{op.product}</span>
                                   </td>
                                   <td data-label="Kâr Kuralı">
-                                    <span className={`status-badge ${op.markupType === 'NET' || op.markupValue === 0 ? 'ok' : 'warn'}`}>
-                                      {badgeText}
-                                    </span>
+                                    {editingOpId === op.id ? (
+                                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                                        <select
+                                          className="modal-input"
+                                          style={{ height: 34, fontSize: 12, minWidth: 112, padding: '0 8px' }}
+                                          value={editOpType}
+                                          onChange={(e) => setEditOpType(e.target.value as 'NET' | 'EUR' | 'TRY' | 'PERCENT')}
+                                        >
+                                          <option value="NET">NET (0 €)</option>
+                                          <option value="EUR">+ Euro (€)</option>
+                                          <option value="TRY">+ TL (₺)</option>
+                                          <option value="PERCENT">+ Yüzde (%)</option>
+                                        </select>
+                                        <input
+                                          className="modal-input"
+                                          type="number"
+                                          min={0}
+                                          disabled={editOpType === 'NET'}
+                                          style={{ height: 34, width: 76, fontSize: 12.5, padding: '0 8px' }}
+                                          value={editOpType === 'NET' ? '0' : editOpVal}
+                                          onChange={(e) => setEditOpVal(e.target.value)}
+                                        />
+                                      </div>
+                                    ) : (
+                                      <span className={`status-badge ${op.markupType === 'NET' || op.markupValue === 0 ? 'ok' : 'warn'}`}>
+                                        {badgeText}
+                                      </span>
+                                    )}
                                   </td>
                                   <td data-label="Geliş → Satış">
                                     <span>
@@ -2352,33 +2469,45 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                   </td>
                                   <td data-label="İşlemler">
                                     <div className="adm-actions">
-                                      {op.markupType === 'EUR' && (
+                                      {editingOpId === op.id ? (
                                         <>
                                           <button
                                             type="button"
-                                            className="adm-btn adm-btn-blue"
+                                            className="adm-btn adm-btn-green"
                                             disabled={!catalogWritable}
-                                            onClick={() => saveCatalog(
-                                              'operators',
-                                              operatorRules.map((r) => (r.id === op.id ? { ...r, markupValue: r.markupValue + 5 } : r)),
-                                              `${op.operator} kuralı +${op.markupValue + 5} € olarak güncellendi.`
-                                            )}
+                                            onClick={() => {
+                                              const nextVal = editOpType === 'NET' ? 0 : Math.max(0, Math.round(Number(editOpVal) || 0));
+                                              saveCatalog(
+                                                'operators',
+                                                operatorRules.map((r) => (r.id === op.id ? { ...r, markupType: editOpType, markupValue: nextVal } : r)),
+                                                `✓ ${op.operator} kuralı (${editOpType === 'NET' ? 'NET 0 €' : `${nextVal} ${editOpType}`}) kaydedildi.`,
+                                                () => setEditingOpId(null)
+                                              );
+                                            }}
                                           >
-                                            +5 €
+                                            <Check size={13} /> Kaydet
                                           </button>
                                           <button
                                             type="button"
                                             className="adm-btn adm-btn-ghost"
-                                            disabled={!catalogWritable || op.markupValue < 5}
-                                            onClick={() => saveCatalog(
-                                              'operators',
-                                              operatorRules.map((r) => (r.id === op.id ? { ...r, markupValue: Math.max(0, r.markupValue - 5) } : r)),
-                                              `${op.operator} kuralı +${Math.max(0, op.markupValue - 5)} € olarak güncellendi.`
-                                            )}
+                                            onClick={() => setEditingOpId(null)}
                                           >
-                                            -5 €
+                                            Vazgeç
                                           </button>
                                         </>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className="adm-btn adm-btn-blue"
+                                          disabled={!catalogWritable}
+                                          onClick={() => {
+                                            setEditingOpId(op.id);
+                                            setEditOpType(op.markupType);
+                                            setEditOpVal(String(op.markupValue));
+                                          }}
+                                        >
+                                          ✎ Fiyat Düzenle
+                                        </button>
                                       )}
                                       <button
                                         type="button"
@@ -4271,73 +4400,373 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                 );
               })()}
 
-              {/* ==================== MODULE 7: SUPPLIER APIS (BURANUS / GDS / POS) ==================== */}
+              {/* ==================== MODULE 7: SUPPLIER APIS & XML INTEGRATION HUB ==================== */}
               {section === 'apis' && (
-                <div className="panel-card">
-                  <strong style={{ fontSize: 18, display: 'block', marginBottom: 6 }}>
-                    B2B Tedarikçi API Bağlantıları (Buranus, Amadeus, BookingAgora) &amp; Sanal POS
-                  </strong>
-                  <p style={{ fontSize: 13, color: 'var(--aspan-text-muted)', marginTop: 0, marginBottom: 16 }}>
-                    Sağlayıcı bağlantısı kurulmayı bekliyor. Aşağıdaki alanlar örnek yapılandırmadır.
-                  </p>
-
-                  {apiConnectors.map((api) => (
-                    <div
-                      key={api.id}
-                      style={{
-                        padding: 16,
-                        borderRadius: 16,
-                        border: '1px solid var(--aspan-border)',
-                        background: 'var(--aspan-bg-soft)',
-                        marginBottom: 12,
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-                        <div>
-                          <div className="panel-actions">
-                            <ShieldCheck size={18} color="#00A8B5" />
-                            <strong style={{ fontSize: 15.5 }}>{api.name}</strong>
-                            <span className="status-badge warn">Bağlantı bekleniyor</span>
-                          </div>
-                          <div style={{ fontSize: 12.5, color: 'var(--aspan-text-body)', marginTop: 4 }}>
-                            {api.desc}
-                          </div>
+                <>
+                  {/* Server Outbound IP Whitelist Banner */}
+                  <div className="panel-card" style={{ border: '1.5px solid rgba(214,174,86,0.45)', background: 'linear-gradient(135deg, #061829 0%, #0d2b45 100%)', color: '#ffffff' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#f2cf7a', marginBottom: 4 }}>
+                          SUNUCU IP WHITELIST BİLGİSİ (XML GÜVENLİK TANIMLAMASI)
                         </div>
-
-                        <button
-                          type="button"
-                          className="uf-quick-pill"
-                          onClick={() => flash('Bağlantı testi için sağlayıcı sunucu ayarı gerekiyor.')}
-                        >
-                          Bağlantı durumunu gör
-                        </button>
+                        <div style={{ fontSize: 17, fontWeight: 800 }}>
+                          Sunucu Çıkış IP Adresi:{' '}
+                          <span style={{ color: '#f2cf7a', fontFamily: 'monospace' }}>
+                            {serverInfo?.outboundIp || 'Yükleniyor...'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.76)', marginTop: 4, maxWidth: 680 }}>
+                          FUN&amp;SUN, Kompas Tour, Selfie Travel (SAMO XML), Buranus ve BiletBank gibi tedarikçiler XML erişimini açarken sunucunuzun çıkış IP adresini Whitelist&apos;e eklemenizi ister.
+                        </div>
                       </div>
+                      <button
+                        type="button"
+                        className="btn-gold-nav"
+                        onClick={() => {
+                          if (serverInfo?.outboundIp) {
+                            void navigator.clipboard?.writeText(serverInfo.outboundIp);
+                            flash(`Sunucu IP adresi kopyalandı: ${serverInfo.outboundIp}`);
+                          }
+                        }}
+                      >
+                        <Copy size={14} /> IP Adresini Kopyala
+                      </button>
+                    </div>
+                  </div>
 
-                      <div className="panel-form-grid" style={{ marginTop: 12 }}>
-                        <div>
-                          <label style={{ fontSize: 11, fontWeight: 700, display: 'block', marginBottom: 3 }}>
-                            Örnek bağlantı adresi
-                          </label>
-                          <input
-                            className="modal-input"
-                            value={api.endpoint}
-                            readOnly
-                          />
-                        </div>
-                        <div>
-                          <label style={{ fontSize: 11, fontWeight: 700, display: 'block', marginBottom: 3 }}>
-                            Örnek acente kodu
-                          </label>
-                          <input
-                            className="modal-input"
-                            value={api.agentCode}
-                            readOnly
-                          />
-                        </div>
+                  {/* Persistent Supplier XML/API Connectors */}
+                  <div className="panel-card">
+                    <strong style={{ fontSize: 18, display: 'block', marginBottom: 6 }}>
+                      B2B Tedarikçi XML / API Bağlantıları &amp; Sanal POS Yönetimi
+                    </strong>
+                    <div className="adm-banner adm-banner-info">
+                      <AlertCircle size={17} style={{ flexShrink: 0, marginTop: 2 }} />
+                      <div>
+                        <strong>Kalıcı &amp; Güvenli Saklama:</strong> Eklediğiniz tüm XML API URL, Veri Feed/WSDL, API Key, Kullanıcı Adı, Şifre, Acente Kodu, API Dokümantasyonu ve Whitelist IP bilgileri veritabanında saklanır ve halka açık sitede asla görünmez.
                       </div>
                     </div>
-                  ))}
-                </div>
+
+                    {managedProviders.length === 0 ? (
+                      <div style={{ padding: 24, textAlign: 'center', color: 'var(--aspan-text-muted)', fontSize: 13 }}>
+                        Henüz kayıtlı XML / API sağlayıcısı yok. Aşağıdaki formdan yeni sağlayıcı ekleyebilirsiniz.
+                      </div>
+                    ) : (
+                      managedProviders.map((prov) => {
+                        const isConfirming = pendingCatalogDelete?.section === 'providers' && pendingCatalogDelete.id === prov.id;
+                        const revealed = Boolean(revealedSecrets[prov.id]);
+                        const testRes = providerTestResults[prov.id];
+                        return (
+                          <div
+                            key={prov.id}
+                            style={{
+                              padding: 16,
+                              borderRadius: 16,
+                              border: `1.5px solid ${prov.active ? 'var(--aspan-border)' : '#e2e8f0'}`,
+                              background: prov.active ? '#ffffff' : '#f8fafc',
+                              opacity: prov.active ? 1 : 0.65,
+                              marginBottom: 14,
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                                  <ShieldCheck size={18} color="#0fa3b1" />
+                                  <strong style={{ fontSize: 15.5 }}>{prov.name}</strong>
+                                  <span className="pkg-pill">{prov.protocol}</span>
+                                  <span className="pkg-pill">{prov.category}</span>
+                                  <span className={`status-badge ${prov.mode.includes('Canlı') ? 'ok' : 'warn'}`}>{prov.mode}</span>
+                                  <span className={`status-badge ${prov.active ? 'ok' : 'warn'}`}>{prov.active ? '● Aktif' : '○ Pasif'}</span>
+                                </div>
+                              </div>
+
+                              <div className="adm-actions">
+                                <button
+                                  type="button"
+                                  className="adm-btn adm-btn-blue"
+                                  disabled={testRes?.testing}
+                                  onClick={() => {
+                                    setProviderTestResults((prev) => ({ ...prev, [prov.id]: { ok: false, message: 'Test ediliyor...', testing: true } }));
+                                    void api.testProviderConnection(prov.apiUrl)
+                                      .then((r) => setProviderTestResults((prev) => ({ ...prev, [prov.id]: { ok: r.ok, message: r.message } })))
+                                      .catch((err) => setProviderTestResults((prev) => ({ ...prev, [prov.id]: { ok: false, message: apiMessage(err) } })));
+                                  }}
+                                >
+                                  {testRes?.testing ? 'Test Ediliyor...' : '⚡ Bağlantıyı Test Et'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="adm-btn adm-btn-ghost"
+                                  onClick={() => setRevealedSecrets((prev) => ({ ...prev, [prov.id]: !prev[prov.id] }))}
+                                >
+                                  <KeyRound size={13} /> {revealed ? 'Şifreleri Gizle' : 'Şifreleri Göster'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="adm-btn adm-btn-blue"
+                                  disabled={!catalogWritable}
+                                  onClick={() => {
+                                    setEditingProviderId(prov.id);
+                                    setProvName(prov.name);
+                                    setProvProtocol(prov.protocol);
+                                    setProvCategory(prov.category);
+                                    setProvMode(prov.mode);
+                                    setProvApiUrl(prov.apiUrl);
+                                    setProvXmlFeedUrl(prov.xmlFeedUrl || '');
+                                    setProvApiKey(prov.apiKey || '');
+                                    setProvUsername(prov.username || '');
+                                    setProvPassword(prov.password || '');
+                                    setProvAgentCode(prov.agentCode || '');
+                                    setProvDocsUrl(prov.docsUrl || '');
+                                    setProvWhitelistIp(prov.whitelistIp || serverInfo?.outboundIp || '');
+                                    flash(`${prov.name} bilgileri aşağıdaki düzenleme formuna yüklendi.`);
+                                  }}
+                                >
+                                  ✎ Düzenle
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`adm-btn ${prov.active ? 'adm-btn-amber' : 'adm-btn-green-soft'}`}
+                                  disabled={!catalogWritable}
+                                  onClick={() => saveCatalog(
+                                    'providers',
+                                    managedProviders.map((r) => (r.id === prov.id ? { ...r, active: !r.active } : r)),
+                                    `${prov.name} ${prov.active ? 'pasifleştirildi' : 'aktifleştirildi'}.`
+                                  )}
+                                >
+                                  {prov.active ? 'Pasifleştir' : 'Aktifleştir'}
+                                </button>
+                                {isConfirming ? (
+                                  <span className="adm-confirm-inline">
+                                    Silinsin mi?
+                                    <button
+                                      type="button"
+                                      className="adm-btn adm-btn-red-solid"
+                                      style={{ height: 26, padding: '0 8px' }}
+                                      disabled={!catalogWritable}
+                                      onClick={() => saveCatalog(
+                                        'providers',
+                                        managedProviders.filter((r) => r.id !== prov.id),
+                                        `✓ ${prov.name} sağlayıcısı silindi.`
+                                      )}
+                                    >
+                                      Evet, Sil
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="adm-btn adm-btn-ghost"
+                                      style={{ height: 26, padding: '0 8px' }}
+                                      onClick={() => setPendingCatalogDelete(null)}
+                                    >
+                                      Vazgeç
+                                    </button>
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="adm-btn adm-btn-red"
+                                    disabled={!catalogWritable}
+                                    onClick={() => setPendingCatalogDelete({ section: 'providers', id: prov.id, label: prov.name })}
+                                  >
+                                    <Trash2 size={13} /> Sil
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {testRes && (
+                              <div className={`adm-banner ${testRes.ok ? 'adm-banner-ok' : 'adm-banner-warn'}`} style={{ marginBottom: 12, padding: '8px 12px' }}>
+                                <strong>{testRes.ok ? '✓ Bağlantı Başarılı:' : '⚠ Test Sonucu:'}</strong> {testRes.message}
+                              </div>
+                            )}
+
+                            <div className="panel-form-grid" style={{ gap: 10 }}>
+                              <div>
+                                <span className="adm-field-lbl">XML / API Erişim URL</span>
+                                <div style={{ fontSize: 12.5, fontFamily: 'monospace', wordBreak: 'break-all', padding: '7px 10px', borderRadius: 9, background: 'var(--aspan-bg-soft)', border: '1px solid var(--aspan-border)' }}>
+                                  {prov.apiUrl}
+                                </div>
+                              </div>
+                              {prov.xmlFeedUrl && (
+                                <div>
+                                  <span className="adm-field-lbl">XML Veri Feed / WSDL Adresi</span>
+                                  <div style={{ fontSize: 12.5, fontFamily: 'monospace', wordBreak: 'break-all', padding: '7px 10px', borderRadius: 9, background: 'var(--aspan-bg-soft)', border: '1px solid var(--aspan-border)' }}>
+                                    {prov.xmlFeedUrl}
+                                  </div>
+                                </div>
+                              )}
+                              <div>
+                                <span className="adm-field-lbl">Acente Kodu / Kullanıcı Adı</span>
+                                <div style={{ fontSize: 12.5, fontWeight: 700, padding: '7px 10px', borderRadius: 9, background: 'var(--aspan-bg-soft)', border: '1px solid var(--aspan-border)' }}>
+                                  {prov.agentCode || '—'} {prov.username ? ` · User: ${prov.username}` : ''}
+                                </div>
+                              </div>
+                              <div>
+                                <span className="adm-field-lbl">API Key &amp; Şifre</span>
+                                <div style={{ fontSize: 12.5, fontFamily: 'monospace', padding: '7px 10px', borderRadius: 9, background: 'var(--aspan-bg-soft)', border: '1px solid var(--aspan-border)' }}>
+                                  Key: {prov.apiKey ? (revealed ? prov.apiKey : '••••••••••••') : 'Girilmedi'} · Pass: {prov.password ? (revealed ? prov.password : '••••••••') : 'Girilmedi'}
+                                </div>
+                              </div>
+                              <div>
+                                <span className="adm-field-lbl">Whitelist Sunucu IP &amp; Dokümantasyon</span>
+                                <div style={{ fontSize: 12.5, padding: '7px 10px', borderRadius: 9, background: 'var(--aspan-bg-soft)', border: '1px solid var(--aspan-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                  <span>IP: <strong>{prov.whitelistIp || serverInfo?.outboundIp || 'Tanımlanmadı'}</strong></span>
+                                  {prov.docsUrl && (
+                                    <a href={prov.docsUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#0369a1', fontWeight: 800, textDecoration: 'underline' }}>
+                                      📄 API Dokümantasyonu →
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+
+                    {/* Add / Edit XML & API Supplier Form */}
+                    <div className="adm-form-box">
+                      <div className="adm-form-title" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <Plus size={16} color="#059669" />
+                          {editingProviderId ? 'Seçili XML / API Sağlayıcısını Güncelle' : 'Yeni XML / API Sağlayıcısı Ekle'}
+                        </span>
+                        {editingProviderId && (
+                          <button
+                            type="button"
+                            className="adm-btn adm-btn-ghost"
+                            style={{ height: 28 }}
+                            onClick={() => {
+                              setEditingProviderId(null);
+                              setProvName('');
+                              setProvApiUrl('');
+                              setProvXmlFeedUrl('');
+                              setProvApiKey('');
+                              setProvUsername('');
+                              setProvPassword('');
+                              setProvAgentCode('');
+                              setProvDocsUrl('');
+                            }}
+                          >
+                            Düzenlemeyi İptal Et
+                          </button>
+                        )}
+                      </div>
+                      <form
+                        className="panel-form-grid"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (!provName.trim() || !provApiUrl.trim()) return;
+                          const nextItem = {
+                            id: editingProviderId || crypto.randomUUID(),
+                            name: provName.trim(),
+                            protocol: provProtocol,
+                            category: provCategory,
+                            mode: provMode,
+                            apiUrl: provApiUrl.trim(),
+                            xmlFeedUrl: provXmlFeedUrl.trim(),
+                            apiKey: provApiKey.trim(),
+                            username: provUsername.trim(),
+                            password: provPassword.trim(),
+                            agentCode: provAgentCode.trim(),
+                            docsUrl: provDocsUrl.trim(),
+                            whitelistIp: provWhitelistIp.trim(),
+                            active: true,
+                          };
+                          const nextList = editingProviderId
+                            ? managedProviders.map((r) => (r.id === editingProviderId ? nextItem : r))
+                            : [...managedProviders, nextItem];
+                          saveCatalog(
+                            'providers',
+                            nextList,
+                            editingProviderId ? `✓ ${nextItem.name} bilgileri güncellendi.` : `✓ ${nextItem.name} sağlayıcısı eklendi.`,
+                            () => {
+                              setEditingProviderId(null);
+                              setProvName('');
+                              setProvApiUrl('');
+                              setProvXmlFeedUrl('');
+                              setProvApiKey('');
+                              setProvUsername('');
+                              setProvPassword('');
+                              setProvAgentCode('');
+                              setProvDocsUrl('');
+                            }
+                          );
+                        }}
+                      >
+                        <div>
+                          <label className="adm-field-lbl">Sağlayıcı Adı *</label>
+                          <input className="modal-input" required placeholder="Örn: FUN&SUN, Kompas, Selfie, Amadeus" value={provName} onChange={(e) => setProvName(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Protokol / Tip</label>
+                          <select className="modal-input" value={provProtocol} onChange={(e) => setProvProtocol(e.target.value)}>
+                            <option value="SAMO XML">SAMO-Tour XML</option>
+                            <option value="XML / SOAP">XML / SOAP</option>
+                            <option value="REST JSON">REST JSON API</option>
+                            <option value="NDC XML">IATA NDC XML</option>
+                            <option value="POS 3D">3D Secure POS</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Kategori</label>
+                          <select className="modal-input" value={provCategory} onChange={(e) => setProvCategory(e.target.value)}>
+                            <option value="Tur Operatörü & Charter">Tur Operatörü &amp; Charter</option>
+                            <option value="Uçak & GDS">Uçak &amp; GDS</option>
+                            <option value="Otel Bedbank">Otel Bedbank</option>
+                            <option value="VIP Transfer">VIP Transfer</option>
+                            <option value="Sanal POS">Sanal POS</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Çalışma Ortamı</label>
+                          <select className="modal-input" value={provMode} onChange={(e) => setProvMode(e.target.value)}>
+                            <option value="Test / Sandbox">Test / Sandbox</option>
+                            <option value="Canlı (Production)">Canlı (Production)</option>
+                            <option value="Beklemede">Beklemede</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">XML / API Erişim URL *</label>
+                          <input className="modal-input" required type="url" placeholder="https://online.kompastour.com/export/..." value={provApiUrl} onChange={(e) => setProvApiUrl(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">XML Veri Feed / WSDL Adresi</label>
+                          <input className="modal-input" placeholder="https://.../flights.xml (Opsiyonel)" value={provXmlFeedUrl} onChange={(e) => setProvXmlFeedUrl(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">API Key / Bearer Token</label>
+                          <input className="modal-input" placeholder="API Anahtarı (Opsiyonel)" value={provApiKey} onChange={(e) => setProvApiKey(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Kullanıcı Adı (Username)</label>
+                          <input className="modal-input" placeholder="XML kullanıcı adı" value={provUsername} onChange={(e) => setProvUsername(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Şifre / API Secret</label>
+                          <input className="modal-input" type="password" placeholder="XML şifre / secret" value={provPassword} onChange={(e) => setProvPassword(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Acente / Bayi Kodu</label>
+                          <input className="modal-input" placeholder="Örn: INF-6199-TR" value={provAgentCode} onChange={(e) => setProvAgentCode(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">API Dokümantasyon Linki</label>
+                          <input className="modal-input" placeholder="https://docs... (PDF / Swagger / WSDL)" value={provDocsUrl} onChange={(e) => setProvDocsUrl(e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="adm-field-lbl">Whitelist Sunucu IP</label>
+                          <input className="modal-input" placeholder={serverInfo?.outboundIp || 'Sunucu IP adresi'} value={provWhitelistIp} onChange={(e) => setProvWhitelistIp(e.target.value)} />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                          <button type="submit" className="adm-btn adm-btn-green" style={{ height: 42, width: '100%', fontSize: 13 }} disabled={!catalogWritable}>
+                            <Plus size={15} /> {editingProviderId ? 'Sağlayıcıyı Güncelle' : 'Sağlayıcı Ekle'}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           </div>
