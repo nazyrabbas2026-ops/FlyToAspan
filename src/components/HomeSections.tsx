@@ -30,8 +30,10 @@ import {
   SOLUTION_PARTNERS,
   TRANSFER_DEALS,
   DEFAULT_MARKUP,
+  formatDisplayDate,
   formatPrice,
 } from '../data/mockData';
+import { resolveCityImage, resolveRegionColor } from '../utils/cityImages';
 import { PHONE_DISPLAY, PHONE_HREF, PHONE_SHORT, TRANSLATIONS, WA_HREF } from '../i18n/translations';
 import { AdminMarkupConfig, CurrencyCode, LangCode, PageView } from '../types';
 import type { AdminCatalog } from '../data/api';
@@ -680,10 +682,27 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
   const curLeftText = formatCampaignText(curLeft ? (loc.campaigns[curLeft.id] || curLeft) : undefined);
   const curRightText = formatCampaignText(curRight ? (loc.campaigns[curRight.id] || curRight) : undefined);
 
-  const flightDeals = getFlightDeals(lang, markup);
-  const featuredDeal = flightDeals[0];
-  const midDeals = flightDeals.slice(1, 7);
-  const bottomDeals = flightDeals.slice(7, 10);
+  const defaultFlightDeals = getFlightDeals(lang, markup).slice(0, 7);
+  const flightDeals: FlightDeal[] = liveCatalog?.deals && liveCatalog.deals.length > 0
+    ? liveCatalog.deals
+        .filter((d) => d.active)
+        .map((d) => ({
+          id: d.id,
+          region: d.region,
+          regionColor: resolveRegionColor(d.region),
+          fromCity: d.fromCity,
+          fromCode: d.fromCode.toUpperCase(),
+          toCity: d.toCity,
+          toCode: d.toCode.toUpperCase(),
+          isoDate: d.date,
+          dateLabel: formatDisplayDate(d.date, lang),
+          price: d.price,
+          image: resolveCityImage(d.toCode || d.toCity, d.image),
+          featured: d.featured,
+        }))
+    : defaultFlightDeals;
+  const featuredDeal = flightDeals.find((d) => d.featured) || flightDeals[0];
+  const midDeals = flightDeals.filter((d) => d.id !== featuredDeal?.id).slice(0, 6);
 
   const hotelMult = 1 + (markup.hotelPercent - DEFAULT_MARKUP.hotelPercent) / 100;
   const transferDiff = markup.transferAddTRY - DEFAULT_MARKUP.transferAddTRY;
@@ -700,6 +719,7 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
             stars: h.stars,
             boardType: h.boardType,
             nights: h.nights,
+            image: h.image ? resolveCityImage(h.city, h.image) : (HOTEL_DEALS.find((m) => m.id === h.id)?.image ?? resolveCityImage(h.city)),
             price: Math.max(500, Math.round(h.price * hotelMult)),
           };
         })
@@ -721,6 +741,7 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
             route: tr.route,
             capacity: tr.capacity,
             baggage: tr.baggage,
+            image: tr.image ? resolveCityImage(tr.city, tr.image) : base.image,
             price: tr.price,
           };
         })
@@ -908,6 +929,7 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
             </span>
           </div>
 
+          {featuredDeal && (
           <div className="ufd-bento-top">
             <div className="deal-card featured" onClick={() => onSelectDeal(featuredDeal)}>
               <img
@@ -992,43 +1014,7 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
               ))}
             </div>
           </div>
-
-          <div className="ufd-subgrid-3">
-            {bottomDeals.map((d) => (
-              <div key={d.id} className="deal-card" onClick={() => onSelectDeal(d)}>
-                <div className="deal-photo-top">
-                  <img src={d.image} alt={trCity(d.toCity)} />
-                  <div className="deal-photo-shade" />
-                  <span
-                    className={`deal-region-pill ${d.regionColor}`}
-                    style={{ position: 'relative', zIndex: 2, alignSelf: 'flex-start' }}
-                  >
-                    {loc.regions[d.region]}
-                  </span>
-                  <div className="deal-photo-row">
-                    <div>
-                      <div className="deal-from">
-                        <Plane size={11} /> {trCity(d.fromCity)}
-                      </div>
-                      <div className="deal-city">{trCity(d.toCity)}</div>
-                    </div>
-                    <span className="deal-date-pill">{d.dateLabel}</span>
-                  </div>
-                </div>
-                <div className="deal-bottom">
-                  <div>
-                    <div className="deal-kisi">{t.perPerson}</div>
-                    <div className="deal-price">{formatPrice(d.price, currency)}</div>
-                    <div className="deal-from-note">{t.startingFrom}</div>
-                  </div>
-                  <button type="button" className="deal-buy-btn">
-                    <Zap size={12} />
-                    {t.quickBuy}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+          )}
         </div>
       </section>
 

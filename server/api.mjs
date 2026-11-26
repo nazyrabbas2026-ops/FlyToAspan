@@ -73,9 +73,14 @@ const catalogFields = {
   rules: { carrier: 100, route: 120, rule: 120 },
   coupons: { code: 30, title: 160, category: 24, validUntil: 48, active: 'boolean' },
   agencies: { name: 120, type: 48, contact: 120, creditLimitTRY: 'integer', miles: 'integer', status: 24 },
-  hotels: { city: 60, name: 120, stars: 'integer', boardType: 60, nights: 'integer', price: 'integer', active: 'boolean' },
-  transfers: { city: 60, vehicle: 120, route: 140, capacity: 48, baggage: 48, price: 'integer', active: 'boolean' },
-  tours: { city: 60, title: 140, duration: 48, quota: 'integer', price: 'integer', active: 'boolean' },
+  hotels: { city: 60, name: 120, stars: 'integer', boardType: 60, nights: 'integer', price: 'integer', image: 'optional:280', active: 'boolean' },
+  transfers: { city: 60, vehicle: 120, route: 140, capacity: 48, baggage: 48, price: 'integer', image: 'optional:280', active: 'boolean' },
+  tours: { city: 60, title: 140, duration: 48, includes: 'optional:240', quota: 'integer', price: 'integer', image: 'optional:280', active: 'boolean' },
+  deals: {
+    fromCity: 60, fromCode: 8, toCity: 60, toCode: 8,
+    region: 24, date: 16, price: 'integer',
+    image: 'optional:280', featured: 'boolean', active: 'boolean',
+  },
   operators: { operator: 80, product: 32, markupType: 16, markupValue: 'integer', active: 'boolean' },
   flights: {
     airline: 80, airlineCode: 8, flightNumber: 20, fromCode: 8, toCode: 8,

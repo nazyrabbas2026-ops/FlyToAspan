@@ -575,6 +575,7 @@ export const App: React.FC = () => {
             <TourResultsPage
               lang={lang}
               currency={currency}
+              liveTours={publicCatalog.tours}
               onAddBooking={handleAddBooking}
               onBackHome={() => {
                 setActiveTab('tour');

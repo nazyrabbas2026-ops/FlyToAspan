@@ -31,6 +31,7 @@ import {
   Ban,
   UserCheck,
   BarChart3,
+  Zap,
 } from 'lucide-react';
 import {
   CAMPAIGNS,
@@ -39,6 +40,7 @@ import {
   TRANSFER_DEALS,
   formatDisplayDate,
   formatPrice,
+  getFlightDeals,
   getLiveRatesSnapshot,
   refreshLiveExchangeRates,
 } from '../data/mockData';
@@ -55,6 +57,7 @@ import {
 import { addCalendarDays, toCalendarDate } from '../data/calendarDates';
 import { PanelNavigation } from './PanelNavigation';
 import { AdminFinanceCrmSection } from './AdminFinanceCrmSection';
+import { AdminDealsSection, AdminToursCard } from './AdminDealsSection';
 import { openBrandedEticketPdf } from '../utils/eticketPdf';
 import { api, apiMessage, type AdminCatalog, type AdminCatalogState, type BookingDraft } from '../data/api';
 
@@ -143,6 +146,7 @@ type AdminSection =
   | 'bookings'
   | 'finance'
   | 'pricing'
+  | 'deals'
   | 'inventory'
   | 'coupons'
   | 'agents'
@@ -153,7 +157,8 @@ const ADMIN_SECTIONS = [
   { id: 'bookings', label: 'Rezervasyonlar', description: 'Rezervasyon koduyla arayın, durumları güncelleyin veya rapor alın.', icon: <Ticket size={18} /> },
   { id: 'finance', label: 'Finans & CRM', description: 'Günlük gelir-gider grafikleri, 360° satış/uçuş defteri, ekip liderliği ve CRM takip listesi.', icon: <BarChart3 size={18} /> },
   { id: 'pricing', label: 'Fiyatlandırma', description: 'Hizmet bedellerini ve komisyonları ayarlayıp örnek fiyatları karşılaştırın.', icon: <Sliders size={18} /> },
-  { id: 'inventory', label: 'Envanter & Manuel Uçuş', description: 'Otel, VIP transfer ve manuel blok koltuk uçuşlarını yönetin.', icon: <CarTaxiFront size={18} /> },
+  { id: 'deals', label: 'Fırsat Uçuşlar', description: 'Ana sayfa Günün Fırsatı ve 6 vitrin uçuşunu, rotaları ve şehir görsellerini yönetin.', icon: <Zap size={18} /> },
+  { id: 'inventory', label: 'Envanter & Manuel Uçuş', description: 'Manuel uçuş, otel, VIP transfer ve paket turları yönetin.', icon: <CarTaxiFront size={18} /> },
   { id: 'coupons', label: 'Kampanya ve kuponlar', description: 'Deneme kuponlarını ve paneldeki durumlarını yönetin.', icon: <Tag size={18} /> },
   { id: 'agents', label: 'Bayiler ve üyeler', description: 'Örnek kurumsal hesapları, limitleri ve mil bakiyelerini inceleyin.', icon: <Users size={18} /> },
   { id: 'apis', label: 'Sağlayıcı bağlantıları', description: 'Uçuş, otel ve ödeme bağlantılarının durumunu takip edin.', icon: <Plug size={18} /> },
@@ -290,9 +295,23 @@ const exampleCatalog: AdminCatalog = {
     active: true,
   })),
   tours: [
-    { id: 'tour-ala-1', city: 'ALMATI', title: 'Almatı & Shymbulak Kültür Turu', duration: '4 Gece 5 Gün', quota: 14, price: 24900, active: true },
-    { id: 'tour-cap-2', city: 'KAPADOKYA', title: 'Kapadokya Mağara Otel & Balon Turu', duration: '2 Gece 3 Gün', quota: 10, price: 9850, active: true },
+    { id: 'tour-ala-1', city: 'ALMATI & KAZAKİSTAN', title: 'Almatı, Big Almaty Gölü & Shymbulak Kültür Turu', duration: '4 Gece · 5 Gün', includes: 'Uçak Dahil · 5★ Otel · Türkçe Rehber · VIP Transfer', quota: 14, price: 24900, active: true },
+    { id: 'tour-cap-2', city: 'KAPADOKYA', title: 'Kapadokya Mağara Otel & Gün Doğumu Balon Turu', duration: '2 Gece · 3 Gün', includes: 'Butik Taş Otel · Kahvaltı · Bölge Gezileri · Transfer', quota: 10, price: 9850, active: true },
+    { id: 'tour-ayt-3', city: 'ANTALYA · BELEK', title: 'Antalya Ultra Her Şey Dahil Aile & Deniz Paketi', duration: '5 Gece · 6 Gün', includes: '5★ Resort · Uçak + Havalimanı VIP Transfer Dahil', quota: 18, price: 18400, active: true },
+    { id: 'tour-bal-4', city: 'BALKANLAR', title: 'Vizesiz Balkanlar: Saraybosna, Mostar & Belgrad', duration: '6 Gece · 7 Gün', includes: 'Gidiş-Dönüş Uçak · 4★ Oteller · Panoramik Şehir Turları', quota: 12, price: 21500, active: true },
   ],
+  deals: getFlightDeals('TR', DEFAULT_MARKUP).slice(0, 7).map((d) => ({
+    id: d.id,
+    fromCity: d.fromCity,
+    fromCode: d.fromCode,
+    toCity: d.toCity,
+    toCode: d.toCode,
+    region: d.region,
+    date: d.isoDate,
+    price: d.price,
+    featured: Boolean(d.featured),
+    active: true,
+  })),
   operators: [
     { id: 'op-funsun', operator: 'FUN&SUN (XML)', product: 'Uçak Bileti', markupType: 'NET', markupValue: 0, active: true },
     { id: 'op-kompas', operator: 'Kompas Tour (XML)', product: 'Uçak Bileti', markupType: 'EUR', markupValue: 10, active: true },
@@ -456,7 +475,8 @@ const ADMIN_I18N: Record<'TR' | 'EN' | 'RU', {
       bookings: { label: 'Rezervasyonlar', description: 'PNR ile arayın, tarih aralığına göre filtreleyin ve durumları güncelleyin.' },
       finance: { label: 'Finans & CRM', description: 'Gelir-gider defteri, CRM teklifleri ve ekip liderliği.' },
       pricing: { label: 'Fiyatlandırma & XML', description: 'Operatör XML kâr kurallarını ve komisyonları yönetin.' },
-      inventory: { label: 'Envanter & Manuel Uçuş', description: 'Manuel blok koltuk uçuşları, otel ve VIP transferleri yönetin.' },
+      deals: { label: 'Fırsat Uçuşlar', description: 'Ana sayfa Günün Fırsatı ve 6 vitrin uçuşunu, rotaları ve şehir görsellerini yönetin.' },
+      inventory: { label: 'Envanter & Manuel Uçuş', description: 'Manuel blok koltuk uçuşları, otel, VIP transfer ve turları yönetin.' },
       coupons: { label: 'Kampanya ve kuponlar', description: 'Canlı indirim kuponlarını ekleyin, kapatın veya silin.' },
       agents: { label: 'Bayiler ve üyeler', description: 'Alt acente onayları, cari kredi limitleri ve yetki matrisi.' },
       apis: { label: 'Sağlayıcı bağlantıları', description: 'Buranus, Amadeus, otel ve ödeme API durumları.' },
@@ -496,7 +516,8 @@ const ADMIN_I18N: Record<'TR' | 'EN' | 'RU', {
       bookings: { label: 'Bookings', description: 'Search by PNR, filter by date range, update status or download PDF.' },
       finance: { label: 'Finance & CRM', description: 'Income/expense ledger, CRM quotes and sales analytics.' },
       pricing: { label: 'Pricing & XML', description: 'Manage operator XML markup rules (FUN&SUN, Kompas, Selfie) and margins.' },
-      inventory: { label: 'Inventory & Flights', description: 'Manage manual charter block-seat flights, hotels and VIP transfers.' },
+      deals: { label: 'Featured Flight Deals', description: 'Manage homepage Deal of the Day + 6 featured flight cards and city photos.' },
+      inventory: { label: 'Inventory & Flights', description: 'Manage manual charter block-seat flights, hotels, VIP transfers and tours.' },
       coupons: { label: 'Campaigns & Coupons', description: 'Create, toggle or delete live promo codes synced to checkout.' },
       agents: { label: 'Agencies & Team', description: 'B2B agency approvals, credit limits and granular RBAC permissions.' },
       apis: { label: 'Supplier APIs', description: 'Monitor Buranus, Amadeus, hotel and payment gateway connections.' },
@@ -536,7 +557,8 @@ const ADMIN_I18N: Record<'TR' | 'EN' | 'RU', {
       bookings: { label: 'Бронирования', description: 'Поиск по PNR, фильтр по датам, смена статуса и PDF билет.' },
       finance: { label: 'Финансы и CRM', description: 'Учет доходов/расходов, CRM предложения и аналитика.' },
       pricing: { label: 'Ценообразование XML', description: 'Наценки операторов XML (FUN&SUN, Kompas, Selfie) и комиссии.' },
-      inventory: { label: 'Инвентарь и Рейсы', description: 'Ручные чартерные рейсы (блок мест), отели и VIP трансферы.' },
+      deals: { label: 'Выгодные рейсы', description: 'Управление блоком «Предложение дня» и 6 витринными рейсами на главной.' },
+      inventory: { label: 'Инвентарь и Рейсы', description: 'Ручные чартерные рейсы, отели, VIP трансферы и туры.' },
       coupons: { label: 'Акции и купоны', description: 'Управление активными промокодами в реальном времени.' },
       agents: { label: 'Агентства и команда', description: 'Заявки B2B агентств, кредитные лимиты и права доступа.' },
       apis: { label: 'API поставщиков', description: 'Статус подключений Buranus, Amadeus, отелей и оплаты.' },
@@ -613,6 +635,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
           return userPerms.some((p) => p.startsWith('bookings.') || p.endsWith('.sell'));
         }
         if (item.id === 'pricing') return canEditPricing;
+        if (item.id === 'deals') return canManageInventory;
         if (item.id === 'inventory') return canManageInventory;
         if (item.id === 'coupons') return canManageCoupons;
         if (item.id === 'agents') return canManageTeam;
@@ -634,6 +657,8 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   const coupons = catalog?.coupons?.items ?? exampleCatalog.coupons;
   const managedHotels = catalog?.hotels?.items ?? exampleCatalog.hotels;
   const managedTransfers = catalog?.transfers?.items ?? exampleCatalog.transfers;
+  const managedTours = catalog?.tours?.items ?? exampleCatalog.tours;
+  const managedDeals = catalog?.deals?.items ?? exampleCatalog.deals;
   const managedProviders = catalog?.providers?.items ?? exampleCatalog.providers;
   const catalogWritable = catalog !== null && !busy;
 
@@ -2745,6 +2770,17 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                 </>
               )}
 
+              {/* ==================== MODULE 3.5: FEATURED FLIGHT DEALS ==================== */}
+              {section === 'deals' && (
+                <AdminDealsSection
+                  lang={lang}
+                  currency={currency}
+                  deals={managedDeals}
+                  catalogWritable={catalogWritable}
+                  onSaveDeals={(items, msg, after) => saveCatalog('deals', items, msg, after)}
+                />
+              )}
+
               {/* ==================== MODULE 4: INVENTORY (MANUAL FLIGHTS, HOTELS & VIP TRANSFERS) ==================== */}
               {section === 'inventory' && (
                 <>
@@ -3420,6 +3456,13 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                       </form>
                     </div>
                   </div>
+
+                  <AdminToursCard
+                    currency={currency}
+                    tours={managedTours}
+                    catalogWritable={catalogWritable}
+                    onSaveTours={(items, msg, after) => saveCatalog('tours', items, msg, after)}
+                  />
                   </>
                   )}
                 </>

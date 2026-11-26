@@ -58,9 +58,22 @@ export interface AdminCatalog {
   rules: { id: string; carrier: string; route: string; rule: string }[];
   coupons: { id: string; code: string; title: string; category: string; validUntil: string; active: boolean }[];
   agencies: { id: string; name: string; type: string; contact: string; creditLimitTRY: number; miles: number; status: string }[];
-  hotels: { id: string; city: string; name: string; stars: number; boardType: string; nights: number; price: number; active: boolean }[];
-  transfers: { id: string; city: string; vehicle: string; route: string; capacity: string; baggage: string; price: number; active: boolean }[];
-  tours: { id: string; city: string; title: string; duration: string; quota: number; price: number; active: boolean }[];
+  hotels: { id: string; city: string; name: string; stars: number; boardType: string; nights: number; price: number; image?: string; active: boolean }[];
+  transfers: { id: string; city: string; vehicle: string; route: string; capacity: string; baggage: string; price: number; image?: string; active: boolean }[];
+  tours: { id: string; city: string; title: string; duration: string; includes?: string; quota: number; price: number; image?: string; active: boolean }[];
+  deals: {
+    id: string;
+    fromCity: string;
+    fromCode: string;
+    toCity: string;
+    toCode: string;
+    region: 'YURT İÇİ' | 'AVRUPA' | 'ORTA ASYA' | 'ORTA DOĞU';
+    date: string;
+    price: number;
+    image?: string;
+    featured: boolean;
+    active: boolean;
+  }[];
   operators: { id: string; operator: string; product: string; markupType: 'NET' | 'EUR' | 'TRY' | 'PERCENT'; markupValue: number; active: boolean }[];
   flights: {
     id: string; airline: string; airlineCode: string; flightNumber: string; fromCode: string; toCode: string;

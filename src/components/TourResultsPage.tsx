@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { ArrowLeft, Calendar, CheckCircle2, Compass, Download, MapPin, Users } from 'lucide-react';
 import { formatPrice } from '../data/mockData';
 import { addCalendarDays, toCalendarDate } from '../data/calendarDates';
-import { apiMessage, type BookingDraft } from '../data/api';
+import { apiMessage, type AdminCatalog, type BookingDraft } from '../data/api';
 import { openBrandedEticketPdf } from '../utils/eticketPdf';
+import { resolveCityImage } from '../utils/cityImages';
 import type { BookingRecord, CurrencyCode, LangCode } from '../types';
 
 export interface TourPackage {
@@ -63,6 +64,7 @@ export const DEFAULT_TOUR_PACKAGES: TourPackage[] = [
 interface TourResultsPageProps {
   lang: LangCode;
   currency: CurrencyCode;
+  liveTours?: AdminCatalog['tours'];
   onAddBooking: (draft: BookingDraft) => Promise<BookingRecord>;
   onBackHome: () => void;
 }
@@ -70,9 +72,24 @@ interface TourResultsPageProps {
 export const TourResultsPage: React.FC<TourResultsPageProps> = ({
   lang,
   currency,
+  liveTours,
   onAddBooking,
   onBackHome,
 }) => {
+  const displayedTours: TourPackage[] = liveTours !== undefined
+    ? liveTours
+        .filter((t) => t.active)
+        .map((t) => ({
+          id: t.id,
+          city: t.city,
+          title: t.title,
+          duration: t.duration,
+          includes: t.includes || 'Uçak + Otel + Rehberlik + VIP Transfer',
+          quota: t.quota,
+          priceTRY: t.price,
+          image: resolveCityImage(t.city, t.image),
+        }))
+    : DEFAULT_TOUR_PACKAGES;
   const [selectedTour, setSelectedTour] = useState<TourPackage | null>(null);
   const [guestFirst, setGuestFirst] = useState('');
   const [guestLast, setGuestLast] = useState('');
@@ -166,7 +183,7 @@ export const TourResultsPage: React.FC<TourResultsPageProps> = ({
           )}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 18 }}>
-            {DEFAULT_TOUR_PACKAGES.map((tour) => (
+            {displayedTours.map((tour) => (
               <article key={tour.id} className="panel-card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ position: 'relative', height: 185, overflow: 'hidden' }}>
                   <img src={tour.image} alt={tour.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
