@@ -643,6 +643,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   const [editOpVal, setEditOpVal] = useState('10');
 
   // Supplier XML / API Hub state
+  const providerFormRef = useRef<HTMLDivElement | null>(null);
   const [serverInfo, setServerInfo] = useState<{ outboundIp: string; host: string; protocol: string } | null>(null);
   const [revealedSecrets, setRevealedSecrets] = useState<Record<string, boolean>>({});
   const [providerTestResults, setProviderTestResults] = useState<Record<string, { ok: boolean; message: string; testing?: boolean }>>({});
@@ -4519,7 +4520,10 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                     setProvAgentCode(prov.agentCode || '');
                                     setProvDocsUrl(prov.docsUrl || '');
                                     setProvWhitelistIp(prov.whitelistIp || serverInfo?.outboundIp || '');
-                                    flash(`${prov.name} bilgileri aşağıdaki düzenleme formuna yüklendi.`);
+                                    flash(`✎ ${prov.name} bilgileri düzenleme formuna yüklendi — aşağıdan güncelleyip kaydedebilirsiniz.`);
+                                    window.setTimeout(() => {
+                                      providerFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    }, 60);
                                   }}
                                 >
                                   ✎ Düzenle
@@ -4625,7 +4629,11 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                     )}
 
                     {/* Add / Edit XML & API Supplier Form */}
-                    <div className="adm-form-box">
+                    <div
+                      ref={providerFormRef}
+                      className="adm-form-box"
+                      style={editingProviderId ? { borderColor: '#0284c7', background: 'rgba(2,132,199,0.06)', boxShadow: '0 0 0 3px rgba(2,132,199,0.12)' } : undefined}
+                    >
                       <div className="adm-form-title" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                           <Plus size={16} color="#059669" />
