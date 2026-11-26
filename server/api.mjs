@@ -831,7 +831,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           db.prepare(`
             INSERT INTO organizations (id, name, type, status, credit_limit, allowed_modules, created_at)
             VALUES (?, ?, ?, 'active', ?, ?, ?)
-          `).run(orgId, orgName, 'Kurumsal B2B', 100000, JSON.stringify(['flights', 'hotels', 'transfers']), Date.now());
+          `).run(orgId, orgName, 'Kurumsal B2B', 0, JSON.stringify(['flights', 'hotels', 'transfers']), Date.now());
         }
         await setAccountPassword(db, targetId, password);
         const row = db.prepare(`

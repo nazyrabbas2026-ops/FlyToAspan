@@ -706,6 +706,8 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   const [orgLedgerEntries, setOrgLedgerEntries] = useState<OrgLedgerEntry[]>([]);
   const [payAmountInput, setPayAmountInput] = useState('25000');
   const [payDescInput, setPayDescInput] = useState('Havale / EFT Cari Tahsilat');
+  const [editingCariOrgId, setEditingCariOrgId] = useState<string | null>(null);
+  const [cariLimitDraft, setCariLimitDraft] = useState('50000');
 
   // Module 4: Hotel & Transfer new item forms
   const [newTrCity, setNewTrCity] = useState('');
@@ -719,7 +721,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   // Module 6: New SaaS Organization form
   const [newOrgName, setNewOrgName] = useState('');
   const [newOrgType, setNewOrgType] = useState<'agency' | 'corporate' | 'internal'>('agency');
-  const [newOrgLimit, setNewOrgLimit] = useState('100000');
+  const [newOrgLimit, setNewOrgLimit] = useState('0');
   const [newOrgModules, setNewOrgModules] = useState<string[]>(['flights', 'hotels', 'transfers']);
 
   // Module 2: Bookings Filter, Date Range, Sort & Manual PNR Form
@@ -4293,6 +4295,18 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                             </span>{' '}
                             <span className={`status-badge ${org.status === 'active' ? 'ok' : 'warn'}`}>
                               {org.status === 'active' ? '● Çalışıyor' : '● Askıda'}
+                            </span>{' '}
+                            <span
+                              className="pkg-pill"
+                              style={{
+                                background: org.creditLimitTRY > 0 ? 'rgba(16,185,129,0.14)' : 'rgba(100,116,139,0.12)',
+                                color: org.creditLimitTRY > 0 ? '#047857' : '#475569',
+                                fontWeight: 800,
+                              }}
+                            >
+                              {org.creditLimitTRY > 0
+                                ? `💳 Cari Açık: ${formatPrice(org.creditLimitTRY, currency)}`
+                                : '🔒 Cari Kapalı'}
                             </span>
                             {org.discountPercent > 0 && (
                               <span className="pkg-pill" style={{ marginLeft: 4, background: 'rgba(16,185,129,0.12)', color: '#047857' }}>
@@ -4307,14 +4321,60 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                           </div>
 
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <div style={{ textAlign: 'right', marginRight: 6 }}>
-                              <div style={{ fontSize: 11, color: 'var(--aspan-text-muted)' }}>
-                                Kalan: <strong style={{ color: '#059669' }}>{formatPrice(org.remainingCreditTRY, currency)}</strong> / {formatPrice(org.creditLimitTRY, currency)}
+                            {org.creditLimitTRY > 0 ? (
+                              <div style={{ textAlign: 'right', marginRight: 6 }}>
+                                <div style={{ fontSize: 11, color: 'var(--aspan-text-muted)' }}>
+                                  Kalan: <strong style={{ color: '#059669' }}>{formatPrice(org.remainingCreditTRY, currency)}</strong> / {formatPrice(org.creditLimitTRY, currency)}
+                                </div>
+                                <div style={{ fontSize: 11, color: org.usedCreditTRY > 0 ? '#D97706' : 'var(--aspan-text-muted)' }}>
+                                  Kullanılan Borç: <strong>{formatPrice(org.usedCreditTRY, currency)}</strong> (%{usedPct})
+                                </div>
                               </div>
-                              <div style={{ fontSize: 11, color: org.usedCreditTRY > 0 ? '#D97706' : 'var(--aspan-text-muted)' }}>
-                                Kullanılan Borç: <strong>{formatPrice(org.usedCreditTRY, currency)}</strong> (%{usedPct})
+                            ) : (
+                              <div style={{ textAlign: 'right', marginRight: 6, fontSize: 11.5, color: 'var(--aspan-text-muted)', fontWeight: 700 }}>
+                                Cari bakiye tanımlı değil
                               </div>
-                            </div>
+                            )}
+                            <button
+                              type="button"
+                              className="uf-quick-pill"
+                              disabled={busy}
+                              style={{
+                                background: org.creditLimitTRY > 0 ? 'rgba(2,132,199,0.1)' : 'rgba(16,185,129,0.14)',
+                                color: org.creditLimitTRY > 0 ? '#0369A1' : '#047857',
+                                borderColor: org.creditLimitTRY > 0 ? '#0284C7' : '#10B981',
+                              }}
+                              onClick={() => {
+                                if (editingCariOrgId === org.id) {
+                                  setEditingCariOrgId(null);
+                                } else {
+                                  setEditingCariOrgId(org.id);
+                                  setCariLimitDraft(String(org.creditLimitTRY > 0 ? org.creditLimitTRY : 50000));
+                                }
+                              }}
+                            >
+                              {editingCariOrgId === org.id
+                                ? 'Vazgeç'
+                                : org.creditLimitTRY > 0
+                                  ? '✎ Cari Limit Düzenle'
+                                  : '🔓 Cari Hesap Aç'}
+                            </button>
+                            {org.creditLimitTRY > 0 && (
+                              <button
+                                type="button"
+                                className="uf-quick-pill"
+                                disabled={busy}
+                                style={{ background: 'rgba(225,29,72,0.1)', color: '#be123c', borderColor: '#e11d48' }}
+                                onClick={() => void runAction(async () => {
+                                  const { organization: updated } = await api.updateOrganization(org.id, { creditLimitTRY: 0 });
+                                  setOrganizations((prev) => prev.map((row) => (row.id === org.id ? updated : row)));
+                                  if (editingCariOrgId === org.id) setEditingCariOrgId(null);
+                                  flash(`${org.name} cari hesabı kapatıldı (Limit: ₺0).`);
+                                })}
+                              >
+                                🔒 Cariyi Kapat
+                              </button>
+                            )}
                             <button
                               type="button"
                               className="uf-quick-pill"
@@ -4349,20 +4409,6 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                               className="uf-quick-pill"
                               disabled={busy}
                               onClick={() => void runAction(async () => {
-                                const { organization: updated } = await api.updateOrganization(org.id, {
-                                  creditLimitTRY: org.creditLimitTRY + 50000,
-                                });
-                                setOrganizations((prev) => prev.map((row) => (row.id === org.id ? updated : row)));
-                                flash(`${org.name} kredi limiti +50.000 TL artırıldı.`);
-                              })}
-                            >
-                              +50.000 TL Limit
-                            </button>
-                            <button
-                              type="button"
-                              className="uf-quick-pill"
-                              disabled={busy}
-                              onClick={() => void runAction(async () => {
                                 const nextStatus = org.status === 'active' ? 'suspended' : 'active';
                                 const { organization: updated } = await api.updateOrganization(org.id, { status: nextStatus });
                                 setOrganizations((prev) => prev.map((row) => (row.id === org.id ? updated : row)));
@@ -4386,6 +4432,56 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                             </button>
                           </div>
                           </div>
+
+                          {/* Super Admin Inline Cari Limit Editor */}
+                          {editingCariOrgId === org.id && (
+                            <form
+                              style={{
+                                marginTop: 10,
+                                padding: '10px 12px',
+                                borderRadius: 12,
+                                background: 'rgba(16,185,129,0.06)',
+                                border: '1px solid rgba(16,185,129,0.3)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                flexWrap: 'wrap',
+                              }}
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                const nextLimit = Math.max(0, Math.round(Number(cariLimitDraft) || 0));
+                                void runAction(async () => {
+                                  const { organization: updated } = await api.updateOrganization(org.id, {
+                                    creditLimitTRY: nextLimit,
+                                  });
+                                  setOrganizations((prev) => prev.map((row) => (row.id === org.id ? updated : row)));
+                                  setEditingCariOrgId(null);
+                                  flash(
+                                    nextLimit > 0
+                                      ? `${org.name} cari limiti ₺${nextLimit.toLocaleString('tr-TR')} olarak açıldı / güncellendi.`
+                                      : `${org.name} cari hesabı kapatıldı (Limit: ₺0).`
+                                  );
+                                });
+                              }}
+                            >
+                              <span style={{ fontSize: 12.5, fontWeight: 800, color: '#047857' }}>
+                                Cari Bakiye Limiti (TL):
+                              </span>
+                              <input
+                                type="number"
+                                min={0}
+                                step={1000}
+                                className="modal-input"
+                                style={{ width: 160, height: 34 }}
+                                value={cariLimitDraft}
+                                onChange={(e) => setCariLimitDraft(e.target.value)}
+                                placeholder="Örn: 50000 (0 = Kapalı)"
+                              />
+                              <button type="submit" className="btn-gold-nav" style={{ height: 34, fontSize: 12 }} disabled={busy}>
+                                ✓ Cari Limiti Kaydet
+                              </button>
+                            </form>
+                          )}
 
                           {/* Cari Credit Usage Bar */}
                           {org.creditLimitTRY > 0 && (
@@ -4471,7 +4567,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                         <option value="corporate">Kurumsal Şirket</option>
                         <option value="internal">Merkez Ekip</option>
                       </select>
-                      <input className="modal-input" type="number" min={0} placeholder="Cari Limit (TL)" value={newOrgLimit} onChange={(e) => setNewOrgLimit(e.target.value)} />
+                      <input className="modal-input" type="number" min={0} placeholder="Cari Limit TL (0 = Cari Kapalı)" value={newOrgLimit} onChange={(e) => setNewOrgLimit(e.target.value)} />
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                         {(['flights', 'hotels', 'transfers', 'tours'] as const).map((mod) => {
                           const checked = newOrgModules.includes(mod);

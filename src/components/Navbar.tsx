@@ -418,14 +418,20 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </span>
                   <ChevronRight size={17} />
                 </a>
-                {user?.role === 'admin' && (<button
+                {(user?.role === 'admin' || Boolean(user?.permissions?.length)) && (<button
                   type="button"
                   className="drawer-link"
+                  style={{
+                    background: 'rgba(0, 168, 181, 0.1)',
+                    borderColor: 'rgba(0, 168, 181, 0.35)',
+                    color: '#0b4f5c',
+                    fontWeight: 800,
+                  }}
                   onClick={() => handleGo('admin')}
                 >
                   <span className="drawer-link-left">
-                    <Sliders size={18} />
-                    Yönetici &amp; Fiyat Paneli
+                    <Sliders size={18} color="#00A8B5" />
+                    {user?.role === 'admin' ? 'Yönetici & Fiyat Paneli' : 'Ekip Portalı'}
                   </span>
                   <ChevronRight size={17} />
                 </button>)}
