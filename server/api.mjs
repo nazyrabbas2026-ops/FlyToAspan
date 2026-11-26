@@ -229,12 +229,28 @@ function newDemoBooking(db, body, owner) {
         paxType: typeof p?.paxType === 'string' ? p.paxType.trim().slice(0, 32) : undefined,
       })).filter((p) => p.fullName)
     : undefined;
+  const legs = Array.isArray(body.legs)
+    ? body.legs.slice(0, 4).map((l) => ({
+        direction: l?.direction === 'Dönüş' ? 'Dönüş' : 'Gidiş',
+        fromCode: typeof l?.fromCode === 'string' ? l.fromCode.trim().toUpperCase().slice(0, 8) : '',
+        toCode: typeof l?.toCode === 'string' ? l.toCode.trim().toUpperCase().slice(0, 8) : '',
+        date: typeof l?.date === 'string' ? l.date.trim().slice(0, 16) : date,
+        departTime: typeof l?.departTime === 'string' ? l.departTime.trim().slice(0, 10) : '',
+        arriveTime: typeof l?.arriveTime === 'string' ? l.arriveTime.trim().slice(0, 10) : '',
+        flightNumber: typeof l?.flightNumber === 'string' ? l.flightNumber.trim().slice(0, 24) : '',
+        airline: typeof l?.airline === 'string' ? l.airline.trim().slice(0, 60) : '',
+        baggage: typeof l?.baggage === 'string' ? l.baggage.trim().slice(0, 60) : undefined,
+        cabin: typeof l?.cabin === 'string' ? l.cabin.trim().slice(0, 32) : undefined,
+        duration: typeof l?.duration === 'string' ? l.duration.trim().slice(0, 24) : undefined,
+      })).filter((l) => l.fromCode || l.flightNumber)
+    : undefined;
   const details = {
     type, date, returnDate,
     title: text(body.title, 160),
     subtitle: text(body.subtitle, 320),
     passenger: text(body.passenger, 150, 2),
     passengersDetail: passengersDetail && passengersDetail.length > 0 ? passengersDetail : undefined,
+    legs: legs && legs.length > 0 ? legs : undefined,
     contactEmail: typeof body.contactEmail === 'string' ? body.contactEmail.trim().slice(0, 120) : undefined,
     contactPhone: typeof body.contactPhone === 'string' ? body.contactPhone.trim().slice(0, 40) : undefined,
     providerSource: typeof body.providerSource === 'string' ? body.providerSource.trim().slice(0, 80) : undefined,
@@ -620,7 +636,23 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const surname = normalizeSurname(body.surname);
         const row = db.prepare('SELECT * FROM bookings WHERE pnr = ? AND surname = ?').get(pnr, surname);
         if (!row) fail(404, 'Bu kod ve soyadla eşleşen rezervasyon bulunamadı.');
-        send(res, 200, { booking: bookingRecord(row) });
+        const isAuthorized = Boolean(
+          user && (user.role === 'admin' || row.owner_id === user.id || row.sold_by_user_id === user.id || canAccessPanel(user))
+        );
+        const rec = bookingRecord(row);
+        if (!isAuthorized) {
+          delete rec.passengersDetail;
+          delete rec.contactEmail;
+          delete rec.contactPhone;
+          delete rec.netCostTRY;
+          delete rec.profitTRY;
+          delete rec.providerSource;
+          delete rec.sellerName;
+          delete rec.sellerEmail;
+          delete rec.organizationName;
+          delete rec.invoiceTaxNo;
+        }
+        send(res, 200, { booking: rec });
       } else if (method === 'POST' && path === '/api/bookings/lookup-cancel') {
         throttle(`lookup:${ip}`, 24);
         const body = await readJson(req);
@@ -637,7 +669,23 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           fail(409, `Bu rezervasyon zaten "${exists.status}" durumunda olduğu için yeni iptal talebi oluşturulamaz.`);
         }
         writeAuditLog(db, { actorEmail: user?.email || `guest:${pnr}`, action: 'public:pnr_cancel_request', target: pnr, ip });
-        send(res, 200, { booking: bookingRecord(row) });
+        const isAuthorized = Boolean(
+          user && (user.role === 'admin' || row.owner_id === user.id || row.sold_by_user_id === user.id || canAccessPanel(user))
+        );
+        const rec = bookingRecord(row);
+        if (!isAuthorized) {
+          delete rec.passengersDetail;
+          delete rec.contactEmail;
+          delete rec.contactPhone;
+          delete rec.netCostTRY;
+          delete rec.profitTRY;
+          delete rec.providerSource;
+          delete rec.sellerName;
+          delete rec.sellerEmail;
+          delete rec.organizationName;
+          delete rec.invoiceTaxNo;
+        }
+        send(res, 200, { booking: rec });
       } else if (method === 'GET' && path === '/api/bookings') {
         if (!user) fail(401, 'Oturum açın.');
         const rows = db.prepare('SELECT * FROM bookings WHERE owner_id = ? OR sold_by_user_id = ? ORDER BY created_at DESC, id DESC').all(user.id, user.id);
@@ -648,9 +696,21 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const idemKey = typeof body.idempotencyKey === 'string' && /^[a-zA-Z0-9_-]{8,64}$/.test(body.idempotencyKey)
           ? `${user?.id ?? ip}:${body.idempotencyKey}`
           : null;
-        if (idemKey && idempotencyCache.has(idemKey)) {
-          send(res, 200, { booking: idempotencyCache.get(idemKey).booking, deduplicated: true });
-          return true;
+        if (idemKey) {
+          if (idempotencyCache.has(idemKey)) {
+            send(res, 200, { booking: idempotencyCache.get(idemKey).booking, deduplicated: true });
+            return true;
+          }
+          const persisted = db.prepare('SELECT booking_id FROM idempotency_keys WHERE key = ? AND expires_at > ?').get(idemKey, Date.now());
+          if (persisted) {
+            const existingRow = db.prepare('SELECT * FROM bookings WHERE id = ?').get(persisted.booking_id);
+            if (existingRow) {
+              const existingBk = bookingRecord(existingRow);
+              idempotencyCache.set(idemKey, { booking: existingBk, until: Date.now() + 10 * 60_000 });
+              send(res, 200, { booking: existingBk, deduplicated: true });
+              return true;
+            }
+          }
         }
         // Enforce granular .sell permissions for staff/sub-agent accounts (B2C members with [] perms can buy freely)
         if (user && user.role !== 'admin' && canAccessPanel(user)) {
@@ -697,7 +757,10 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           );
         }
         if (idemKey) {
+          const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
           idempotencyCache.set(idemKey, { booking, until: Date.now() + 10 * 60_000 });
+          db.prepare('INSERT OR REPLACE INTO idempotency_keys (key, booking_id, expires_at) VALUES (?, ?, ?)').run(idemKey, booking.id, expiresAt);
+          if (Math.random() < 0.02) db.prepare('DELETE FROM idempotency_keys WHERE expires_at <= ?').run(Date.now());
         }
         if (user?.email) {
           void sendBookingConfirmationEmail({
@@ -742,7 +805,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const rows = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'catalog:%'").all();
         const catalog = Object.fromEntries(rows.map(({ key, value }) => [key.slice('catalog:'.length), JSON.parse(value)]));
         send(res, 200, { catalog });
-      } else if (method === 'PUT' && /^\/api\/admin\/catalog\/(rules|coupons|agencies|hotels|transfers|tours|operators|flights|providers)$/.test(path)) {
+      } else if (method === 'PUT' && /^\/api\/admin\/catalog\/(rules|coupons|agencies|hotels|transfers|tours|deals|operators|flights|providers)$/.test(path)) {
         const section = path.split('/')[4];
         const key = 'catalog:' + section;
         const body = await readJson(req);
@@ -755,6 +818,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           ? db.prepare('UPDATE settings SET value = ? WHERE key = ? AND value = ?').run(JSON.stringify(entry), key, saved.value)
           : db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING').run(key, JSON.stringify(entry));
         if (!result.changes) fail(409, 'Bu liste başka bir yerde güncellendi. Paneli yenileyip tekrar deneyin.');
+        writeAuditLog(db, { actorEmail: user.email, action: 'admin:catalog_update', target: `${section}:rev${entry.revision}`, ip });
         send(res, 200, { entry });
       } else if ((method === 'PATCH' || method === 'DELETE') && /^\/api\/admin\/bookings\/[a-f0-9]{32}$/.test(path)) {
         const id = path.split('/').at(-1);
@@ -771,15 +835,23 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           writeAuditLog(db, { actorEmail: user.email, action: 'admin:booking_delete', target: id, ip });
           send(res, 200, { ok: true });
         } else {
-          const { status } = await readJson(req);
+          const body = await readJson(req);
+          const { status, expectedStatus } = body;
           if (!statuses.includes(status)) fail(400, 'Rezervasyon durumu geçersiz.');
           const canDirectManage = user.role === 'admin' || hasPerm(user, 'bookings.manage');
           const canCancelReq = status === 'İptal Talebi' && existingBk.status === 'Onaylandı' && (canDirectManage || hasPerm(user, 'bookings.cancel_request'));
           if (!canDirectManage && !canCancelReq) {
             fail(403, 'Bu rezervasyon durumunu değiştirme yetkiniz yok.');
           }
-          const row = db.prepare('UPDATE bookings SET status = ? WHERE id = ? RETURNING *').get(status, id);
-          writeAuditLog(db, { actorEmail: user.email, action: 'admin:booking_status', target: `${row.pnr}:${status}`, ip });
+          if (expectedStatus && existingBk.status !== expectedStatus) {
+            fail(409, `Bu rezervasyonun durumu başka bir yönetici tarafından "${existingBk.status}" olarak değiştirildi. Lütfen sayfayı yenileyin.`);
+          }
+          if ((existingBk.status === 'İade Edildi' || existingBk.status === 'İptal Edildi') && status !== existingBk.status && status !== 'İade Edildi') {
+            fail(409, `"${existingBk.status}" durumundaki kayıt "${status}" olarak değiştirilemez.`);
+          }
+          const row = db.prepare('UPDATE bookings SET status = ? WHERE id = ? AND status = ? RETURNING *').get(status, id, existingBk.status);
+          if (!row) fail(409, 'Bu rezervasyon eşzamanlı olarak güncellendi. Lütfen yenileyip tekrar deneyin.');
+          writeAuditLog(db, { actorEmail: user.email, action: 'admin:booking_status', target: `${row.pnr}:${existingBk.status}->${status}`, ip });
           send(res, 200, { booking: bookingRecord(row) });
         }
       } else if (method === 'PATCH' && path === '/api/admin/pricing') {
@@ -789,12 +861,18 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           if (!Number.isInteger(body[key]) || body[key] < 0 || body[key] > maximum) fail(400, 'Fiyat kuralı geçersiz.');
           markup[key] = body[key];
         }
-        db.prepare(`
-          INSERT INTO settings (key, value) VALUES ('markup', ?)
-          ON CONFLICT(key) DO UPDATE SET value = excluded.value
-        `).run(JSON.stringify(markup));
+        const saved = db.prepare("SELECT value FROM settings WHERE key = 'markup'").get();
+        const currentRev = saved ? (JSON.parse(saved.value).revision ?? 0) : 0;
+        if (body.revision !== undefined && body.revision !== currentRev) {
+          fail(409, 'Fiyat kuralları başka bir yönetici tarafından güncellendi. Lütfen yenileyip tekrar deneyin.');
+        }
+        const nextPayload = { ...markup, revision: currentRev + 1 };
+        const result = saved
+          ? db.prepare("UPDATE settings SET value = ? WHERE key = 'markup' AND value = ?").run(JSON.stringify(nextPayload), saved.value)
+          : db.prepare("INSERT INTO settings (key, value) VALUES ('markup', ?) ON CONFLICT(key) DO NOTHING").run(JSON.stringify(nextPayload));
+        if (!result.changes) fail(409, 'Fiyat kuralları eşzamanlı olarak güncellendi. Lütfen yenileyip tekrar deneyin.');
         writeAuditLog(db, { actorEmail: user.email, action: 'admin:pricing_update', target: JSON.stringify(markup), ip });
-        send(res, 200, { markup });
+        send(res, 200, { markup: nextPayload });
       } else if (method === 'PATCH' && path === '/api/admin/fx') {
         const body = await readJson(req);
         const usdTry = Number(body.usdTry);

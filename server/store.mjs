@@ -94,6 +94,12 @@ export function openDatabase(filename = process.env.FLYTOASPAN_DB || '.data/flyt
       created_by TEXT NOT NULL DEFAULT '',
       created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS idempotency_keys (
+      key TEXT PRIMARY KEY,
+      booking_id TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idempotency_expiry ON idempotency_keys(expires_at);
     CREATE INDEX IF NOT EXISTS org_ledger_org ON org_ledger(organization_id, created_at DESC);
     CREATE TABLE IF NOT EXISTS saved_passengers (
       id TEXT PRIMARY KEY,

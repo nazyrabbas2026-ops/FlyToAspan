@@ -10,7 +10,10 @@
     "start": "node --env-file-if-exists=.env server/index.mjs",
     "admin:create": "node --env-file-if-exists=.env server/create-admin.mjs",
     "backup:db": "node --env-file-if-exists=.env server/backup-db.mjs",
-    "test:api": "node --test server/test-api.mjs"
+    "test:api": "node --test server/test-api.mjs",
+    "test:e2e": "playwright test",
+    "test:stress": "node --test tests/stress/stress-concurrency.mjs",
+    "test:all": "npm run build && npm run test:api && npm run test:e2e && npm run test:stress"
   },
   "dependencies": {
     "lucide-react": "^0.460.0",
@@ -18,6 +21,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",

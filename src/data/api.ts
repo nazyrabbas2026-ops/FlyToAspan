@@ -110,8 +110,8 @@ export const api = {
     '/bookings/lookup-cancel', 'POST', { pnr, surname }
   ),
   cancel: (id: string) => request<{ booking: BookingRecord }>(`/bookings/${encodeURIComponent(id)}/cancel`, 'POST'),
-  setStatus: (id: string, status: BookingRecord['status']) => request<{ booking: BookingRecord }>(
-    `/admin/bookings/${encodeURIComponent(id)}`, 'PATCH', { status }
+  setStatus: (id: string, status: BookingRecord['status'], expectedStatus?: BookingRecord['status']) => request<{ booking: BookingRecord }>(
+    `/admin/bookings/${encodeURIComponent(id)}`, 'PATCH', expectedStatus ? { status, expectedStatus } : { status }
   ),
   deleteBooking: (id: string) => request<{ ok: true }>(`/admin/bookings/${encodeURIComponent(id)}`, 'DELETE'),
   pricing: (signal?: AbortSignal) => request<{ markup: AdminMarkupConfig | null }>('/pricing', 'GET', undefined, signal),
@@ -174,7 +174,7 @@ export const api = {
   testProviderConnection: (url: string) => request<{ ok: boolean; status: number; latencyMs: number; message: string }>('/admin/providers/test', 'POST', { url }),
 };
 
-export type BookingDraft = Pick<BookingRecord, 'type' | 'title' | 'subtitle' | 'date' | 'returnDate' | 'passenger' | 'passengersDetail' | 'contactEmail' | 'contactPhone' | 'providerSource' | 'netCostTRY' | 'profitTRY' | 'price' | 'departTime' | 'arriveTime' | 'flightNumber' | 'airline' | 'baggage' | 'cabin' | 'duration'> & {
+export type BookingDraft = Pick<BookingRecord, 'type' | 'title' | 'subtitle' | 'date' | 'returnDate' | 'passenger' | 'passengersDetail' | 'legs' | 'contactEmail' | 'contactPhone' | 'providerSource' | 'netCostTRY' | 'profitTRY' | 'price' | 'departTime' | 'arriveTime' | 'flightNumber' | 'airline' | 'baggage' | 'cabin' | 'duration'> & {
   lookupSurname: string;
   idempotencyKey?: string;
 };

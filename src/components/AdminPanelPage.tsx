@@ -645,7 +645,24 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
     [isSuperAdmin, userPerms, canEditPricing, canManageInventory, canManageCoupons, canManageTeam, canManageApis]
   );
 
-  const [section, setSection] = useState<AdminSection>('dashboard');
+  const [section, setSectionState] = useState<AdminSection>(() => {
+    try {
+      const hashSec = window.location.hash.replace(/^#/, '') as AdminSection;
+      if (ADMIN_SECTIONS.some((s) => s.id === hashSec)) return hashSec;
+      const saved = sessionStorage.getItem('flytoaspan_admin_section') as AdminSection | null;
+      if (saved && ADMIN_SECTIONS.some((s) => s.id === saved)) return saved;
+    } catch { /* ignore */ }
+    return 'dashboard';
+  });
+  const setSection = (next: AdminSection) => {
+    setSectionState(next);
+    try {
+      sessionStorage.setItem('flytoaspan_admin_section', next);
+      if (window.location.hash !== `#${next}`) {
+        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${next}`);
+      }
+    } catch { /* ignore */ }
+  };
   const [draft, setDraft] = useState<AdminMarkupConfig>(markup);
   const [savedToast, setSavedToast] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
@@ -751,13 +768,35 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
 
   // Module 2: Bookings Filter, Date Range, Sort & Manual PNR Form
   const [searchQ, setSearchQ] = useState('');
-  const [typeFilter, setTypeFilter] = useState<'ALL' | 'Uçak' | 'Otel' | 'Transfer'>('ALL');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | BookingRecord['status']>('ALL');
+  const [typeFilter, setTypeFilterState] = useState<'ALL' | 'Uçak' | 'Otel' | 'Transfer' | 'Tur'>(() => {
+    try {
+      const s = sessionStorage.getItem('flytoaspan_admin_type_filter');
+      if (s === 'Uçak' || s === 'Otel' || s === 'Transfer' || s === 'Tur') return s;
+    } catch { /* ignore */ }
+    return 'ALL';
+  });
+  const setTypeFilter = (next: 'ALL' | 'Uçak' | 'Otel' | 'Transfer' | 'Tur') => {
+    setTypeFilterState(next);
+    try { sessionStorage.setItem('flytoaspan_admin_type_filter', next); } catch { /* ignore */ }
+  };
+  const [statusFilter, setStatusFilterState] = useState<'ALL' | BookingRecord['status']>(() => {
+    try {
+      const s = sessionStorage.getItem('flytoaspan_admin_status_filter') as BookingRecord['status'] | null;
+      if (s && s in STATUS_VISUALS) return s;
+    } catch { /* ignore */ }
+    return 'ALL';
+  });
+  const setStatusFilter = (next: 'ALL' | BookingRecord['status']) => {
+    setStatusFilterState(next);
+    try { sessionStorage.setItem('flytoaspan_admin_status_filter', next); } catch { /* ignore */ }
+  };
+  const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
+  const [bookingAuditLogs, setBookingAuditLogs] = useState<Array<{ id: string; actor_email: string; action: string; target: string; created_at: number }>>([]);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [sortBy, setSortBy] = useState<BookingSortKey>('dateDesc');
   const [showManualForm, setShowManualForm] = useState(false);
-  const [manType, setManType] = useState<'Uçak' | 'Otel' | 'Transfer'>('Uçak');
+  const [manType, setManType] = useState<'Uçak' | 'Otel' | 'Transfer' | 'Tur'>('Uçak');
   const [manTitle, setManTitle] = useState('İstanbul (IST) → Almatı (ALA)');
   const [manSubtitle, setManSubtitle] = useState('Air Astana · KC912 · Prime Fly');
   const [manPax, setManPax] = useState('');
@@ -1131,7 +1170,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
       b.pnr,
       b.eticketNumber || '-',
       b.type,
-      `"${b.providerSource || (b.type === 'Otel' ? 'BookingAgora Hotel XML' : b.type === 'Transfer' ? 'Buranus VIP Transfer XML' : 'Amadeus GDS (XML)')}"`,
+      `"${b.providerSource || 'Yerel Deneme / Manuel Kayıt'}"`,
       `"${b.title}"`,
       `"${b.subtitle}"`,
       b.date,
@@ -1792,16 +1831,24 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                     {/* Pill Filters for Type & Status */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {(['ALL', 'Uçak', 'Otel', 'Transfer'] as const).map((t) => (
-                          <button
-                            key={t}
-                            type="button"
-                            className={`sort-pill-btn ${typeFilter === t ? 'active' : ''}`}
-                            onClick={() => setTypeFilter(t)}
-                          >
-                            {t === 'ALL' ? 'Tüm Hizmetler' : t}
-                          </button>
-                        ))}
+                        {(['ALL', 'Uçak', 'Otel', 'Transfer', 'Tur'] as const).map((t) => {
+                          const typeLabels: Record<string, string> =
+                            activePanelLang === 'EN'
+                              ? { ALL: 'All Services', Uçak: 'Flight', Otel: 'Hotel', Transfer: 'Transfer', Tur: 'Tour' }
+                              : activePanelLang === 'RU'
+                                ? { ALL: 'Все услуги', Uçak: 'Авиа', Otel: 'Отель', Transfer: 'Трансфер', Tur: 'Тур' }
+                                : { ALL: 'Tüm Hizmetler', Uçak: 'Uçak', Otel: 'Otel', Transfer: 'Transfer', Tur: 'Tur' };
+                          return (
+                            <button
+                              key={t}
+                              type="button"
+                              className={`sort-pill-btn ${typeFilter === t ? 'active' : ''}`}
+                              onClick={() => setTypeFilter(t)}
+                            >
+                              {typeLabels[t]}
+                            </button>
+                          );
+                        })}
                       </div>
 
                       {/* Color-Coded Status Filter Buttons */}
@@ -1811,7 +1858,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                           className={`sort-pill-btn ${statusFilter === 'ALL' ? 'active' : ''}`}
                           onClick={() => setStatusFilter('ALL')}
                         >
-                          Tüm Durumlar ({bookings.length})
+                          {activePanelLang === 'EN' ? 'All Statuses' : activePanelLang === 'RU' ? 'Все статусы' : 'Tüm Durumlar'} ({bookings.length})
                         </button>
                         {(
                           [
@@ -1851,7 +1898,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                   background: isActive ? '#ffffff' : vis.dot,
                                 }}
                               />
-                              {vis.label} ({countByStatus[st]})
+                              {ui.statusLabels[st]} ({countByStatus[st]})
                             </button>
                           );
                         })}
@@ -1861,7 +1908,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                             className="uf-quick-pill"
                             onClick={resetBookingFilters}
                           >
-                            Filtreleri Temizle
+                            {activePanelLang === 'EN' ? 'Clear Filters' : activePanelLang === 'RU' ? 'Сбросить фильтры' : 'Filtreleri Temizle'}
                           </button>
                         )}
                       </div>
@@ -1869,7 +1916,11 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
 
                     {/* Bookings List */}
                     <div role="status" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--aspan-text-muted)', marginBottom: 10 }}>
-                      Gösterilen: {filteredBookings.length} / {bookings.length} kayıt
+                      {activePanelLang === 'EN'
+                        ? `Showing: ${filteredBookings.length} / ${bookings.length} records`
+                        : activePanelLang === 'RU'
+                          ? `Показано: ${filteredBookings.length} / ${bookings.length} записей`
+                          : `Gösterilen: ${filteredBookings.length} / ${bookings.length} kayıt`}
                     </div>
 
                     {filteredBookings.length === 0 ? (
@@ -1904,13 +1955,13 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                 <span
                                   className="pkg-pill"
                                   style={{
-                                    background: 'rgba(2, 132, 199, 0.12)',
-                                    color: '#0369A1',
-                                    border: '1px solid rgba(2, 132, 199, 0.3)',
+                                    background: b.providerSource ? 'rgba(2, 132, 199, 0.12)' : 'rgba(245, 158, 11, 0.14)',
+                                    color: b.providerSource ? '#0369A1' : '#b45309',
+                                    border: `1px solid ${b.providerSource ? 'rgba(2, 132, 199, 0.3)' : 'rgba(245, 158, 11, 0.35)'}`,
                                     fontWeight: 800,
                                   }}
                                 >
-                                  🔌 XML: {b.providerSource || (b.type === 'Otel' ? 'BookingAgora Hotel XML' : b.type === 'Transfer' ? 'Buranus VIP Transfer XML' : 'Amadeus GDS (XML)')}
+                                  {b.providerSource ? `🔌 ${b.providerSource}` : '🧪 Yerel Deneme / Manuel Kayıt'}
                                 </span>
                                 {b.eticketNumber && <span className="pkg-pill">ETKT: {b.eticketNumber}</span>}
                                 <span
@@ -1934,7 +1985,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                       background: vis.dot,
                                     }}
                                   />
-                                  {vis.label}
+                                  {ui.statusLabels[b.status] || vis.label}
                                 </span>
                                 <span className="pkg-pill" style={{ background: 'rgba(15, 23, 42, 0.06)', color: 'var(--aspan-text-body)' }}>
                                   {b.organizationName ? `🏢 Kurumsal: ${b.organizationName}` : '👤 Bireysel (B2C)'}
@@ -1975,6 +2026,16 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                   {b.duration && <span>⏱ <strong>Süre:</strong> {b.duration}</span>}
                                   {b.cabin && <span>💺 <strong>Kabin:</strong> {b.cabin}</span>}
                                   {b.baggage && <span>🧳 <strong>Bagaj:</strong> {b.baggage}</span>}
+                                  {b.legs && b.legs.length > 0 && (
+                                    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+                                      {b.legs.map((leg, lIdx) => (
+                                        <div key={`${b.id}-leg-${lIdx}`} style={{ fontSize: 11.5, color: 'var(--aspan-text-body)' }}>
+                                          <strong>{leg.direction}:</strong> {leg.fromCode} → {leg.toCode} ({formatDisplayDate(leg.date, lang)} · {leg.departTime} → {leg.arriveTime}) · {leg.airline} {leg.flightNumber}
+                                          {leg.baggage ? ` · 🧳 ${leg.baggage}` : ''}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               )}
 
@@ -2030,6 +2091,33 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                   </span>
                                 </div>
                               )}
+
+                              {expandedBookingId === b.id && (
+                                <div
+                                  style={{
+                                    marginTop: 8,
+                                    padding: '10px 12px',
+                                    borderRadius: 10,
+                                    background: 'rgba(15, 23, 42, 0.04)',
+                                    border: '1px solid var(--aspan-border)',
+                                    fontSize: 12,
+                                  }}
+                                >
+                                  <div style={{ fontWeight: 800, marginBottom: 6 }}>
+                                    🕒 {activePanelLang === 'EN' ? 'Booking Timeline & Audit History' : activePanelLang === 'RU' ? 'История изменений бронирования' : 'İşlem Geçmişi & Zaman Çizelgesi'}
+                                  </div>
+                                  <div style={{ fontSize: 11.5, color: 'var(--aspan-text-muted)', marginBottom: 4 }}>
+                                    • {formatTrDateTime(b.createdAt)} — {activePanelLang === 'EN' ? 'Created' : activePanelLang === 'RU' ? 'Создано' : 'Oluşturuldu'} ({b.sellerName || b.sellerEmail || 'Web Direkt'})
+                                  </div>
+                                  {bookingAuditLogs
+                                    .filter((log) => log.target.includes(b.pnr) || log.target.includes(b.id))
+                                    .map((log) => (
+                                      <div key={log.id} style={{ fontSize: 11.5, color: 'var(--aspan-text-body)', marginTop: 3 }}>
+                                        • <strong>{formatTrDateTime(log.created_at)}</strong> · {log.actor_email} · <code>{log.action}</code> ({log.target})
+                                      </div>
+                                    ))}
+                                </div>
+                              )}
                             </div>
 
                             <div className="panel-record-actions" style={{ flexWrap: 'wrap', gap: 6 }}>
@@ -2048,7 +2136,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                     flash(`${b.pnr} (${b.type}) yapıldı / tamamlandı olarak işaretlendi.`);
                                   })}
                                 >
-                                  ✓ Yapıldı
+                                  ✓ {activePanelLang === 'EN' ? 'Done' : activePanelLang === 'RU' ? 'Выполнено' : 'Yapıldı'}
                                 </button>
                               )}
                               {!canManageBookings && canCancelRequest && b.status === 'Onaylandı' && (
@@ -2062,16 +2150,36 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                     flash(`${b.pnr} için merkeze iptal talebi iletildi.`);
                                   })}
                                 >
-                                  İptal Talebi Oluştur
+                                  {activePanelLang === 'EN' ? 'Request Cancel' : activePanelLang === 'RU' ? 'Запрос отмены' : 'İptal Talebi Oluştur'}
                                 </button>
                               )}
                               <button
                                 type="button"
                                 className="uf-quick-pill"
-                                onClick={() => openBrandedEticketPdf(b, { currency, lang })}
+                                onClick={() => openBrandedEticketPdf(b, { currency, lang: activePanelLang })}
                               >
                                 <Download size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-                                PDF E-Bilet
+                                {b.demo !== false
+                                  ? (activePanelLang === 'EN' ? 'Demo PDF' : activePanelLang === 'RU' ? 'Демо PDF' : 'Deneme Özeti (PDF)')
+                                  : 'PDF E-Bilet'}
+                              </button>
+                              <button
+                                type="button"
+                                className="uf-quick-pill"
+                                onClick={() => {
+                                  if (expandedBookingId === b.id) {
+                                    setExpandedBookingId(null);
+                                  } else {
+                                    setExpandedBookingId(b.id);
+                                    if (isSuperAdmin && bookingAuditLogs.length === 0) {
+                                      api.adminAuditLogs().then(({ logs }) => setBookingAuditLogs(logs)).catch(() => {});
+                                    }
+                                  }
+                                }}
+                              >
+                                {expandedBookingId === b.id
+                                  ? (activePanelLang === 'EN' ? 'Hide History' : activePanelLang === 'RU' ? 'Скрыть историю' : 'Geçmişi Kapat')
+                                  : (activePanelLang === 'EN' ? 'Timeline' : activePanelLang === 'RU' ? 'История' : 'İşlem Geçmişi')}
                               </button>
                               {canManageBookings && b.status !== 'İptal Edildi' && (
                                 <button
@@ -2084,7 +2192,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                     flash(`${b.pnr} iptal edildi.`);
                                   })}
                                 >
-                                  ✕ İptal
+                                  ✕ {activePanelLang === 'EN' ? 'Cancel' : activePanelLang === 'RU' ? 'Отменить' : 'İptal'}
                                 </button>
                               )}
                               {canManageBookings && b.status !== 'İade Edildi' && (
@@ -2092,13 +2200,14 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                   type="button"
                                   className="uf-quick-pill"
                                   disabled={busy}
+                                  title="Yalnızca rezervasyon kayıt durumunu İade Edildi olarak işaretler (otomatik banka POS iadesi değildir)."
                                   style={{ background: 'rgba(124,58,237,0.1)', color: '#6d28d9', borderColor: '#7c3aed' }}
                                   onClick={() => void runAction(async () => {
                                     await onUpdateBookingStatus(b.id, 'İade Edildi');
-                                    flash(`${b.pnr} iade edildi olarak işaretlendi.`);
+                                    flash(`${b.pnr} kayıt durumu "İade Edildi" olarak işaretlendi.`);
                                   })}
                                 >
-                                  ↺ İade
+                                  ↺ {activePanelLang === 'EN' ? 'Mark Refunded (Record)' : activePanelLang === 'RU' ? 'Возврат (запись)' : 'İade İşaretle (Kayıt)'}
                                 </button>
                               )}
 

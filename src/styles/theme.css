@@ -4811,12 +4811,14 @@ img {
   .u4-tabs-bar {
     width: 100%;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
   }
   .u4-tab-btn {
     justify-content: center;
-    padding: 0 10px;
-    font-size: 13px;
+    padding: 0 8px;
+    font-size: 12.5px;
+    min-width: 0;
   }
   .u4-trip-pills {
     width: 100%;
@@ -6151,6 +6153,29 @@ img {
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+}
+
+/* Ultra-narrow mobile (320px – 379px): prevent logo & quick pill overlap without affecting 390px+ */
+@media (max-width: 379px) {
+  .brand-logo-img {
+    height: 28px !important;
+    max-width: 118px !important;
+    width: auto !important;
+    object-fit: contain;
+  }
+  .mobile-header-actions {
+    gap: 5px;
+  }
+  .mobile-quick-pill {
+    height: 32px;
+    padding: 0 8px;
+    font-size: 11px;
+    gap: 3px;
+  }
+  .mobile-menu-btn {
+    width: 34px;
+    height: 34px;
+  }
 }
 
 /* Compact Desktop & Phone "Desktop Site" Mode (921px – 1180px, includes 980px) */

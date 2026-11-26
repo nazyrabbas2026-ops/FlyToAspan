@@ -113,6 +113,9 @@ export const TourResultsPage: React.FC<TourResultsPageProps> = ({
         passenger: `${guestFirst.trim()} ${guestLast.trim()}`,
         lookupSurname: guestLast.trim(),
         price: selectedTour.priceTRY * paxCount,
+        netCostTRY: Math.round(selectedTour.priceTRY * paxCount * 0.9),
+        profitTRY: Math.round(selectedTour.priceTRY * paxCount * 0.1),
+        providerSource: 'Yerel Tur Envanteri (Deneme)',
         idempotencyKey: crypto.randomUUID(),
       });
       setConfirmed(booking);

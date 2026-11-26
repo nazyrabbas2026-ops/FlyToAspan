@@ -99,9 +99,8 @@ function resolveBookingNetCost(b: BookingRecord, markup: AdminMarkupConfig): num
 
 function resolveProviderSource(b: BookingRecord): string {
   if (b.providerSource) return b.providerSource;
-  if (b.type === 'Otel') return 'BookingAgora Hotel XML';
-  if (b.type === 'Transfer') return 'Buranus VIP Transfer XML';
-  return 'Amadeus GDS (XML)';
+  if (b.demo !== false) return 'Yerel Deneme / Manuel Kayıt';
+  return 'Manuel / Tanımsız Kaynak';
 }
 
 function parseCarrierAndFlight(subtitle: string): { carrier: string; flightNo: string } {
@@ -268,19 +267,22 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
     : 0;
   const netCashTRY = netCommissionProfitTRY + manualIncomeTRY - totalExpensesTRY;
 
-  // Product breakdown
+  // Product breakdown (all 4 products: Flight, Hotel, Transfer, Tour)
   const productTotals = useMemo(() => {
     const flight = confirmedBookings.filter((b) => b.type === 'Uçak').reduce((s, b) => s + b.price, 0);
     const hotel = confirmedBookings.filter((b) => b.type === 'Otel').reduce((s, b) => s + b.price, 0);
     const transfer = confirmedBookings.filter((b) => b.type === 'Transfer').reduce((s, b) => s + b.price, 0);
-    const total = Math.max(1, flight + hotel + transfer);
+    const tour = confirmedBookings.filter((b) => b.type === 'Tur').reduce((s, b) => s + b.price, 0);
+    const total = Math.max(1, flight + hotel + transfer + tour);
     return {
       flight,
       hotel,
       transfer,
+      tour,
       flightPct: Math.round((flight / total) * 100),
       hotelPct: Math.round((hotel / total) * 100),
       transferPct: Math.round((transfer / total) * 100),
+      tourPct: Math.round((tour / total) * 100),
     };
   }, [confirmedBookings]);
 
@@ -598,6 +600,7 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
                 { label: '✈ Uçak Bileti', amount: productTotals.flight, pct: productTotals.flightPct, color: '#10B981' },
                 { label: '🏨 Otel Konaklama', amount: productTotals.hotel, pct: productTotals.hotelPct, color: '#F59E0B' },
                 { label: '🚐 VIP Transfer', amount: productTotals.transfer, pct: productTotals.transferPct, color: '#0284C7' },
+                { label: '🧭 Paket Tur', amount: productTotals.tour, pct: productTotals.tourPct, color: '#7C3AED' },
               ].map((row) => (
                 <div key={row.label}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}>

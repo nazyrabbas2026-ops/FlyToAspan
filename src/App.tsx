@@ -50,8 +50,28 @@ export const App: React.FC = () => {
   const [page, updatePage] = useState<PageView>(() =>
     isAdminSubdomain ? 'admin' : readSiteRoute(window.location.pathname).page
   );
-  const [lang, setLang] = useState<LangCode>('TR');
-  const [currency, setCurrency] = useState<CurrencyCode>('TRY');
+  const [lang, setLangState] = useState<LangCode>(() => {
+    try {
+      const saved = localStorage.getItem('flytoaspan_lang_v1');
+      if (saved === 'TR' || saved === 'EN' || saved === 'RU' || saved === 'KK') return saved;
+    } catch { /* ignore */ }
+    return 'TR';
+  });
+  const setLang = (next: LangCode) => {
+    setLangState(next);
+    try { localStorage.setItem('flytoaspan_lang_v1', next); } catch { /* ignore */ }
+  };
+  const [currency, setCurrencyState] = useState<CurrencyCode>(() => {
+    try {
+      const saved = localStorage.getItem('flytoaspan_currency_v1');
+      if (saved === 'TRY' || saved === 'USD' || saved === 'EUR' || saved === 'KZT' || saved === 'RUB') return saved;
+    } catch { /* ignore */ }
+    return 'TRY';
+  });
+  const setCurrency = (next: CurrencyCode) => {
+    setCurrencyState(next);
+    try { localStorage.setItem('flytoaspan_currency_v1', next); } catch { /* ignore */ }
+  };
   const [, setFxVersion] = useState(0);
   const [legalDoc, updateLegalDoc] = useState(() => readSiteRoute(window.location.pathname).legalDoc);
   const [markup, setMarkup] = useState<AdminMarkupConfig>(DEFAULT_MARKUP);

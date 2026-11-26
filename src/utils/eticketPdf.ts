@@ -30,12 +30,20 @@ export function openBrandedEticketPdf(
 ): void {
   const currency = options.currency ?? 'TRY';
   const lang = options.lang ?? 'TR';
-  const docTitle =
-    booking.type === 'Uçak'
+  const isDemo = booking.demo !== false;
+  const docTitle = isDemo
+    ? (lang === 'EN'
+        ? 'DEMO RESERVATION SUMMARY (NOT AN ISSUED TICKET)'
+        : lang === 'RU'
+          ? 'ДЕМО-РЕЗЮМЕ БРОНИРОВАНИЯ (НЕ ЯВЛЯЕТСЯ БИЛЕТОМ)'
+          : 'DENEME REZERVASYON ÖZETİ (GERÇEK BİLET DEĞİLDİR)')
+    : booking.type === 'Uçak'
       ? 'ELEKTRONİK UÇAK BİLETİ & FATURA ÖZETİ'
       : booking.type === 'Otel'
         ? 'OTEL KONAKLAMA VOUCHER & REZERVASYON BELGESİ'
-        : 'VIP HAVALİMANI TRANSFER VOUCHER';
+        : booking.type === 'Tur'
+          ? 'TUR PAKETİ REZERVASYON VOUCHER'
+          : 'VIP HAVALİMANI TRANSFER VOUCHER';
 
   const statusColor =
     booking.status === 'Onaylandı' || booking.status === 'Tamamlandı'
@@ -76,7 +84,31 @@ export function openBrandedEticketPdf(
   const cabinText = booking.cabin || (booking.subtitle.toLowerCase().includes('business') ? 'Business Class' : 'Ekonomi');
 
   const flightSegmentHtml = booking.type === 'Uçak'
-    ? `<div style="margin-bottom: 20px; border: 1.5px solid #CBD5E1; border-radius: 14px; overflow: hidden;">
+    ? (booking.legs && booking.legs.length > 0
+        ? booking.legs.map((leg) => `<div style="margin-bottom: 14px; border: 1.5px solid #CBD5E1; border-radius: 14px; overflow: hidden;">
+            <div style="background: #0B1E33; color: #fff; padding: 10px 18px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700;">
+              <span>✈ ${escapeHtml(leg.direction.toUpperCase())} · ${escapeHtml(leg.airline)} (${escapeHtml(leg.flightNumber)})</span>
+              <span style="color: #F2C85C;">${escapeHtml(leg.cabin || cabinText)}</span>
+            </div>
+            <div style="padding: 16px 22px; display: flex; justify-content: space-between; align-items: center; gap: 16px; background: #F8FAFC;">
+              <div>
+                <div class="lbl">Kalkış Saati</div>
+                <div style="font-size: 26px; font-weight: 900; color: #0B1E33; line-height: 1.1;">${escapeHtml(leg.departTime)}</div>
+                <div style="font-size: 13px; font-weight: 700; color: #0369A1; margin-top: 3px;">${escapeHtml(leg.fromCode)} · ${escapeHtml(formatDisplayDate(leg.date, lang))}</div>
+              </div>
+              <div style="flex: 1; text-align: center; padding: 0 10px;">
+                <div style="font-size: 11.5px; font-weight: 700; color: #64748B; margin-bottom: 4px;">${escapeHtml(leg.duration || durationText)}</div>
+                <div style="height: 2px; background: linear-gradient(90deg, #00A8B5, #E0AA36); position: relative;"></div>
+                <div style="font-size: 11px; color: #047857; font-weight: 700; margin-top: 5px;">Bagaj: ${escapeHtml(leg.baggage || baggageText)}</div>
+              </div>
+              <div style="text-align: right;">
+                <div class="lbl">Varış Saati</div>
+                <div style="font-size: 26px; font-weight: 900; color: #0B1E33; line-height: 1.1;">${escapeHtml(leg.arriveTime)}</div>
+                <div style="font-size: 13px; font-weight: 700; color: #0369A1; margin-top: 3px;">${escapeHtml(leg.toCode)} · ${escapeHtml(formatDisplayDate(leg.date, lang))}</div>
+              </div>
+            </div>
+          </div>`).join('')
+        : `<div style="margin-bottom: 20px; border: 1.5px solid #CBD5E1; border-radius: 14px; overflow: hidden;">
         <div style="background: #0B1E33; color: #fff; padding: 10px 18px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700;">
           <span>✈ UÇUŞ BİLGİLERİ · ${escapeHtml(airlineName)} (${escapeHtml(flightNo)})</span>
           <span style="color: #F2C85C;">${escapeHtml(cabinText)}</span>
@@ -98,7 +130,7 @@ export function openBrandedEticketPdf(
             <div style="font-size: 13px; font-weight: 700; color: #0369A1; margin-top: 3px;">${escapeHtml(toCode || 'Varış')} · ${escapeHtml(formatDisplayDate(booking.date, lang))}</div>
           </div>
         </div>
-      </div>`
+      </div>`)
     : '';
 
   const html = `<!DOCTYPE html>

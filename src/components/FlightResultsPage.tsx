@@ -1066,6 +1066,19 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
             ? `${firstName} ${lookupSurname} (+${paxSlots.length - 1})`
             : `${firstName} ${lookupSurname}`,
           passengersDetail,
+          legs: bookingLegs.map((leg, idx) => ({
+            direction: idx === 0 ? 'Gidiş' : 'Dönüş',
+            fromCode: leg.flight.fromCode,
+            toCode: leg.flight.toCode,
+            date: leg.flight.departureDate,
+            departTime: leg.flight.departTime,
+            arriveTime: leg.flight.arriveTime,
+            flightNumber: leg.flight.flightNumber,
+            airline: leg.flight.airline,
+            baggage: `${leg.pkg.cabinBag} + ${leg.pkg.checkedBag}`,
+            cabin: leg.pkg.cabin === 'BUSINESS' ? 'Business Class' : 'Ekonomi',
+            duration: leg.flight.durationLabel,
+          })),
           contactEmail,
           contactPhone,
           providerSource,
@@ -1166,7 +1179,7 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                       className="btn-gold-nav"
                       onClick={() => openBrandedEticketPdf(confirmedBooking, { currency, lang })}
                     >
-                      📄 PDF E-Bilet / Voucher İndir
+                      📄 {lang === 'EN' ? 'Download Demo Summary (PDF)' : lang === 'RU' ? 'Скачать демо-резюме (PDF)' : lang === 'KK' ? 'Демо түйіндеме (PDF)' : 'Deneme Rezervasyon Özeti (PDF)'}
                     </button>
                   )}
                   <button type="button" className="uf-quick-pill" onClick={onBackHome}>{co.backHome}</button>
@@ -1396,12 +1409,12 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                               <input name={`surname_${idx}`} autoComplete="family-name" className="uf-co-input" required maxLength={64} />
                             </label>
                             <label className="uf-co-label">
-                              {lang === 'EN' ? 'ID / Passport No *' : lang === 'RU' ? 'Паспорт / ИИН *' : lang === 'KK' ? 'Төлқұжат / ЖСН *' : 'T.C. Kimlik / Pasaport No *'}
-                              <input name={`doc_${idx}`} className="uf-co-input" required maxLength={24} placeholder="TCKN / Pasaport" />
+                              {lang === 'EN' ? 'ID / Passport No (Optional · Demo)' : lang === 'RU' ? 'Паспорт / ИИН (необяз. · Демо)' : lang === 'KK' ? 'Төлқұжат / ЖСН (міндетті емес)' : 'T.C. Kimlik / Pasaport No (Opsiyonel · Deneme)'}
+                              <input name={`doc_${idx}`} className="uf-co-input" maxLength={24} placeholder="TCKN / Pasaport" />
                             </label>
                             <label className="uf-co-label">
-                              {lang === 'EN' ? 'Date of Birth *' : lang === 'RU' ? 'Дата рождения *' : lang === 'KK' ? 'Туған күні *' : 'Doğum Tarihi *'}
-                              <input name={`dob_${idx}`} type="date" className="uf-co-input" required />
+                              {lang === 'EN' ? 'Date of Birth (Optional)' : lang === 'RU' ? 'Дата рождения (необяз.)' : lang === 'KK' ? 'Туған күні (міндетті емес)' : 'Doğum Tarihi (Opsiyonel)'}
+                              <input name={`dob_${idx}`} type="date" className="uf-co-input" />
                             </label>
                           </div>
                         </div>

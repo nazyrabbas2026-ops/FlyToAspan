@@ -145,6 +145,20 @@ export interface BookingPassengerDetail {
   paxType?: string;
 }
 
+export interface BookingLegDetail {
+  direction: 'Gidiş' | 'Dönüş';
+  fromCode: string;
+  toCode: string;
+  date: string;
+  departTime: string;
+  arriveTime: string;
+  flightNumber: string;
+  airline: string;
+  baggage?: string;
+  cabin?: string;
+  duration?: string;
+}
+
 export interface BookingRecord {
   id: string;
   pnr: string;
@@ -158,6 +172,7 @@ export interface BookingRecord {
   passenger: string;
   passengersList?: SavedPassenger[];
   passengersDetail?: BookingPassengerDetail[];
+  legs?: BookingLegDetail[];
   contactEmail?: string;
   contactPhone?: string;
   providerSource?: string;

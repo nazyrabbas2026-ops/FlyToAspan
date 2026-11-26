@@ -545,7 +545,10 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
       airlineFlight: 'Havayolu / Uçuş',
       baggage: 'Bagaj',
       totalPrice: 'Toplam Tutar',
-      downloadPdf: 'PDF E-Bilet / Voucher İndir',
+      downloadPdf: 'Deneme Rezervasyon Özeti (PDF)',
+      demoBadge: 'Deneme Kaydı',
+      outboundLbl: 'Gidiş Uçuşu',
+      returnLbl: 'Dönüş Uçuşu',
       cancelBtn: 'İptal Talebi Oluştur',
       cancelConfirm: 'İptal talebi gönderilsin mi?',
       cancelYes: 'Evet, Gönder',
@@ -570,7 +573,10 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
       airlineFlight: 'Airline / Flight',
       baggage: 'Baggage',
       totalPrice: 'Total Price',
-      downloadPdf: 'Download PDF E-Ticket / Voucher',
+      downloadPdf: 'Download Demo Summary (PDF)',
+      demoBadge: 'Demo Record',
+      outboundLbl: 'Outbound Flight',
+      returnLbl: 'Return Flight',
       cancelBtn: 'Request Cancellation',
       cancelConfirm: 'Submit cancellation request?',
       cancelYes: 'Yes, Submit',
@@ -595,7 +601,10 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
       airlineFlight: 'Авиакомпания / Рейс',
       baggage: 'Багаж',
       totalPrice: 'Итого',
-      downloadPdf: 'Скачать PDF E-Билет / Ваучер',
+      downloadPdf: 'Скачать демо-резюме (PDF)',
+      demoBadge: 'Демо-запись',
+      outboundLbl: 'Рейс туда',
+      returnLbl: 'Обратный рейс',
       cancelBtn: 'Запросить отмену',
       cancelConfirm: 'Отправить запрос на отмену?',
       cancelYes: 'Да, отправить',
@@ -620,7 +629,10 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
       airlineFlight: 'Әуекомпания / Рейс',
       baggage: 'Жолжүк',
       totalPrice: 'Жалпы сома',
-      downloadPdf: 'PDF E-Билет / Ваучер жүктеу',
+      downloadPdf: 'Демо түйіндеме жүктеу (PDF)',
+      demoBadge: 'Демо жазба',
+      outboundLbl: 'Бару рейсі',
+      returnLbl: 'Қайту рейсі',
       cancelBtn: 'Болдырмау сұранысы',
       cancelConfirm: 'Болдырмау сұранысын жіберу керек пе?',
       cancelYes: 'Иә, жіберу',
@@ -767,9 +779,16 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
                     <CheckCircle2 size={18} />
                     {ui.foundTitle(matchedBooking.pnr)}
                   </div>
-                  <span className={`status-badge ${matchedBooking.status === 'Onaylandı' || matchedBooking.status === 'Tamamlandı' ? 'ok' : 'warn'}`}>
-                    {ticketUi.status[matchedBooking.status] || matchedBooking.status}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    {matchedBooking.demo !== false && (
+                      <span className="pkg-pill" style={{ background: 'rgba(245,158,11,0.16)', color: '#b45309', fontWeight: 800 }}>
+                        {ticketUi.demoBadge}
+                      </span>
+                    )}
+                    <span className={`status-badge ${matchedBooking.status === 'Onaylandı' || matchedBooking.status === 'Tamamlandı' ? 'ok' : 'warn'}`}>
+                      {ticketUi.status[matchedBooking.status] || matchedBooking.status}
+                    </span>
+                  </div>
                 </div>
 
                 <div style={{ fontWeight: 800, fontSize: 16.5, color: 'var(--aspan-text)', marginBottom: 4 }}>
@@ -805,23 +824,63 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
                       {matchedBooking.returnDate ? ` → ${formatDisplayDate(matchedBooking.returnDate, lang)}` : ''}
                     </strong>
                   </div>
-                  {(matchedBooking.departTime || matchedBooking.arriveTime) && (
-                    <div>
-                      <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>{ticketUi.flightTimes}</div>
-                      <strong>{matchedBooking.departTime || '--:--'} → {matchedBooking.arriveTime || '--:--'}</strong>
+                  {matchedBooking.legs && matchedBooking.legs.length > 0 ? (
+                    <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {matchedBooking.legs.map((leg, idx) => (
+                        <div
+                          key={`${leg.direction}-${leg.flightNumber}-${idx}`}
+                          style={{
+                            padding: '8px 10px',
+                            borderRadius: 10,
+                            background: '#ffffff',
+                            border: '1px solid var(--aspan-border)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            gap: 8,
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: 10.5, fontWeight: 800, color: '#0369A1', textTransform: 'uppercase' }}>
+                              {leg.direction === 'Dönüş' ? ticketUi.returnLbl : ticketUi.outboundLbl} · {formatDisplayDate(leg.date, lang)}
+                            </div>
+                            <strong>
+                              {leg.fromCode} → {leg.toCode} · {leg.departTime} → {leg.arriveTime}
+                            </strong>
+                            <div style={{ fontSize: 11.5, color: 'var(--aspan-text-muted)' }}>
+                              {leg.airline} · {leg.flightNumber}{leg.duration ? ` · ${leg.duration}` : ''}
+                            </div>
+                          </div>
+                          {leg.baggage && (
+                            <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--aspan-text-body)' }}>
+                              🧳 {leg.baggage}
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  )}
-                  {(matchedBooking.flightNumber || matchedBooking.airline) && (
-                    <div>
-                      <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>{ticketUi.airlineFlight}</div>
-                      <strong>{[matchedBooking.airline, matchedBooking.flightNumber].filter(Boolean).join(' · ')}</strong>
-                    </div>
-                  )}
-                  {matchedBooking.baggage && (
-                    <div>
-                      <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>{ticketUi.baggage}</div>
-                      <strong>{matchedBooking.baggage}</strong>
-                    </div>
+                  ) : (
+                    <>
+                      {(matchedBooking.departTime || matchedBooking.arriveTime) && (
+                        <div>
+                          <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>{ticketUi.flightTimes}</div>
+                          <strong>{matchedBooking.departTime || '--:--'} → {matchedBooking.arriveTime || '--:--'}</strong>
+                        </div>
+                      )}
+                      {(matchedBooking.flightNumber || matchedBooking.airline) && (
+                        <div>
+                          <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>{ticketUi.airlineFlight}</div>
+                          <strong>{[matchedBooking.airline, matchedBooking.flightNumber].filter(Boolean).join(' · ')}</strong>
+                        </div>
+                      )}
+                      {matchedBooking.baggage && (
+                        <div>
+                          <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>{ticketUi.baggage}</div>
+                          <strong>{matchedBooking.baggage}</strong>
+                        </div>
+                      )}
+                    </>
                   )}
                   <div>
                     <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>{ticketUi.totalPrice}</div>
