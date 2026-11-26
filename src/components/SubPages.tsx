@@ -776,6 +776,18 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
                       </button>
                     </span>
                   )}
+
+                  <a
+                    href={`${WA_HREF}?text=${encodeURIComponent(
+                      `Merhaba FlyToAspan, ${matchedBooking.pnr} PNR kodlu (${matchedBooking.passenger || surname.toUpperCase()} · ${matchedBooking.title} · ${formatDisplayDate(matchedBooking.date, lang)}) biletim için değişiklik talebinde bulunmak istiyorum.`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="adm-btn adm-btn-blue"
+                    style={{ height: 40, padding: '0 16px', fontSize: 13, textDecoration: 'none' }}
+                  >
+                    <MessageCircle size={15} /> Değişiklik Talebi
+                  </a>
                 </div>
 
                 <p style={{ margin: '12px 0 0', fontSize: 12, color: 'var(--aspan-text-muted)' }}>
