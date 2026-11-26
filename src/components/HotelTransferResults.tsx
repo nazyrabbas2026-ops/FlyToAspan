@@ -398,14 +398,22 @@ export const HotelResultsPage: React.FC<{
                 setBookingPending(true);
                 setBookingError('');
                 try {
+                  const hotelNetCost = Math.min(
+                    finalHotelPrice,
+                    Math.max(0, Math.round(selectedHotel.price * (1 - DEFAULT_MARKUP.hotelPercent / 100)))
+                  );
                   const { pnr } = await onAddBooking({
-                  type: 'Otel',
-                  title: selectedHotel.name,
-                  subtitle: selectedHotel.city,
-                  date: query.checkIn,
-                  returnDate: query.checkOut,
-                  price: finalHotelPrice,
+                    type: 'Otel',
+                    title: selectedHotel.name,
+                    subtitle: `${selectedHotel.city} · ${selectedHotel.boardType}`,
+                    date: query.checkIn,
+                    returnDate: query.checkOut,
+                    price: finalHotelPrice,
+                    netCostTRY: hotelNetCost,
+                    profitTRY: Math.round(finalHotelPrice - hotelNetCost),
+                    providerSource: 'BookingAgora Hotel XML',
                     passenger: firstName + ' ' + lookupSurname,
+                    passengersDetail: [{ fullName: firstName + ' ' + lookupSurname, paxType: 'Misafir' }],
                     lookupSurname,
                   });
                   setConfirmedPnr(pnr);
@@ -640,13 +648,21 @@ export const TransferResultsPage: React.FC<{
                 setBookingPending(true);
                 setBookingError('');
                 try {
+                  const trNetCost = Math.min(
+                    finalTrPrice,
+                    Math.max(0, selectedTr.price - DEFAULT_MARKUP.transferAddTRY)
+                  );
                   const { pnr } = await onAddBooking({
-                  type: 'Transfer',
-                  title: query.from + ' → ' + query.to,
-                  subtitle: selectedTr.vehicle + ' · ' + query.time,
-                  date: query.date,
-                  price: finalTrPrice,
+                    type: 'Transfer',
+                    title: query.from + ' → ' + query.to,
+                    subtitle: selectedTr.vehicle + ' · ' + query.time,
+                    date: query.date,
+                    price: finalTrPrice,
+                    netCostTRY: trNetCost,
+                    profitTRY: Math.round(finalTrPrice - trNetCost),
+                    providerSource: 'Buranus VIP Transfer XML',
                     passenger: firstName + ' ' + lookupSurname,
+                    passengersDetail: [{ fullName: firstName + ' ' + lookupSurname, paxType: 'Yolcu' }],
                     lookupSurname,
                   });
                   setConfirmedPnr(pnr);

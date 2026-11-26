@@ -137,6 +137,14 @@ export interface UserProfile {
   registeredAt?: number;
 }
 
+export interface BookingPassengerDetail {
+  fullName: string;
+  tcOrPassport?: string;
+  birthDate?: string;
+  gender?: string;
+  paxType?: string;
+}
+
 export interface BookingRecord {
   id: string;
   pnr: string;
@@ -149,6 +157,12 @@ export interface BookingRecord {
   returnDate?: string;
   passenger: string;
   passengersList?: SavedPassenger[];
+  passengersDetail?: BookingPassengerDetail[];
+  contactEmail?: string;
+  contactPhone?: string;
+  providerSource?: string;
+  netCostTRY?: number;
+  profitTRY?: number;
   couponCode?: string;
   discountTRY?: number;
   invoiceCompany?: string;

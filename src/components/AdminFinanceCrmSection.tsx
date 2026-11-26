@@ -83,10 +83,25 @@ function formatTrDateTime(value?: number | string): string {
 
 function estimateBookingProfit(b: BookingRecord, markup: AdminMarkupConfig): number {
   if (b.status === 'İptal Edildi' || b.status === 'İade Edildi') return 0;
+  if (typeof b.profitTRY === 'number' && Number.isFinite(b.profitTRY)) return Math.max(0, b.profitTRY);
+  if (typeof b.netCostTRY === 'number' && Number.isFinite(b.netCostTRY)) return Math.max(0, Math.round(b.price - b.netCostTRY));
   if (b.type === 'Transfer') return Math.min(b.price, Math.max(markup.transferAddTRY, Math.round(b.price * 0.1)));
   if (b.type === 'Otel') return Math.round(b.price * (Math.max(5, markup.hotelPercent) / 100));
   const pct = Math.max(6, markup.centralAsiaPercent);
   return Math.max(markup.domesticAddTRY, Math.round(b.price * (pct / 100)));
+}
+
+function resolveBookingNetCost(b: BookingRecord, markup: AdminMarkupConfig): number {
+  if (typeof b.netCostTRY === 'number' && Number.isFinite(b.netCostTRY)) return b.netCostTRY;
+  const estProfit = estimateBookingProfit(b, markup);
+  return Math.max(0, Math.round(b.price - estProfit));
+}
+
+function resolveProviderSource(b: BookingRecord): string {
+  if (b.providerSource) return b.providerSource;
+  if (b.type === 'Otel') return 'BookingAgora Hotel XML';
+  if (b.type === 'Transfer') return 'Buranus VIP Transfer XML';
+  return 'Amadeus GDS (XML)';
 }
 
 function parseCarrierAndFlight(subtitle: string): { carrier: string; flightNo: string } {
@@ -228,6 +243,10 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
     () => confirmedBookings.reduce((s, b) => s + b.price, 0),
     [confirmedBookings]
   );
+  const totalXmlCostTRY = useMemo(
+    () => confirmedBookings.reduce((s, b) => s + resolveBookingNetCost(b, markup), 0),
+    [confirmedBookings, markup]
+  );
   const netCommissionProfitTRY = useMemo(
     () => confirmedBookings.reduce((s, b) => s + estimateBookingProfit(b, markup), 0),
     [confirmedBookings, markup]
@@ -299,7 +318,7 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
     return bookings.filter((b) => {
       if (ledgerStatus !== 'ALL' && b.status !== ledgerStatus) return false;
       if (!q) return true;
-      const hay = `${b.pnr} ${b.passenger} ${b.title} ${b.subtitle} ${b.sellerName ?? ''} ${b.sellerEmail ?? ''} ${b.organizationName ?? ''}`.toLowerCase();
+      const hay = `${b.pnr} ${b.passenger} ${b.title} ${b.subtitle} ${b.providerSource ?? ''} ${b.sellerName ?? ''} ${b.sellerEmail ?? ''} ${b.organizationName ?? ''}`.toLowerCase();
       return hay.includes(q);
     });
   }, [bookings, ledgerSearch, ledgerStatus]);
@@ -414,7 +433,7 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
   };
 
   const handleExportLedgerCsv = () => {
-    const headers = ['Satis_Tarihi', 'Satan', 'Sirket', 'Yolcu', 'PNR', 'Tip', 'Firma', 'Ucus_No', 'Guzergah', 'Ucus_Tarihi', 'Tutar_TRY', 'Net_Kar_TRY', 'Durum'];
+    const headers = ['Satis_Tarihi', 'Satan', 'Sirket', 'Yolcu', 'PNR', 'Tip', 'XML_Kaynagi', 'Firma', 'Ucus_No', 'Guzergah', 'Ucus_Tarihi', 'XML_Alis_TRY', 'Satis_TRY', 'Net_Kar_TRY', 'Durum'];
     const rows = filteredLedger.map((b) => {
       const { carrier, flightNo } = parseCarrierAndFlight(b.subtitle);
       return [
@@ -424,10 +443,12 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
         `"${b.passenger}"`,
         b.pnr,
         b.type,
+        `"${resolveProviderSource(b)}"`,
         `"${carrier}"`,
         `"${flightNo}"`,
         `"${b.title}"`,
         b.date,
+        resolveBookingNetCost(b, markup),
         b.price,
         estimateBookingProfit(b, markup),
         b.status,
@@ -504,8 +525,13 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
               <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--aspan-text)' }}>{formatPrice(grossSalesTRY, currency)}</div>
               <div style={{ fontSize: 12, color: '#059669', fontWeight: 700 }}>● {confirmedBookings.length} Onaylı / Tamamlanan</div>
             </div>
+            <div className="panel-stat-card" style={{ border: '1.5px solid rgba(2,132,199,0.3)', background: 'rgba(2,132,199,0.04)' }}>
+              <div className="filter-label" style={{ color: '#0369A1' }}>Toplam XML Alış Maliyeti</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#0369A1' }}>{formatPrice(totalXmlCostTRY, currency)}</div>
+              <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>Tedarikçi net bilet / otel maliyeti</div>
+            </div>
             <div className="panel-stat-card" style={{ border: '1.5px solid rgba(16,185,129,0.4)', background: 'rgba(16,185,129,0.05)' }}>
-              <div className="filter-label" style={{ color: '#047857' }}>Net Komisyon Kârı</div>
+              <div className="filter-label" style={{ color: '#047857' }}>Net Kâr (Satış − XML Alış)</div>
               <div style={{ fontSize: 24, fontWeight: 800, color: '#059669' }}>+{formatPrice(netCommissionProfitTRY, currency)}</div>
               <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>Ek gelir: +{formatPrice(manualIncomeTRY, currency)}</div>
             </div>
@@ -716,16 +742,18 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
                     <th style={{ padding: '8px 8px 8px 0' }}>Satış Tarih / Saat</th>
                     <th style={{ padding: '8px' }}>Satan &amp; Şirket</th>
                     <th style={{ padding: '8px' }}>Satın Alan / PNR</th>
-                    <th style={{ padding: '8px' }}>Firma &amp; Uçuş No</th>
+                    <th style={{ padding: '8px' }}>Firma, Uçuş &amp; XML Kaynağı</th>
                     <th style={{ padding: '8px' }}>Güzergâh / Tarih</th>
-                    <th style={{ padding: '8px' }}>Tutar / Net Kâr</th>
+                    <th style={{ padding: '8px' }}>XML Alış / Satış / Net Kâr</th>
                     <th style={{ padding: '8px 0 8px 8px', textAlign: 'right' }}>Durum</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredLedger.map((b) => {
                     const { carrier, flightNo } = parseCarrierAndFlight(b.subtitle);
+                    const netCost = resolveBookingNetCost(b, markup);
                     const profit = estimateBookingProfit(b, markup);
+                    const xmlSource = resolveProviderSource(b);
                     return (
                       <tr key={b.id} style={{ borderBottom: '1px solid var(--aspan-border)' }}>
                         <td style={{ padding: '10px 8px 10px 0', whiteSpace: 'nowrap' }}>
@@ -744,9 +772,12 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
                           </div>
                         </td>
                         <td style={{ padding: '10px 8px' }}>
-                          <strong>{carrier}</strong>
+                          <strong>{b.airline || carrier}</strong>
                           <div style={{ fontSize: 11.5, color: 'var(--aspan-text-muted)' }}>
-                            {b.type === 'Uçak' ? `Uçuş: ${flightNo}` : b.type}
+                            {b.type === 'Uçak' ? `Uçuş: ${b.flightNumber || flightNo}` : b.type}
+                          </div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#0369A1', marginTop: 2 }}>
+                            🔌 {xmlSource}
                           </div>
                         </td>
                         <td style={{ padding: '10px 8px' }}>
@@ -756,9 +787,14 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
                           </div>
                         </td>
                         <td style={{ padding: '10px 8px', whiteSpace: 'nowrap' }}>
-                          <strong>{formatPrice(b.price, currency)}</strong>
-                          <div style={{ fontSize: 11.5, fontWeight: 700, color: profit > 0 ? '#059669' : '#BE123C' }}>
-                            {profit > 0 ? `+${formatPrice(profit, currency)} kâr` : 'Kâr yok'}
+                          <div style={{ fontSize: 11.5, color: 'var(--aspan-text-muted)' }}>
+                            Alış: <strong>{formatPrice(netCost, currency)}</strong>
+                          </div>
+                          <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--aspan-text)' }}>
+                            Satış: {formatPrice(b.price, currency)}
+                          </div>
+                          <div style={{ fontSize: 11.5, fontWeight: 800, color: profit > 0 ? '#059669' : '#BE123C' }}>
+                            {profit > 0 ? `+${formatPrice(profit, currency)} Net Kâr` : 'Kâr yok'}
                           </div>
                         </td>
                         <td style={{ padding: '10px 0 10px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>

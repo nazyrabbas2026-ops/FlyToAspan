@@ -1099,16 +1099,19 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   };
 
   const handleExportCsv = () => {
-    const headers = ['PNR', 'E-Bilet', 'Tip', 'Guzergah', 'Detay', 'Tarih', 'Yolcu', 'Tutar_TRY', 'Durum'];
+    const headers = ['PNR', 'E-Bilet', 'Tip', 'XML_Kaynagi', 'Guzergah', 'Detay', 'Tarih', 'Yolcu', 'XML_Alis_TRY', 'Satis_TRY', 'Net_Kar_TRY', 'Durum'];
     const rows = filteredBookings.map((b) => [
       b.pnr,
       b.eticketNumber || '-',
       b.type,
+      `"${b.providerSource || (b.type === 'Otel' ? 'BookingAgora Hotel XML' : b.type === 'Transfer' ? 'Buranus VIP Transfer XML' : 'Amadeus GDS (XML)')}"`,
       `"${b.title}"`,
       `"${b.subtitle}"`,
       b.date,
       `"${b.passenger}"`,
+      b.netCostTRY ?? '',
       b.price,
+      b.profitTRY ?? (b.netCostTRY !== undefined ? Math.max(0, b.price - b.netCostTRY) : ''),
       b.status,
     ]);
     const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
@@ -1867,10 +1870,21 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                               gap: 14,
                             }}
                           >
-                            <div>
+                            <div style={{ flex: '1 1 420px', minWidth: 0 }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                                 <span className="uf-airport-code">{b.pnr}</span>
                                 <span className="pkg-pill">{b.type}</span>
+                                <span
+                                  className="pkg-pill"
+                                  style={{
+                                    background: 'rgba(2, 132, 199, 0.12)',
+                                    color: '#0369A1',
+                                    border: '1px solid rgba(2, 132, 199, 0.3)',
+                                    fontWeight: 800,
+                                  }}
+                                >
+                                  🔌 XML: {b.providerSource || (b.type === 'Otel' ? 'BookingAgora Hotel XML' : b.type === 'Transfer' ? 'Buranus VIP Transfer XML' : 'Amadeus GDS (XML)')}
+                                </span>
                                 {b.eticketNumber && <span className="pkg-pill">ETKT: {b.eticketNumber}</span>}
                                 <span
                                   style={{
@@ -1895,14 +1909,100 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                   />
                                   {vis.label}
                                 </span>
+                                <span className="pkg-pill" style={{ background: 'rgba(15, 23, 42, 0.06)', color: 'var(--aspan-text-body)' }}>
+                                  {b.organizationName ? `🏢 Kurumsal: ${b.organizationName}` : '👤 Bireysel (B2C)'}
+                                  {b.sellerName ? ` · ${b.sellerName}` : ''}
+                                </span>
                               </div>
                               <strong style={{ fontSize: 16 }}>{b.title}</strong>
                               <div style={{ fontSize: 12.5, color: 'var(--aspan-text-body)', marginTop: 3 }}>
-                                {b.subtitle} · Tarih: <strong>{formatDisplayDate(b.date, lang)}</strong> ({b.date}) · Yolcu:{' '}
-                                <strong>{b.passenger}</strong>
+                                {b.subtitle} · Tarih: <strong>{formatDisplayDate(b.date, lang)}</strong> ({b.date})
                                 {b.returnDate && ` · Dönüş / çıkış: ${formatDisplayDate(b.returnDate, lang)}`}
                                 {b.invoiceCompany ? ` · Kurumsal Fatura: ${b.invoiceCompany}` : ''}
                               </div>
+
+                              {/* Tam Bilet Detayları */}
+                              {(b.airline || b.flightNumber || b.departTime || b.baggage || b.cabin || b.duration) && (
+                                <div
+                                  style={{
+                                    marginTop: 8,
+                                    padding: '8px 11px',
+                                    borderRadius: 10,
+                                    background: 'rgba(255,255,255,0.72)',
+                                    border: '1px solid var(--aspan-border)',
+                                    display: 'flex',
+                                    flexWrap: 'wrap',
+                                    gap: '6px 14px',
+                                    fontSize: 12,
+                                    color: 'var(--aspan-text-body)',
+                                  }}
+                                >
+                                  {b.airline && <span>✈ <strong>Havayolu:</strong> {b.airline}</span>}
+                                  {b.flightNumber && <span><strong>Uçuş No:</strong> {b.flightNumber}</span>}
+                                  {b.departTime && (
+                                    <span>
+                                      🕒 <strong>Saat:</strong> {b.departTime}
+                                      {b.arriveTime ? ` → ${b.arriveTime}` : ''}
+                                    </span>
+                                  )}
+                                  {b.duration && <span>⏱ <strong>Süre:</strong> {b.duration}</span>}
+                                  {b.cabin && <span>💺 <strong>Kabin:</strong> {b.cabin}</span>}
+                                  {b.baggage && <span>🧳 <strong>Bagaj:</strong> {b.baggage}</span>}
+                                </div>
+                              )}
+
+                              {/* Tam Yolcu & İletişim Bilgileri */}
+                              <div
+                                style={{
+                                  marginTop: 8,
+                                  padding: '8px 11px',
+                                  borderRadius: 10,
+                                  background: 'rgba(255,255,255,0.78)',
+                                  border: '1px solid var(--aspan-border)',
+                                  fontSize: 12,
+                                }}
+                              >
+                                <div style={{ fontWeight: 800, color: 'var(--aspan-text)', marginBottom: 4 }}>
+                                  👥 Yolcu Bilgileri ({b.passengersDetail?.length || 1} kişi)
+                                </div>
+                                {b.passengersDetail && b.passengersDetail.length > 0 ? (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    {b.passengersDetail.map((px, pIdx) => (
+                                      <div key={`${b.id}-px-${pIdx}`} style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', color: 'var(--aspan-text-body)' }}>
+                                        <span><strong>{pIdx + 1}. {px.fullName}</strong>{px.paxType ? ` (${px.paxType})` : ''}</span>
+                                        {px.gender && <span>· {px.gender}</span>}
+                                        {px.tcOrPassport && <span>· <strong>TC/Pasaport:</strong> {px.tcOrPassport}</span>}
+                                        {px.birthDate && <span>· <strong>Doğum:</strong> {px.birthDate}</span>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div style={{ color: 'var(--aspan-text-body)' }}>
+                                    <strong>{b.passenger}</strong>
+                                  </div>
+                                )}
+                                {(b.contactPhone || b.contactEmail) && (
+                                  <div style={{ marginTop: 5, paddingTop: 5, borderTop: '1px dashed var(--aspan-border)', display: 'flex', flexWrap: 'wrap', gap: '4px 14px', color: 'var(--aspan-text-muted)' }}>
+                                    {b.contactPhone && <span>📞 <strong>Tel:</strong> {b.contactPhone}</span>}
+                                    {b.contactEmail && <span>✉ <strong>E-Posta:</strong> {b.contactEmail}</span>}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* XML Alış / Satış / Net Kâr Özeti */}
+                              {(isSuperAdmin || canManageBookings) && b.netCostTRY !== undefined && (
+                                <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 12 }}>
+                                  <span style={{ padding: '3px 9px', borderRadius: 8, background: 'rgba(15,23,42,0.06)', fontWeight: 700 }}>
+                                    XML Alış: {formatPrice(b.netCostTRY, currency)}
+                                  </span>
+                                  <span style={{ padding: '3px 9px', borderRadius: 8, background: 'rgba(2,132,199,0.1)', color: '#0369A1', fontWeight: 700 }}>
+                                    Satış: {formatPrice(b.price, currency)}
+                                  </span>
+                                  <span style={{ padding: '3px 9px', borderRadius: 8, background: 'rgba(16,185,129,0.14)', color: '#047857', fontWeight: 800 }}>
+                                    Net Kâr: +{formatPrice(b.profitTRY ?? Math.max(0, b.price - b.netCostTRY), currency)}
+                                  </span>
+                                </div>
+                              )}
                             </div>
 
                             <div className="panel-record-actions" style={{ flexWrap: 'wrap', gap: 6 }}>

@@ -212,6 +212,8 @@ export interface FlightResult {
   stops: number;
   stopCity?: string;
   basePrice: number;
+  netCostTRY?: number;
+  providerSource?: string;
   seatsLeft: number;
   packages: FarePackage[];
 }
@@ -1144,6 +1146,12 @@ export function generateFlights(
     const durM = dur % 60;
     const priceFactor = isReverseDirection ? t.mult * 1.02 : t.mult;
     const price = Math.round((baseFare * priceFactor * cabinMult) / 10) * 10;
+    const netCost = Math.round((rawNetFare * priceFactor * cabinMult) / 10) * 10;
+    const providerSource = isDomestic
+      ? 'BookingAgora / BiletBank B2B XML'
+      : isCentralAsia
+        ? 'Buranus B2B & Charter XML'
+        : 'Amadeus GDS (XML)';
     const flightNum = `${t.code}${String(t.numBase + (isReverseDirection ? 1 : 0)).padStart(t.numBase < 100 ? 3 : 0, '0')}`;
 
     const packages = cabin === 'Business' || !LCC_CODES.has(t.code)
@@ -1171,6 +1179,8 @@ export function generateFlights(
       stops: t.stops,
       stopCity: t.stopCity,
       basePrice: price,
+      netCostTRY: Math.min(price, netCost),
+      providerSource,
       seatsLeft: 2 + ((idx * 3 + (isReverseDirection ? 2 : 0)) % 7),
       packages,
     };

@@ -206,12 +206,36 @@ function newDemoBooking(db, body, owner) {
   const returnDate = body.returnDate ? isoDate(body.returnDate) : undefined;
   if (returnDate && returnDate < date) fail(400, 'Dönüş tarihi başlangıç tarihinden önce olamaz.');
   if (!Number.isFinite(body.price) || body.price < 0 || body.price > 10_000_000) fail(400, 'Tutar geçersiz.');
+  const salePrice = Math.round(body.price * 100) / 100;
+  const rawNetCost = Number(body.netCostTRY);
+  const netCostTRY = Number.isFinite(rawNetCost) && rawNetCost >= 0 && rawNetCost <= 10_000_000
+    ? Math.round(rawNetCost * 100) / 100
+    : undefined;
+  const rawProfit = Number(body.profitTRY);
+  const profitTRY = Number.isFinite(rawProfit) && rawProfit >= -10_000_000 && rawProfit <= 10_000_000
+    ? Math.round(rawProfit * 100) / 100
+    : (netCostTRY !== undefined ? Math.round((salePrice - netCostTRY) * 100) / 100 : undefined);
+  const passengersDetail = Array.isArray(body.passengersDetail)
+    ? body.passengersDetail.slice(0, 12).map((p) => ({
+        fullName: typeof p?.fullName === 'string' ? p.fullName.trim().slice(0, 120) : '',
+        tcOrPassport: typeof p?.tcOrPassport === 'string' ? p.tcOrPassport.trim().slice(0, 32) : undefined,
+        birthDate: typeof p?.birthDate === 'string' ? p.birthDate.trim().slice(0, 16) : undefined,
+        gender: typeof p?.gender === 'string' ? p.gender.trim().slice(0, 12) : undefined,
+        paxType: typeof p?.paxType === 'string' ? p.paxType.trim().slice(0, 32) : undefined,
+      })).filter((p) => p.fullName)
+    : undefined;
   const details = {
     type, date, returnDate,
     title: text(body.title, 160),
     subtitle: text(body.subtitle, 320),
     passenger: text(body.passenger, 150, 2),
-    price: Math.round(body.price * 100) / 100,
+    passengersDetail: passengersDetail && passengersDetail.length > 0 ? passengersDetail : undefined,
+    contactEmail: typeof body.contactEmail === 'string' ? body.contactEmail.trim().slice(0, 120) : undefined,
+    contactPhone: typeof body.contactPhone === 'string' ? body.contactPhone.trim().slice(0, 40) : undefined,
+    providerSource: typeof body.providerSource === 'string' ? body.providerSource.trim().slice(0, 80) : undefined,
+    netCostTRY,
+    profitTRY,
+    price: salePrice,
     departTime: typeof body.departTime === 'string' ? body.departTime.trim().slice(0, 10) : undefined,
     arriveTime: typeof body.arriveTime === 'string' ? body.arriveTime.trim().slice(0, 10) : undefined,
     flightNumber: typeof body.flightNumber === 'string' ? body.flightNumber.trim().slice(0, 24) : undefined,

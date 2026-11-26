@@ -332,6 +332,14 @@ test('FlyToAspan API & Security Suite', async (t) => {
         subtitle: 'Air Astana · KC911',
         date: '2026-12-20',
         passenger: 'Nurlan Bek',
+        passengersDetail: [
+          { fullName: 'Nurlan Bek', tcOrPassport: 'KZ9988776', birthDate: '1991-05-14', gender: 'Erkek', paxType: 'Yetişkin' },
+        ],
+        contactEmail: 'nurlan@example.kz',
+        contactPhone: '+7 701 555 44 33',
+        providerSource: 'Kompas Tour (XML)',
+        netCostTRY: 6450,
+        profitTRY: 750,
         lookupSurname: 'Bek',
         price: 7200,
       },
@@ -382,6 +390,13 @@ test('FlyToAspan API & Security Suite', async (t) => {
     assert.ok(aidaBooking);
     assert.equal(aidaBooking.sellerName, 'Aida Nurlanova');
     assert.equal(aidaBooking.organizationName, 'Astana Sky Turizm');
+    assert.equal(aidaBooking.providerSource, 'Kompas Tour (XML)');
+    assert.equal(aidaBooking.netCostTRY, 6450);
+    assert.equal(aidaBooking.profitTRY, 750);
+    assert.equal(aidaBooking.contactEmail, 'nurlan@example.kz');
+    assert.equal(aidaBooking.contactPhone, '+7 701 555 44 33');
+    assert.equal(aidaBooking.passengersDetail?.length, 1);
+    assert.equal(aidaBooking.passengersDetail?.[0]?.tcOrPassport, 'KZ9988776');
 
     // 2. Finance income/expense CRUD
     const addExp = await call(env.origin, '/api/admin/finance', {

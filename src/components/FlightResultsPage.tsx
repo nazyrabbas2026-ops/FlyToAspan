@@ -720,6 +720,8 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
           stops: 0,
           seatsLeft: mf.quota,
           basePrice: xmlAdjustedPrice,
+          netCostTRY: mf.priceTRY,
+          providerSource: mf.operator || 'Manuel XML Envanteri',
           packages: [
             {
               id: `man-eco-${mf.id}`,
@@ -1025,6 +1027,35 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
       setBookingError('');
       try {
         const firstLeg = bookingLegs[0];
+        const passengersDetail = paxSlots.map((slot, idx) => {
+          const fn = String(fields.get(`firstName_${idx}`) || '').trim();
+          const ln = String(fields.get(`surname_${idx}`) || '').trim();
+          const doc = String(fields.get(`doc_${idx}`) || '').trim();
+          const dob = String(fields.get(`dob_${idx}`) || '').trim();
+          const rawGender = String(fields.get(`gender_${idx}`) || 'M');
+          return {
+            fullName: `${fn} ${ln}`.trim(),
+            tcOrPassport: doc || undefined,
+            birthDate: dob || undefined,
+            gender: rawGender === 'F' ? 'Kadın' : 'Erkek',
+            paxType: slot.label,
+          };
+        }).filter((p) => p.fullName);
+        const contactEmail = String(fields.get('contactEmail') || '').trim() || undefined;
+        const contactPhone = String(fields.get('contactPhone') || '').trim() || undefined;
+        const providerSources = Array.from(
+          new Set(bookingLegs.map((l) => l.flight.providerSource).filter((v): v is string => Boolean(v)))
+        );
+        const providerSource = providerSources.length > 0 ? providerSources.join(' + ') : 'Amadeus GDS (XML)';
+        const unitNetLegTotal = bookingLegs.reduce(
+          (total, { flight, pkg }) => total + (flight.netCostTRY ?? Math.round(flight.basePrice * 0.92)) + Math.round(pkg.priceDelta * 0.9),
+          0
+        );
+        const totalNetCostTRY = Math.min(
+          bookingTotal,
+          Math.max(0, Math.round(unitNetLegTotal * paxWeight))
+        );
+        const profitTRY = Math.round(bookingTotal - totalNetCostTRY);
         const booking = await onAddBooking({
           type: 'Uçak',
           title: bookingTitle,
@@ -1034,6 +1065,12 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
           passenger: paxSlots.length > 1
             ? `${firstName} ${lookupSurname} (+${paxSlots.length - 1})`
             : `${firstName} ${lookupSurname}`,
+          passengersDetail,
+          contactEmail,
+          contactPhone,
+          providerSource,
+          netCostTRY: totalNetCostTRY,
+          profitTRY,
           lookupSurname,
           price: bookingTotal,
           departTime: firstLeg?.flight.departTime,
@@ -1320,8 +1357,8 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                                 };
                                 setVal('firstName_0', first);
                                 setVal('surname_0', last);
-                                setVal('docNo_0', sp.tcOrPassport);
-                                setVal('birthDate_0', sp.birthDate);
+                                setVal('doc_0', sp.tcOrPassport);
+                                setVal('dob_0', sp.birthDate);
                                 if (sp.phone) setVal('contactPhone', sp.phone);
                               }}
                             >
