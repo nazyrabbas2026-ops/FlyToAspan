@@ -537,6 +537,109 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
   const [cancelNotice, setCancelNotice] = useState('');
   const ui = SUBPAGES_I18N[lang];
 
+  const ticketUi = {
+    TR: {
+      passenger: 'Yolcu',
+      travelDate: 'Seyahat Tarihi',
+      flightTimes: 'Uçuş Saatleri',
+      airlineFlight: 'Havayolu / Uçuş',
+      baggage: 'Bagaj',
+      totalPrice: 'Toplam Tutar',
+      downloadPdf: 'PDF E-Bilet / Voucher İndir',
+      cancelBtn: 'İptal Talebi Oluştur',
+      cancelConfirm: 'İptal talebi gönderilsin mi?',
+      cancelYes: 'Evet, Gönder',
+      cancelSending: 'Gönderiliyor...',
+      cancelBack: 'Vazgeç',
+      changeBtn: 'Değişiklik Talebi',
+      cancelSuccess: '✓ İptal talebiniz başarıyla merkeze iletildi. Operasyon ekibimiz en kısa sürede işleme alacaktır.',
+      status: {
+        'Onaylandı': 'Onaylandı',
+        'Tamamlandı': 'Tamamlandı',
+        'İptal Talebi': 'İptal Talebi',
+        'İptal Edildi': 'İptal Edildi',
+        'İade Edildi': 'İade Edildi',
+      } as Record<string, string>,
+      waChangeMsg: (code: string, pax: string, title: string, date: string) =>
+        `Merhaba FlyToAspan, ${code} PNR kodlu (${pax} · ${title} · ${date}) biletim için değişiklik talebinde bulunmak istiyorum.`,
+    },
+    EN: {
+      passenger: 'Passenger',
+      travelDate: 'Travel Date',
+      flightTimes: 'Flight Times',
+      airlineFlight: 'Airline / Flight',
+      baggage: 'Baggage',
+      totalPrice: 'Total Price',
+      downloadPdf: 'Download PDF E-Ticket / Voucher',
+      cancelBtn: 'Request Cancellation',
+      cancelConfirm: 'Submit cancellation request?',
+      cancelYes: 'Yes, Submit',
+      cancelSending: 'Submitting...',
+      cancelBack: 'Cancel',
+      changeBtn: 'Change Request',
+      cancelSuccess: '✓ Your cancellation request has been sent. Our operations team will process it shortly.',
+      status: {
+        'Onaylandı': 'Confirmed',
+        'Tamamlandı': 'Completed',
+        'İptal Talebi': 'Cancellation Requested',
+        'İptal Edildi': 'Cancelled',
+        'İade Edildi': 'Refunded',
+      } as Record<string, string>,
+      waChangeMsg: (code: string, pax: string, title: string, date: string) =>
+        `Hello FlyToAspan, I would like to request a change for my ticket with PNR ${code} (${pax} · ${title} · ${date}).`,
+    },
+    RU: {
+      passenger: 'Пассажир',
+      travelDate: 'Дата поездки',
+      flightTimes: 'Время вылета',
+      airlineFlight: 'Авиакомпания / Рейс',
+      baggage: 'Багаж',
+      totalPrice: 'Итого',
+      downloadPdf: 'Скачать PDF E-Билет / Ваучер',
+      cancelBtn: 'Запросить отмену',
+      cancelConfirm: 'Отправить запрос на отмену?',
+      cancelYes: 'Да, отправить',
+      cancelSending: 'Отправка...',
+      cancelBack: 'Отмена',
+      changeBtn: 'Запрос на изменение',
+      cancelSuccess: '✓ Ваш запрос на отмену успешно отправлен. Наша служба поддержки обработает его в ближайшее время.',
+      status: {
+        'Onaylandı': 'Подтверждено',
+        'Tamamlandı': 'Завершено',
+        'İptal Talebi': 'Запрос на отмену',
+        'İptal Edildi': 'Отменено',
+        'İade Edildi': 'Возвращено',
+      } as Record<string, string>,
+      waChangeMsg: (code: string, pax: string, title: string, date: string) =>
+        `Здравствуйте, FlyToAspan! Я хочу оформить запрос на изменение билета с кодом PNR ${code} (${pax} · ${title} · ${date}).`,
+    },
+    KK: {
+      passenger: 'Жолаушы',
+      travelDate: 'Сапар күні',
+      flightTimes: 'Ұшу уақыты',
+      airlineFlight: 'Әуекомпания / Рейс',
+      baggage: 'Жолжүк',
+      totalPrice: 'Жалпы сома',
+      downloadPdf: 'PDF E-Билет / Ваучер жүктеу',
+      cancelBtn: 'Болдырмау сұранысы',
+      cancelConfirm: 'Болдырмау сұранысын жіберу керек пе?',
+      cancelYes: 'Иә, жіберу',
+      cancelSending: 'Жіберілуде...',
+      cancelBack: 'Бас тарту',
+      changeBtn: 'Өзгерту сұранысы',
+      cancelSuccess: '✓ Болдырмау сұранысыңыз орталыққа сәтті жіберілді. Операциялық топ жақын арада қарастырады.',
+      status: {
+        'Onaylandı': 'Расталды',
+        'Tamamlandı': 'Аяқталды',
+        'İptal Talebi': 'Болдырмау сұранысы',
+        'İptal Edildi': 'Болдырылмады',
+        'İade Edildi': 'Қайтарылды',
+      } as Record<string, string>,
+      waChangeMsg: (code: string, pax: string, title: string, date: string) =>
+        `Сәлеметсіз бе, FlyToAspan! Мен ${code} PNR коды бар билетімді (${pax} · ${title} · ${date}) өзгертуге өтініш бергім келеді.`,
+    },
+  }[lang];
+
   const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (pending) return;
@@ -564,7 +667,7 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
       const { booking } = await api.lookupCancel(matchedBooking.pnr, surname);
       setMatchedBooking(booking);
       setConfirmCancel(false);
-      setCancelNotice('✓ İptal talebiniz başarıyla merkeze iletildi. Operasyon ekibimiz en kısa sürede işleme alacaktır.');
+      setCancelNotice(ticketUi.cancelSuccess);
     } catch (cause) {
       setError(apiMessage(cause));
     } finally {
@@ -665,7 +768,7 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
                     {ui.foundTitle(matchedBooking.pnr)}
                   </div>
                   <span className={`status-badge ${matchedBooking.status === 'Onaylandı' || matchedBooking.status === 'Tamamlandı' ? 'ok' : 'warn'}`}>
-                    {matchedBooking.status}
+                    {ticketUi.status[matchedBooking.status] || matchedBooking.status}
                   </span>
                 </div>
 
@@ -692,11 +795,11 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
                   }}
                 >
                   <div>
-                    <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>Yolcu</div>
+                    <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>{ticketUi.passenger}</div>
                     <strong>{matchedBooking.passenger || surname.toUpperCase()}</strong>
                   </div>
                   <div>
-                    <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>Seyahat Tarihi</div>
+                    <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>{ticketUi.travelDate}</div>
                     <strong>
                       {formatDisplayDate(matchedBooking.date, lang)}
                       {matchedBooking.returnDate ? ` → ${formatDisplayDate(matchedBooking.returnDate, lang)}` : ''}
@@ -704,24 +807,24 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
                   </div>
                   {(matchedBooking.departTime || matchedBooking.arriveTime) && (
                     <div>
-                      <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>Uçuş Saatleri</div>
+                      <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>{ticketUi.flightTimes}</div>
                       <strong>{matchedBooking.departTime || '--:--'} → {matchedBooking.arriveTime || '--:--'}</strong>
                     </div>
                   )}
                   {(matchedBooking.flightNumber || matchedBooking.airline) && (
                     <div>
-                      <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>Havayolu / Uçuş</div>
+                      <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>{ticketUi.airlineFlight}</div>
                       <strong>{[matchedBooking.airline, matchedBooking.flightNumber].filter(Boolean).join(' · ')}</strong>
                     </div>
                   )}
                   {matchedBooking.baggage && (
                     <div>
-                      <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>Bagaj</div>
+                      <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>{ticketUi.baggage}</div>
                       <strong>{matchedBooking.baggage}</strong>
                     </div>
                   )}
                   <div>
-                    <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>Toplam Tutar</div>
+                    <div style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--aspan-text-muted)', textTransform: 'uppercase' }}>{ticketUi.totalPrice}</div>
                     <strong style={{ color: 'var(--aspan-teal-deep)', fontSize: 14 }}>{formatPrice(matchedBooking.price, currency)}</strong>
                   </div>
                 </div>
@@ -740,7 +843,7 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
                     style={{ height: 40, padding: '0 16px', fontSize: 13 }}
                     onClick={() => openBrandedEticketPdf(matchedBooking, { currency, lang })}
                   >
-                    <Download size={15} /> PDF E-Bilet / Voucher İndir
+                    <Download size={15} /> {ticketUi.downloadPdf}
                   </button>
 
                   {matchedBooking.status === 'Onaylandı' && !confirmCancel && (
@@ -750,13 +853,13 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
                       style={{ height: 40, padding: '0 16px', fontSize: 13 }}
                       onClick={() => setConfirmCancel(true)}
                     >
-                      <XCircle size={15} /> İptal Talebi Oluştur
+                      <XCircle size={15} /> {ticketUi.cancelBtn}
                     </button>
                   )}
 
                   {matchedBooking.status === 'Onaylandı' && confirmCancel && (
                     <span className="adm-confirm-inline" style={{ padding: '6px 10px' }}>
-                      İptal talebi gönderilsin mi?
+                      {ticketUi.cancelConfirm}
                       <button
                         type="button"
                         className="adm-btn adm-btn-red-solid"
@@ -764,7 +867,7 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
                         disabled={cancelBusy}
                         onClick={() => void handleCancelRequest()}
                       >
-                        {cancelBusy ? 'Gönderiliyor...' : 'Evet, Gönder'}
+                        {cancelBusy ? ticketUi.cancelSending : ticketUi.cancelYes}
                       </button>
                       <button
                         type="button"
@@ -772,21 +875,26 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
                         style={{ height: 30, padding: '0 10px' }}
                         onClick={() => setConfirmCancel(false)}
                       >
-                        Vazgeç
+                        {ticketUi.cancelBack}
                       </button>
                     </span>
                   )}
 
                   <a
                     href={`${WA_HREF}?text=${encodeURIComponent(
-                      `Merhaba FlyToAspan, ${matchedBooking.pnr} PNR kodlu (${matchedBooking.passenger || surname.toUpperCase()} · ${matchedBooking.title} · ${formatDisplayDate(matchedBooking.date, lang)}) biletim için değişiklik talebinde bulunmak istiyorum.`
+                      ticketUi.waChangeMsg(
+                        matchedBooking.pnr,
+                        matchedBooking.passenger || surname.toUpperCase(),
+                        matchedBooking.title,
+                        formatDisplayDate(matchedBooking.date, lang)
+                      )
                     )}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="adm-btn adm-btn-blue"
                     style={{ height: 40, padding: '0 16px', fontSize: 13, textDecoration: 'none' }}
                   >
-                    <MessageCircle size={15} /> Değişiklik Talebi
+                    <MessageCircle size={15} /> {ticketUi.changeBtn}
                   </a>
                 </div>
 

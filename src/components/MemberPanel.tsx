@@ -16,8 +16,10 @@ import {
   Download,
   CalendarDays,
   ChevronDown,
+  MessageCircle,
 } from 'lucide-react';
 import { formatDisplayDate, formatTRY } from '../data/mockData';
+import { WA_HREF } from '../i18n/translations';
 import { api, apiMessage } from '../data/api';
 import { openBrandedEticketPdf } from '../utils/eticketPdf';
 import { toCalendarDate } from '../data/calendarDates';
@@ -597,6 +599,32 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
                             {bookingUi.cancel}
                           </button>
                         )}
+                        <a
+                          href={`${WA_HREF}?text=${encodeURIComponent(
+                            lang === 'EN'
+                              ? `Hello FlyToAspan, I would like to request a change for my ticket with PNR ${b.pnr} (${b.passenger} · ${b.title} · ${formatDisplayDate(b.date, lang)}).`
+                              : lang === 'RU'
+                                ? `Здравствуйте, FlyToAspan! Я хочу оформить запрос на изменение билета с кодом PNR ${b.pnr} (${b.passenger} · ${b.title} · ${formatDisplayDate(b.date, lang)}).`
+                                : lang === 'KK'
+                                  ? `Сәлеметсіз бе, FlyToAspan! Мен ${b.pnr} PNR коды бар билетімді (${b.passenger} · ${b.title} · ${formatDisplayDate(b.date, lang)}) өзгертуге өтініш бергім келеді.`
+                                  : `Merhaba FlyToAspan, ${b.pnr} PNR kodlu (${b.passenger} · ${b.title} · ${formatDisplayDate(b.date, lang)}) biletim için değişiklik talebinde bulunmak istiyorum.`
+                          )}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="uf-quick-pill"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            textDecoration: 'none',
+                            background: 'rgba(2, 132, 199, 0.1)',
+                            color: '#0369A1',
+                            borderColor: 'rgba(2, 132, 199, 0.35)',
+                          }}
+                        >
+                          <MessageCircle size={13} />
+                          {lang === 'EN' ? 'Change Request' : lang === 'RU' ? 'Запрос на изменение' : lang === 'KK' ? 'Өзгерту сұранысы' : 'Değişiklik Talebi'}
+                        </a>
                       </div>
                       <details className="panel-disclosure" open={bookingSearch.trim() === b.pnr}>
                         <summary><ChevronDown size={16} /> {bookingUi.details}</summary>
