@@ -146,6 +146,7 @@ export function openDatabase(filename = process.env.FLYTOASPAN_DB || '.data/flyt
   safeAlter('ALTER TABLE bookings ADD COLUMN sold_by_user_id TEXT');
   safeAlter('ALTER TABLE organizations ADD COLUMN used_credit INTEGER NOT NULL DEFAULT 0');
   safeAlter('ALTER TABLE organizations ADD COLUMN discount_percent INTEGER NOT NULL DEFAULT 0');
+  safeAlter("ALTER TABLE crm_quotes ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'");
   return db;
 }
 
@@ -226,16 +227,40 @@ export function priceAlertRecord(row) {
 }
 
 export function crmQuoteRecord(row) {
+  let meta = {};
+  try {
+    meta = row.metadata ? JSON.parse(row.metadata) : {};
+  } catch {
+    meta = {};
+  }
   return {
     id: row.id,
     quoteNo: row.quote_no,
     customerName: row.customer_name,
+    firstName: meta.firstName || undefined,
+    lastName: meta.lastName || undefined,
+    birthDate: meta.birthDate || undefined,
+    tcOrPassport: meta.tcOrPassport || undefined,
+    gender: meta.gender || undefined,
+    customerEmail: meta.customerEmail || undefined,
     customerPhone: row.customer_phone || '',
+    paxCount: meta.paxCount || 1,
     type: row.type || 'Uçak',
     title: row.title,
     details: row.details || '',
     travelDate: row.travel_date,
     price: row.price,
+    airline: meta.airline || undefined,
+    flightNumber: meta.flightNumber || undefined,
+    departTime: meta.departTime || undefined,
+    arriveTime: meta.arriveTime || undefined,
+    duration: meta.duration || undefined,
+    baggage: meta.baggage || undefined,
+    cabin: meta.cabin || undefined,
+    fromCode: meta.fromCode || undefined,
+    toCode: meta.toCode || undefined,
+    providerSource: meta.providerSource || undefined,
+    netCostTRY: typeof meta.netCostTRY === 'number' ? meta.netCostTRY : undefined,
     status: row.status || 'Taslak',
     convertedPnr: row.converted_pnr || '',
     createdBy: row.created_by || '',

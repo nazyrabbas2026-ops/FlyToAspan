@@ -620,6 +620,12 @@ export const App: React.FC = () => {
               onLogout={signOut}
               onUpdateBookingStatus={handleUpdateBookingStatus}
               onDeleteBooking={handleDeleteBooking}
+              onBookingCreated={(bk) =>
+                setBookingView((prev) => ({
+                  key: bookingKey,
+                  records: [bk, ...(prev?.records ?? []).filter((b) => b.id !== bk.id)],
+                }))
+              }
               onCatalogUpdated={refreshPublicCatalog}
               onBackHome={() => {
                 refreshPublicCatalog();

@@ -15,9 +15,9 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
-import { formatDisplayDate, formatPrice } from '../data/mockData';
+import { AIRPORTS, HOTEL_DEALS, formatDisplayDate, formatPrice, generateFlights } from '../data/mockData';
 import { addCalendarDays, toCalendarDate } from '../data/calendarDates';
-import { api, apiMessage } from '../data/api';
+import { api, apiMessage, type AdminCatalog } from '../data/api';
 import { openBrandedEticketPdf } from '../utils/eticketPdf';
 import type {
   AdminMarkupConfig,
@@ -31,15 +31,44 @@ import type {
   UserProfile,
 } from '../types';
 
+type ManagedFlightItem = AdminCatalog['flights'][number];
+type ManagedHotelItem = AdminCatalog['hotels'][number];
+type ManagedTourItem = AdminCatalog['tours'][number];
+
 interface AdminFinanceCrmSectionProps {
   lang: LangCode;
   currency: CurrencyCode;
   markup: AdminMarkupConfig;
   bookings: BookingRecord[];
   siteUsers?: UserProfile[];
+  manualFlights?: ManagedFlightItem[];
+  managedHotels?: ManagedHotelItem[];
+  managedTours?: ManagedTourItem[];
+  onBookingCreated?: (booking: BookingRecord) => void;
   onJumpToBookings: (status?: BookingRecord['status'] | 'ALL') => void;
   onFlash: (msg: string) => void;
   onError: (msg: string) => void;
+}
+
+interface XmlQuoteOffer {
+  id: string;
+  type: 'Uçak' | 'Otel' | 'Tur';
+  title: string;
+  details: string;
+  unitPriceTRY: number;
+  totalPriceTRY: number;
+  netCostTRY: number;
+  providerSource: string;
+  airline?: string;
+  flightNumber?: string;
+  departTime?: string;
+  arriveTime?: string;
+  duration?: string;
+  baggage?: string;
+  cabin?: string;
+  fromCode?: string;
+  toCode?: string;
+  badge?: string;
 }
 
 type FinanceTab = 'finance' | 'ledger' | 'crm' | 'followup' | 'quotes' | 'customers' | 'audit';
@@ -116,6 +145,10 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
   markup,
   bookings,
   siteUsers = [],
+  manualFlights = [],
+  managedHotels = [],
+  managedTours = [],
+  onBookingCreated,
   onJumpToBookings,
   onFlash,
   onError,
@@ -127,14 +160,150 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [busy, setBusy] = useState(false);
 
-  // Quote builder form
-  const [qCustomer, setQCustomer] = useState('');
+  // Detailed Quote Builder form (separate passenger fields + automatic XML price list)
+  const [qFirstName, setQFirstName] = useState('');
+  const [qLastName, setQLastName] = useState('');
+  const [qBirthDate, setQBirthDate] = useState('1992-05-15');
+  const [qPassport, setQPassport] = useState('');
+  const [qGender, setQGender] = useState<'F' | 'M'>('F');
   const [qPhone, setQPhone] = useState('');
-  const [qType, setQType] = useState<CrmQuote['type']>('Uçak');
-  const [qTitle, setQTitle] = useState('');
-  const [qDetails, setQDetails] = useState('');
+  const [qEmail, setQEmail] = useState('');
+  const [qPaxCount, setQPaxCount] = useState(1);
+  const [qType, setQType] = useState<'Uçak' | 'Otel' | 'Tur'>('Uçak');
+  const [qFrom, setQFrom] = useState('AYT');
+  const [qTo, setQTo] = useState('ALA');
+  const [qCabin, setQCabin] = useState<'Ekonomi' | 'Business'>('Ekonomi');
+  const [qNights, setQNights] = useState(3);
   const [qDate, setQDate] = useState(() => addCalendarDays(toCalendarDate(new Date()), 14));
-  const [qPrice, setQPrice] = useState('');
+  const [selectedXmlOfferId, setSelectedXmlOfferId] = useState('');
+
+  // Automatically pull & sort XML prices (cheapest -> highest) based on service type, route, date & pax
+  const xmlOffers = useMemo<XmlQuoteOffer[]>(() => {
+    const pax = Math.max(1, Math.min(9, qPaxCount));
+
+    if (qType === 'Uçak') {
+      const fromAp = AIRPORTS.find((a) => a.code === qFrom) || AIRPORTS[0];
+      const toAp = AIRPORTS.find((a) => a.code === qTo) || AIRPORTS[4];
+      const routeTitle = `${fromAp.city} (${fromAp.code}) → ${toAp.city} (${toAp.code})`;
+      const offers: XmlQuoteOffer[] = [];
+
+      // 1. Matching active manual/charter XML inventory flights
+      manualFlights
+        .filter((mf) => mf.active && mf.fromCode.toUpperCase() === qFrom && mf.toCode.toUpperCase() === qTo)
+        .forEach((mf) => {
+          const unit = Math.round(mf.priceTRY);
+          offers.push({
+            id: `xml-mf-${mf.id}`,
+            type: 'Uçak',
+            title: routeTitle,
+            details: `${mf.airline} · ${mf.flightNumber} · ${mf.departTime}-${mf.arriveTime} · ${mf.baggage} · ${qCabin} · ${pax} Kişi`,
+            unitPriceTRY: unit,
+            totalPriceTRY: unit * pax,
+            netCostTRY: Math.round(unit * 0.9) * pax,
+            providerSource: mf.operator || 'Charter / Blok Koltuk XML',
+            airline: mf.airline,
+            flightNumber: mf.flightNumber,
+            departTime: mf.departTime,
+            arriveTime: mf.arriveTime,
+            duration: mf.duration,
+            baggage: mf.baggage,
+            cabin: qCabin,
+            fromCode: qFrom,
+            toCode: qTo,
+            badge: 'Charter XML',
+          });
+        });
+
+      // 2. Live XML / GDS flight feed
+      const generated = generateFlights(qFrom, qTo, qDate, qCabin, lang, markup, currency);
+      generated.forEach((f) => {
+        const unit = Math.round(f.basePrice);
+        const unitNet = Math.round(f.netCostTRY ?? unit * 0.9);
+        const bag = f.packages[0]?.checkedBag || '20 kg Bagaj';
+        offers.push({
+          id: `xml-flt-${f.id}`,
+          type: 'Uçak',
+          title: routeTitle,
+          details: `${f.airline} · ${f.flightNumber} · ${f.departTime}-${f.arriveTime} · ${bag} · ${qCabin} · ${pax} Kişi`,
+          unitPriceTRY: unit,
+          totalPriceTRY: unit * pax,
+          netCostTRY: unitNet * pax,
+          providerSource: f.providerSource || 'Buranus / Amadeus XML',
+          airline: f.airline,
+          flightNumber: f.flightNumber,
+          departTime: f.departTime,
+          arriveTime: f.arriveTime,
+          duration: f.durationLabel,
+          baggage: bag,
+          cabin: qCabin,
+          fromCode: qFrom,
+          toCode: qTo,
+          badge: f.stops === 0 ? 'Direkt' : `${f.stops} Aktarma`,
+        });
+      });
+
+      return offers.sort((a, b) => a.totalPriceTRY - b.totalPriceTRY);
+    }
+
+    if (qType === 'Otel') {
+      const sourceHotels = managedHotels.filter((h) => h.active);
+      const list = sourceHotels.length > 0
+        ? sourceHotels
+        : HOTEL_DEALS.map((h) => ({
+            id: h.id,
+            city: h.city,
+            name: h.name,
+            stars: h.stars,
+            boardType: h.boardType,
+            nights: h.nights,
+            price: h.price,
+            active: true,
+          }));
+      return list
+        .map((h) => {
+          const baseNights = Math.max(1, h.nights || 2);
+          const perNight = h.price / baseNights;
+          const unit = Math.round((perNight * qNights) / 10) * 10;
+          return {
+            id: `xml-htl-${h.id}`,
+            type: 'Otel' as const,
+            title: `${h.name} (${h.city})`,
+            details: `${h.stars}★ · ${h.boardType} · ${qNights} Gece · ${pax} Kişi`,
+            unitPriceTRY: unit,
+            totalPriceTRY: unit * pax,
+            netCostTRY: Math.round(unit * (1 - Math.max(5, markup.hotelPercent) / 100)) * pax,
+            providerSource: (h as ManagedHotelItem).provider || 'Hotelbeds / TBO XML',
+            badge: `${h.stars}★ ${h.boardType}`,
+          };
+        })
+        .sort((a, b) => a.totalPriceTRY - b.totalPriceTRY);
+    }
+
+    // Paket Tur
+    const sourceTours = managedTours.filter((t) => t.active);
+    return sourceTours
+      .map((t) => {
+        const unit = Math.round(t.price);
+        return {
+          id: `xml-tur-${t.id}`,
+          type: 'Tur' as const,
+          title: `${t.title} (${t.city})`,
+          details: `${t.duration} · ${t.includes || ''} · ${pax} Kişi`,
+          unitPriceTRY: unit,
+          totalPriceTRY: unit * pax,
+          netCostTRY: Math.round(unit * 0.9) * pax,
+          providerSource: t.provider || 'SAMO-Tour / Kompas XML',
+          duration: t.duration,
+          badge: t.city,
+        };
+      })
+      .sort((a, b) => a.totalPriceTRY - b.totalPriceTRY);
+  }, [qType, qFrom, qTo, qDate, qCabin, qNights, qPaxCount, manualFlights, managedHotels, managedTours, lang, markup, currency]);
+
+  const selectedXmlOffer = useMemo(
+    () => xmlOffers.find((o) => o.id === selectedXmlOfferId) ?? xmlOffers[0] ?? null,
+    [xmlOffers, selectedXmlOfferId]
+  );
 
   // Customer 360 & Audit search
   const [custSearch, setCustSearch] = useState('');
@@ -1016,36 +1185,54 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
       {subTab === 'quotes' && (
         <div className="panel-card">
           <strong style={{ fontSize: 17.5, display: 'inline-flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
-            <FileText size={18} color="#00A8B5" /> Teklif Hazırlama &amp; Satışa Dönüştürme (Quote Builder)
+            <FileText size={18} color="#00A8B5" /> Detaylı Teklif Hazırlama &amp; Otomatik XML Fiyatlandırma
           </strong>
           <p style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)', marginTop: 0, marginBottom: 14 }}>
-            Müşteriye hızlı fiyat teklifi oluşturun, tek tıkla WhatsApp&apos;tan gönderin; onaylandığında tek tıkla gerçek PNR&apos;lı satışa çevirin.
+            Yolcunun adı, soyadı, doğum tarihi ve iletişim bilgilerini girin; teklif tutarı elle yazılmaz, XML kaynaklarından en ucuzdan pahalıya otomatik sıralanır.
           </p>
 
           <form
-            className="panel-form-grid"
-            style={{ marginBottom: 18 }}
+            style={{ marginBottom: 20 }}
             onSubmit={async (e) => {
               e.preventDefault();
-              if (busy || !qCustomer.trim() || !qTitle.trim() || !Number(qPrice)) return;
+              if (busy || !qFirstName.trim() || !qLastName.trim() || !selectedXmlOffer) return;
               setBusy(true);
               onError('');
               try {
+                const fullName = `${qFirstName.trim()} ${qLastName.trim()}`.trim();
                 const { quote } = await api.createCrmQuote({
-                  customerName: qCustomer.trim(),
+                  customerName: fullName,
+                  firstName: qFirstName.trim(),
+                  lastName: qLastName.trim(),
+                  birthDate: qBirthDate || undefined,
+                  tcOrPassport: qPassport.trim() || undefined,
+                  gender: qGender,
+                  customerEmail: qEmail.trim() || undefined,
                   customerPhone: qPhone.trim(),
-                  type: qType,
-                  title: qTitle.trim(),
-                  details: qDetails.trim(),
+                  paxCount: qPaxCount,
+                  type: selectedXmlOffer.type,
+                  title: selectedXmlOffer.title,
+                  details: selectedXmlOffer.details,
                   travelDate: qDate,
-                  price: Math.round(Number(qPrice)),
+                  price: selectedXmlOffer.totalPriceTRY,
+                  airline: selectedXmlOffer.airline,
+                  flightNumber: selectedXmlOffer.flightNumber,
+                  departTime: selectedXmlOffer.departTime,
+                  arriveTime: selectedXmlOffer.arriveTime,
+                  duration: selectedXmlOffer.duration,
+                  baggage: selectedXmlOffer.baggage,
+                  cabin: selectedXmlOffer.cabin,
+                  fromCode: selectedXmlOffer.fromCode,
+                  toCode: selectedXmlOffer.toCode,
+                  providerSource: selectedXmlOffer.providerSource,
+                  netCostTRY: selectedXmlOffer.netCostTRY,
                 });
                 setQuotes((prev) => [quote, ...prev]);
-                setQCustomer('');
+                setQFirstName('');
+                setQLastName('');
+                setQPassport('');
                 setQPhone('');
-                setQTitle('');
-                setQDetails('');
-                setQPrice('');
+                setQEmail('');
                 onFlash(`Teklif oluşturuldu: ${quote.quoteNo}`);
               } catch (err) {
                 onError(apiMessage(err));
@@ -1054,21 +1241,234 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
               }
             }}
           >
-            <input required className="modal-input" placeholder="Müşteri Ad Soyad *" value={qCustomer} onChange={(e) => setQCustomer(e.target.value)} />
-            <input className="modal-input" placeholder="Telefon (+90 5xx...)" value={qPhone} onChange={(e) => setQPhone(e.target.value)} />
-            <select className="modal-input" value={qType} onChange={(e) => setQType(e.target.value as CrmQuote['type'])}>
-              <option value="Uçak">Uçak Bileti</option>
-              <option value="Otel">Otel</option>
-              <option value="Transfer">VIP Transfer</option>
-              <option value="Tur">Tur Paketi</option>
-            </select>
-            <input required className="modal-input" placeholder="Güzergâh / Paket Başlığı *" value={qTitle} onChange={(e) => setQTitle(e.target.value)} />
-            <input className="modal-input" placeholder="Detay (Örn: Air Astana · 2 Yetişkin · 30kg)" value={qDetails} onChange={(e) => setQDetails(e.target.value)} />
-            <input required type="date" className="modal-input" value={qDate} onChange={(e) => setQDate(e.target.value)} />
-            <input required type="number" min={1} className="modal-input" placeholder="Teklif Tutarı (TL) *" value={qPrice} onChange={(e) => setQPrice(e.target.value)} />
-            <button type="submit" className="btn-gold-nav" style={{ borderRadius: 12 }} disabled={busy}>
-              <Plus size={15} /> Teklif Oluştur
-            </button>
+            {/* 1. Detailed Passenger & Contact Fields */}
+            <div className="adm-form-box" style={{ marginTop: 0, marginBottom: 14 }}>
+              <div className="adm-form-title">1. Yolcu &amp; İletişim Bilgileri</div>
+              <div className="panel-form-grid">
+                <div>
+                  <label className="adm-field-lbl">Yolcu Adı *</label>
+                  <input required className="modal-input" placeholder="Örn: Jalia" value={qFirstName} onChange={(e) => setQFirstName(e.target.value)} />
+                </div>
+                <div>
+                  <label className="adm-field-lbl">Yolcu Soyadı *</label>
+                  <input required className="modal-input" placeholder="Örn: Coşkun" value={qLastName} onChange={(e) => setQLastName(e.target.value)} />
+                </div>
+                <div>
+                  <label className="adm-field-lbl">Doğum Tarihi *</label>
+                  <input required type="date" className="modal-input" value={qBirthDate} onChange={(e) => setQBirthDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="adm-field-lbl">TC / Pasaport No</label>
+                  <input className="modal-input" placeholder="Örn: U12345678" value={qPassport} onChange={(e) => setQPassport(e.target.value.toUpperCase())} />
+                </div>
+                <div>
+                  <label className="adm-field-lbl">Cinsiyet</label>
+                  <select className="modal-input" value={qGender} onChange={(e) => setQGender(e.target.value as 'F' | 'M')}>
+                    <option value="F">Kadın</option>
+                    <option value="M">Erkek</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="adm-field-lbl">Yolcu Sayısı</label>
+                  <select className="modal-input" value={qPaxCount} onChange={(e) => setQPaxCount(Number(e.target.value))}>
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+                      <option key={n} value={n}>{n} Kişi</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="adm-field-lbl">Telefon (+90 / +7)</label>
+                  <input className="modal-input" placeholder="Telefon (+90 5xx...)" value={qPhone} onChange={(e) => setQPhone(e.target.value)} />
+                </div>
+                <div>
+                  <label className="adm-field-lbl">E-Posta</label>
+                  <input type="email" className="modal-input" placeholder="yolcu@ornek.com" value={qEmail} onChange={(e) => setQEmail(e.target.value)} />
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Service Criteria & Automatic XML Sorted Price List */}
+            <div className="adm-form-box" style={{ marginTop: 0, marginBottom: 14 }}>
+              <div className="adm-form-title">2. Hizmet Seçimi &amp; Otomatik XML Fiyat Sıralaması (Ucuzdan Pahalıya)</div>
+              <div className="panel-form-grid" style={{ marginBottom: 14 }}>
+                <div>
+                  <label className="adm-field-lbl">Hizmet Tipi</label>
+                  <select
+                    className="modal-input"
+                    value={qType}
+                    onChange={(e) => {
+                      setQType(e.target.value as 'Uçak' | 'Otel' | 'Tur');
+                      setSelectedXmlOfferId('');
+                    }}
+                  >
+                    <option value="Uçak">✈ Uçak Bileti</option>
+                    <option value="Otel">🏨 Otel Konaklama</option>
+                    <option value="Tur">🧭 Paket Tur</option>
+                  </select>
+                </div>
+                {qType === 'Uçak' && (
+                  <>
+                    <div>
+                      <label className="adm-field-lbl">Kalkış (Nereden)</label>
+                      <select className="modal-input" value={qFrom} onChange={(e) => { setQFrom(e.target.value); setSelectedXmlOfferId(''); }}>
+                        {AIRPORTS.map((a) => (
+                          <option key={a.code} value={a.code}>{a.city} ({a.code})</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="adm-field-lbl">Varış (Nereye)</label>
+                      <select className="modal-input" value={qTo} onChange={(e) => { setQTo(e.target.value); setSelectedXmlOfferId(''); }}>
+                        {AIRPORTS.filter((a) => a.code !== qFrom).map((a) => (
+                          <option key={a.code} value={a.code}>{a.city} ({a.code})</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="adm-field-lbl">Kabin Sınıfı</label>
+                      <select className="modal-input" value={qCabin} onChange={(e) => { setQCabin(e.target.value as 'Ekonomi' | 'Business'); setSelectedXmlOfferId(''); }}>
+                        <option value="Ekonomi">Ekonomi</option>
+                        <option value="Business">Business</option>
+                      </select>
+                    </div>
+                  </>
+                )}
+                {qType === 'Otel' && (
+                  <div>
+                    <label className="adm-field-lbl">Gece Sayısı</label>
+                    <select className="modal-input" value={qNights} onChange={(e) => setQNights(Number(e.target.value))}>
+                      {[1, 2, 3, 4, 5, 6, 7, 10, 14].map((n) => (
+                        <option key={n} value={n}>{n} Gece</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label className="adm-field-lbl">Seyahat / Giriş Tarihi *</label>
+                  <input required type="date" className="modal-input" value={qDate} onChange={(e) => setQDate(e.target.value)} />
+                </div>
+              </div>
+
+              {/* Sorted XML Offers List */}
+              {xmlOffers.length === 0 ? (
+                <div style={{ fontSize: 13, color: 'var(--aspan-text-muted)' }}>Seçilen kriter için XML teklifi bulunamadı.</div>
+              ) : (
+                <div style={{ display: 'grid', gap: 8, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
+                  {xmlOffers.map((offer, idx) => {
+                    const isSelected = selectedXmlOffer?.id === offer.id;
+                    return (
+                      <button
+                        key={offer.id}
+                        type="button"
+                        onClick={() => setSelectedXmlOfferId(offer.id)}
+                        style={{
+                          textAlign: 'left',
+                          width: '100%',
+                          padding: '11px 14px',
+                          borderRadius: 12,
+                          border: isSelected ? '2px solid #00A8B5' : '1.5px solid #cbd5e1',
+                          background: isSelected ? 'rgba(0, 168, 181, 0.08)' : '#ffffff',
+                          boxShadow: isSelected ? '0 4px 12px -4px rgba(0, 168, 181, 0.35)' : '0 1px 3px rgba(15, 23, 42, 0.05)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: 10,
+                          transition: 'all 0.14s ease',
+                        }}
+                      >
+                        <div style={{ minWidth: 0, flex: '1 1 280px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 3 }}>
+                            {idx === 0 && (
+                              <span className="status-badge ok" style={{ fontSize: 10.5 }}>
+                                ★ En Uygun XML
+                              </span>
+                            )}
+                            <span className="pkg-pill" style={{ fontSize: 11, color: '#0369A1', background: 'rgba(2,132,199,0.1)' }}>
+                              🔌 {offer.providerSource}
+                            </span>
+                            {offer.badge && <span className="pkg-pill" style={{ fontSize: 11 }}>{offer.badge}</span>}
+                          </div>
+                          <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--aspan-text)' }}>
+                            {offer.airline ? `${offer.airline} (${offer.flightNumber}) · ` : ''}{offer.title}
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)', marginTop: 2 }}>
+                            {offer.departTime && offer.arriveTime
+                              ? `🕒 ${offer.departTime} → ${offer.arriveTime}${offer.duration ? ` (${offer.duration})` : ''}${offer.baggage ? ` · ${offer.baggage}` : ''}`
+                              : offer.details}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: 16.5, fontWeight: 900, color: '#0B1E33' }}>
+                              {formatPrice(offer.totalPriceTRY, currency)}
+                            </div>
+                            {qPaxCount > 1 && (
+                              <div style={{ fontSize: 11, color: 'var(--aspan-text-muted)' }}>
+                                {formatPrice(offer.unitPriceTRY, currency)} × {qPaxCount}
+                              </div>
+                            )}
+                          </div>
+                          <span
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: 9,
+                              fontSize: 12,
+                              fontWeight: 800,
+                              background: isSelected ? '#0B1E33' : '#f1f5f9',
+                              color: isSelected ? '#ffffff' : '#0f172a',
+                              border: isSelected ? '1px solid #0B1E33' : '1px solid #94a3b8',
+                            }}
+                          >
+                            {isSelected ? '✓ Seçildi' : 'Seç'}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 3. Locked Automatic XML Quote Total & Submit */}
+            <div
+              style={{
+                padding: '14px 18px',
+                borderRadius: 14,
+                background: 'linear-gradient(135deg, rgba(0, 168, 181, 0.08), rgba(224, 170, 54, 0.08))',
+                border: '1.5px solid #00A8B5',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 12,
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 11.5, fontWeight: 800, color: '#0369A1', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                  Otomatik XML Teklif Tutarı (Elle Girilmez)
+                </div>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--aspan-text)', marginTop: 2 }}>
+                  {selectedXmlOffer
+                    ? `${selectedXmlOffer.title} · ${selectedXmlOffer.providerSource}`
+                    : 'Yukarıdan XML seçeneği seçin'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 24, fontWeight: 900, color: '#0B1E33' }}>
+                  {selectedXmlOffer ? formatPrice(selectedXmlOffer.totalPriceTRY, currency) : '—'}
+                </div>
+                <button
+                  type="submit"
+                  className="btn-gold-nav"
+                  style={{ borderRadius: 12, minHeight: 42, padding: '0 20px', fontSize: 13.5 }}
+                  disabled={busy || !selectedXmlOffer}
+                >
+                  <Plus size={16} /> Teklif Oluştur
+                </button>
+              </div>
+            </div>
           </form>
 
           {quotes.length === 0 ? (
@@ -1080,7 +1480,9 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
                 `Merhaba ${q.customerName}, FlyToAspan özel teklifiniz hazırdır:\n` +
                 `• Teklif No: ${q.quoteNo}\n` +
                 `• Hizmet: ${q.type} — ${q.title}\n` +
+                (q.airline ? `• Havayolu / Uçuş: ${q.airline}${q.flightNumber ? ` (${q.flightNumber})` : ''}${q.departTime && q.arriveTime ? ` · ${q.departTime}→${q.arriveTime}` : ''}\n` : '') +
                 (q.details ? `• Detay: ${q.details}\n` : '') +
+                (q.birthDate ? `• Yolcu Doğum Tarihi: ${formatDisplayDate(q.birthDate, lang)}\n` : '') +
                 `• Tarih: ${formatDisplayDate(q.travelDate, lang)}\n` +
                 `• Toplam Fiyat: ${formatPrice(q.price, currency)}\n` +
                 `Onaylamanız halinde hemen PNR biletinizi düzenleyebiliriz.`
@@ -1107,20 +1509,33 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
                     <span className={`status-badge ${q.status === 'Onaylandı' ? 'ok' : q.status === 'Kaybedildi' ? 'warn' : 'ok'}`}>
                       {q.status}
                     </span>
+                    {q.providerSource && (
+                      <span className="pkg-pill" style={{ marginLeft: 4, color: '#0369A1', background: 'rgba(2,132,199,0.1)' }}>
+                        🔌 {q.providerSource}
+                      </span>
+                    )}
                     {q.convertedPnr && (
                       <span className="pkg-pill" style={{ marginLeft: 4, background: 'rgba(16,185,129,0.14)', color: '#047857' }}>
                         ✓ PNR: {q.convertedPnr}
                       </span>
                     )}
-                    <div style={{ fontWeight: 800, fontSize: 15, marginTop: 4 }}>
+                    <div style={{ fontWeight: 800, fontSize: 15, marginTop: 5 }}>
                       {q.customerName} · {q.title}
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>
+                    <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)', marginTop: 2 }}>
                       {q.details ? `${q.details} · ` : ''}Tarih: {formatDisplayDate(q.travelDate, lang)} · Oluşturma: {formatTrDateTime(q.createdAt)}
                     </div>
+                    {(q.birthDate || q.tcOrPassport || q.customerPhone || q.customerEmail) && (
+                      <div style={{ fontSize: 11.5, color: 'var(--aspan-text-body)', marginTop: 3 }}>
+                        {q.birthDate ? `Doğum: ${formatDisplayDate(q.birthDate, lang)}` : ''}
+                        {q.tcOrPassport ? ` · Belge: ${q.tcOrPassport}` : ''}
+                        {q.customerPhone ? ` · Tel: ${q.customerPhone}` : ''}
+                        {q.customerEmail ? ` · E-Posta: ${q.customerEmail}` : ''}
+                      </div>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                    <strong style={{ fontSize: 16, marginRight: 4 }}>{formatPrice(q.price, currency)}</strong>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <strong style={{ fontSize: 16.5, marginRight: 4 }}>{formatPrice(q.price, currency)}</strong>
                     <a
                       href={waHref}
                       target="_blank"
@@ -1142,7 +1557,7 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
                       <button
                         type="button"
                         className="btn-gold-nav"
-                        style={{ height: 32, fontSize: 12 }}
+                        style={{ minHeight: 38, fontSize: 12.5, padding: '0 14px' }}
                         disabled={busy}
                         onClick={async () => {
                           setBusy(true);
@@ -1150,6 +1565,7 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
                           try {
                             const { quote: upd, booking } = await api.convertCrmQuote(q.id);
                             setQuotes((prev) => prev.map((r) => (r.id === q.id ? upd : r)));
+                            onBookingCreated?.(booking);
                             onFlash(`Teklif satışa dönüştürüldü! Yeni PNR: ${booking.pnr}`);
                           } catch (err) {
                             onError(apiMessage(err));

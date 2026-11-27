@@ -137,6 +137,7 @@ interface AdminPanelPageProps {
   onAddBooking: (draft: BookingDraft) => Promise<BookingRecord>;
   onUpdateBookingStatus: (id: string, status: BookingRecord['status']) => Promise<void>;
   onDeleteBooking: (id: string) => Promise<void>;
+  onBookingCreated?: (booking: BookingRecord) => void;
   onCatalogUpdated?: () => void;
   onLogout: () => void;
   onBackHome: () => void;
@@ -639,6 +640,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   onAddBooking,
   onUpdateBookingStatus,
   onDeleteBooking,
+  onBookingCreated,
   onCatalogUpdated,
   onLogout,
   onBackHome,
@@ -2399,11 +2401,15 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
               {/* ==================== MODULE 2.5: FINANCE & CRM CENTER ==================== */}
               {section === 'finance' && (
                 <AdminFinanceCrmSection
-                  lang={lang}
+                  lang={activePanelLang}
                   currency={currency}
                   markup={draft}
                   bookings={bookings}
                   siteUsers={siteUsers}
+                  manualFlights={manualFlights}
+                  managedHotels={managedHotels}
+                  managedTours={managedTours}
+                  onBookingCreated={onBookingCreated}
                   onJumpToBookings={(st) => openBookings(st ?? 'ALL')}
                   onFlash={flash}
                   onError={setActionError}

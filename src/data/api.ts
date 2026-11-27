@@ -162,7 +162,33 @@ export const api = {
     request<{ task: CrmTask }>(`/admin/crm/tasks/${encodeURIComponent(id)}`, 'PATCH', { status }),
   deleteCrmTask: (id: string) => request<{ ok: true }>(`/admin/crm/tasks/${encodeURIComponent(id)}`, 'DELETE'),
   adminCrmQuotes: (signal?: AbortSignal) => request<{ quotes: CrmQuote[] }>('/admin/crm/quotes', 'GET', undefined, signal),
-  createCrmQuote: (payload: { customerName: string; customerPhone?: string; type: CrmQuote['type']; title: string; details?: string; travelDate: string; price: number }) =>
+  createCrmQuote: (payload: {
+    customerName: string;
+    firstName?: string;
+    lastName?: string;
+    birthDate?: string;
+    tcOrPassport?: string;
+    gender?: 'M' | 'F';
+    customerEmail?: string;
+    customerPhone?: string;
+    paxCount?: number;
+    type: CrmQuote['type'];
+    title: string;
+    details?: string;
+    travelDate: string;
+    price: number;
+    airline?: string;
+    flightNumber?: string;
+    departTime?: string;
+    arriveTime?: string;
+    duration?: string;
+    baggage?: string;
+    cabin?: string;
+    fromCode?: string;
+    toCode?: string;
+    providerSource?: string;
+    netCostTRY?: number;
+  }) =>
     request<{ quote: CrmQuote }>('/admin/crm/quotes', 'POST', payload),
   updateCrmQuoteStatus: (id: string, status: CrmQuote['status']) =>
     request<{ quote: CrmQuote }>(`/admin/crm/quotes/${encodeURIComponent(id)}`, 'PATCH', { status }),

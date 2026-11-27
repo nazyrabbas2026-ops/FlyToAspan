@@ -1132,8 +1132,18 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         send(res, 200, { quotes: rows.map(crmQuoteRecord) });
       } else if (method === 'POST' && path === '/api/admin/crm/quotes') {
         const body = await readJson(req);
-        const customerName = text(body.customerName, 120, 2);
+        const firstName = typeof body.firstName === 'string' ? body.firstName.trim().slice(0, 60) : '';
+        const lastName = typeof body.lastName === 'string' ? body.lastName.trim().slice(0, 60) : '';
+        const combinedName = `${firstName} ${lastName}`.trim();
+        const customerName = text(combinedName || body.customerName, 120, 2);
         const customerPhone = typeof body.customerPhone === 'string' ? body.customerPhone.trim().slice(0, 32) : '';
+        const customerEmail = typeof body.customerEmail === 'string' ? body.customerEmail.trim().slice(0, 120) : '';
+        const birthDate = typeof body.birthDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.birthDate.trim())
+          ? body.birthDate.trim()
+          : '';
+        const tcOrPassport = typeof body.tcOrPassport === 'string' ? body.tcOrPassport.trim().slice(0, 32) : '';
+        const gender = body.gender === 'F' ? 'F' : body.gender === 'M' ? 'M' : undefined;
+        const paxCount = Math.max(1, Math.min(9, Math.round(Number(body.paxCount) || 1)));
         const type = ['Uçak', 'Otel', 'Transfer', 'Tur'].includes(body.type) ? body.type : 'Uçak';
         const title = text(body.title, 160, 2);
         const details = typeof body.details === 'string' ? body.details.trim().slice(0, 240) : '';
@@ -1142,12 +1152,34 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           : new Date().toISOString().slice(0, 10);
         const price = Math.round(Number(body.price));
         if (!Number.isFinite(price) || price <= 0 || price > 50_000_000) fail(400, 'Geçerli bir teklif tutarı girin.');
+        const metadata = {
+          firstName: firstName || undefined,
+          lastName: lastName || undefined,
+          birthDate: birthDate || undefined,
+          tcOrPassport: tcOrPassport || undefined,
+          gender,
+          customerEmail: customerEmail || undefined,
+          paxCount,
+          airline: typeof body.airline === 'string' ? body.airline.trim().slice(0, 60) : undefined,
+          flightNumber: typeof body.flightNumber === 'string' ? body.flightNumber.trim().slice(0, 24) : undefined,
+          departTime: typeof body.departTime === 'string' ? body.departTime.trim().slice(0, 10) : undefined,
+          arriveTime: typeof body.arriveTime === 'string' ? body.arriveTime.trim().slice(0, 10) : undefined,
+          duration: typeof body.duration === 'string' ? body.duration.trim().slice(0, 24) : undefined,
+          baggage: typeof body.baggage === 'string' ? body.baggage.trim().slice(0, 60) : undefined,
+          cabin: typeof body.cabin === 'string' ? body.cabin.trim().slice(0, 32) : undefined,
+          fromCode: typeof body.fromCode === 'string' ? body.fromCode.trim().toUpperCase().slice(0, 8) : undefined,
+          toCode: typeof body.toCode === 'string' ? body.toCode.trim().toUpperCase().slice(0, 8) : undefined,
+          providerSource: typeof body.providerSource === 'string' ? body.providerSource.trim().slice(0, 80) : undefined,
+          netCostTRY: Number.isFinite(Number(body.netCostTRY)) && Number(body.netCostTRY) > 0
+            ? Math.round(Number(body.netCostTRY))
+            : undefined,
+        };
         const id = randomBytes(12).toString('hex');
         const quoteNo = `TKF-${randomBytes(3).toString('hex').toUpperCase()}`;
         db.prepare(`
-          INSERT INTO crm_quotes (id, quote_no, customer_name, customer_phone, type, title, details, travel_date, price, status, converted_pnr, created_by, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Taslak', '', ?, ?)
-        `).run(id, quoteNo, customerName, customerPhone, type, title, details, travelDate, price, user.email, Date.now());
+          INSERT INTO crm_quotes (id, quote_no, customer_name, customer_phone, type, title, details, travel_date, price, status, converted_pnr, created_by, created_at, metadata)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Taslak', '', ?, ?, ?)
+        `).run(id, quoteNo, customerName, customerPhone, type, title, details, travelDate, price, user.email, Date.now(), JSON.stringify(metadata));
         const row = db.prepare('SELECT * FROM crm_quotes WHERE id = ?').get(id);
         writeAuditLog(db, { actorEmail: user.email, action: 'admin:quote_create', target: `${quoteNo}:${customerName}`, ip });
         send(res, 201, { quote: crmQuoteRecord(row) });
@@ -1164,7 +1196,24 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const qRow = db.prepare('SELECT * FROM crm_quotes WHERE id = ?').get(id);
         if (!qRow) fail(404, 'Teklif bulunamadı.');
         if (qRow.converted_pnr) fail(409, `Bu teklif zaten satışa dönüştürülmüş (PNR: ${qRow.converted_pnr}).`);
-        const surname = qRow.customer_name.trim().split(/\s+/).at(-1) || qRow.customer_name;
+        const parsedQuote = crmQuoteRecord(qRow);
+        const surname = (parsedQuote.lastName || qRow.customer_name.trim().split(/\s+/).at(-1) || qRow.customer_name);
+        const legs =
+          parsedQuote.type === 'Uçak' && (parsedQuote.fromCode || parsedQuote.flightNumber)
+            ? [{
+                direction: 'Gidiş',
+                fromCode: parsedQuote.fromCode || '',
+                toCode: parsedQuote.toCode || '',
+                date: qRow.travel_date,
+                departTime: parsedQuote.departTime || '',
+                arriveTime: parsedQuote.arriveTime || '',
+                flightNumber: parsedQuote.flightNumber || '',
+                airline: parsedQuote.airline || '',
+                baggage: parsedQuote.baggage,
+                cabin: parsedQuote.cabin,
+                duration: parsedQuote.duration,
+              }]
+            : undefined;
         const booking = newDemoBooking(db, {
           type: qRow.type,
           title: qRow.title,
@@ -1173,12 +1222,31 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           passenger: qRow.customer_name,
           lookupSurname: surname,
           price: qRow.price,
+          contactPhone: parsedQuote.customerPhone || undefined,
+          contactEmail: parsedQuote.customerEmail || undefined,
+          airline: parsedQuote.airline,
+          flightNumber: parsedQuote.flightNumber,
+          departTime: parsedQuote.departTime,
+          arriveTime: parsedQuote.arriveTime,
+          duration: parsedQuote.duration,
+          baggage: parsedQuote.baggage,
+          cabin: parsedQuote.cabin,
+          providerSource: parsedQuote.providerSource,
+          netCostTRY: parsedQuote.netCostTRY,
+          legs,
+          passengersDetail: [{
+            fullName: qRow.customer_name,
+            birthDate: parsedQuote.birthDate,
+            tcOrPassport: parsedQuote.tcOrPassport,
+            gender: parsedQuote.gender,
+            paxType: (parsedQuote.paxCount || 1) > 1 ? `Yetişkin (${parsedQuote.paxCount} Kişi)` : 'Yetişkin',
+          }],
         }, user);
         const updatedQuote = db.prepare(`
           UPDATE crm_quotes SET status = 'Onaylandı', converted_pnr = ? WHERE id = ? RETURNING *
         `).get(booking.pnr, id);
         writeAuditLog(db, { actorEmail: user.email, action: 'admin:quote_convert', target: `${qRow.quote_no}->${booking.pnr}`, ip });
-        send(res, 201, { quote: crmQuoteRecord(updatedQuote), booking });
+        send(res, 201, { quote: crmQuoteRecord(updatedQuote), booking: stripHouseMargin({ ...booking }, user) });
       } else if (method === 'DELETE' && /^\/api\/admin\/crm\/quotes\/[a-f0-9]{24}$/.test(path)) {
         const id = path.split('/').at(-1);
         db.prepare('DELETE FROM crm_quotes WHERE id = ?').run(id);
