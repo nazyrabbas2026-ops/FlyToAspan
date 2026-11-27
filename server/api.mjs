@@ -147,13 +147,13 @@ function isoDate(value) {
   return value;
 }
 
-async function readJson(req) {
+async function readJson(req, maxBytes = 16_384) {
   if (!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] ?? '')) fail(415, 'JSON içerik bekleniyor.');
   const chunks = [];
   let size = 0;
   for await (const chunk of req.iterator({ destroyOnReturn: false })) {
     size += chunk.length;
-    if (size > 16_384) {
+    if (size > maxBytes) {
       req.resume();
       fail(413, 'İstek çok büyük.');
     }
@@ -927,7 +927,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const id = path.split('/')[4];
         const existingBk = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id);
         if (!existingBk) fail(404, 'Rezervasyon bulunamadı.');
-        const body = await readJson(req);
+        const body = await readJson(req, 3_500_000);
         const nextCheckinStatus = body.checkinStatus === 'completed' ? 'completed' : body.checkinStatus === 'pending' ? 'pending' : null;
         if (!nextCheckinStatus) fail(400, 'Check-in durumu geçersiz.');
 
@@ -967,6 +967,18 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           }
         }
 
+        const cleanDataUrl = (val, allowedMimeRe, maxLen) => {
+          if (val === '') return undefined;
+          if (typeof val !== 'string') return null; // preserve previous
+          const trimmed = val.trim();
+          if (!trimmed) return undefined;
+          if (trimmed.length > maxLen) fail(400, 'Yüklenen biniş kartı dosyası çok büyük (en fazla 2 MB).');
+          if (!allowedMimeRe.test(trimmed)) fail(400, 'Desteklenen dosya biçimleri: PNG, JPG, WEBP veya PDF.');
+          return trimmed;
+        };
+        const nextOfficialQr = cleanDataUrl(bpRaw.officialQrDataUrl, /^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$/i, 2_200_000);
+        const nextOfficialPass = cleanDataUrl(bpRaw.officialPassDataUrl, /^data:(application\/pdf|image\/(png|jpeg|jpg|webp));base64,[A-Za-z0-9+/=]+$/i, 2_900_000);
+
         const prevBp = details.boardingPass && typeof details.boardingPass === 'object' ? details.boardingPass : {};
         const nextBoardingPass = {
           ...prevBp,
@@ -982,6 +994,11 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           sequenceNo: typeof bpRaw.sequenceNo === 'string' ? bpRaw.sequenceNo.trim().slice(0, 16) || undefined : prevBp.sequenceNo,
           baggageDropNote: typeof bpRaw.baggageDropNote === 'string' ? bpRaw.baggageDropNote.trim().slice(0, 320) || undefined : prevBp.baggageDropNote,
           mobilePassUrl: typeof bpRaw.mobilePassUrl === 'string' ? bpRaw.mobilePassUrl.trim().slice(0, 280) || undefined : prevBp.mobilePassUrl,
+          officialQrDataUrl: nextOfficialQr === null ? prevBp.officialQrDataUrl : nextOfficialQr,
+          officialPassDataUrl: nextOfficialPass === null ? prevBp.officialPassDataUrl : nextOfficialPass,
+          officialPassFileName: typeof bpRaw.officialPassFileName === 'string' ? bpRaw.officialPassFileName.trim().slice(0, 120) || undefined : prevBp.officialPassFileName,
+          officialPassMime: typeof bpRaw.officialPassMime === 'string' ? bpRaw.officialPassMime.trim().slice(0, 64) || undefined : prevBp.officialPassMime,
+          bcbpString: typeof bpRaw.bcbpString === 'string' ? bpRaw.bcbpString.trim().slice(0, 240) || undefined : prevBp.bcbpString,
           sentToEmail: recipientEmail || prevBp.sentToEmail,
         };
 
@@ -1016,8 +1033,13 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
             sequenceNo: nextBoardingPass.sequenceNo,
             baggageDropNote: nextBoardingPass.baggageDropNote,
             mobilePassUrl: nextBoardingPass.mobilePassUrl,
+            officialQrDataUrl: nextBoardingPass.officialQrDataUrl,
+            officialPassDataUrl: nextBoardingPass.officialPassDataUrl,
+            officialPassFileName: nextBoardingPass.officialPassFileName,
+            bcbpString: nextBoardingPass.bcbpString,
             lang: mailLang,
           });
+          if (mailOut.bcbpCode) nextBoardingPass.bcbpString = mailOut.bcbpCode;
           const deliveryStatus = mailOut.sent ? 'sent' : mailOut.skipped === 'no_api_key' ? 'queued_preview' : 'failed';
           nextBoardingPass.sentToEmail = recipientEmail;
           nextBoardingPass.emailSentAt = Date.now();

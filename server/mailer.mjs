@@ -1,5 +1,53 @@
-// Zero-dependency Resend transactional email service for FlyToAspan
+// Zero-dependency + QR Resend transactional email service for FlyToAspan
 // Activates automatically when RESEND_API_KEY is configured in .env
+import QRCode from 'qrcode';
+
+function toIataAscii(raw) {
+  return String(raw || '')
+    .replace(/[Çç]/g, 'C')
+    .replace(/[Ğğ]/g, 'G')
+    .replace(/[İIıi]/g, 'I')
+    .replace(/[Öö]/g, 'O')
+    .replace(/[Şş]/g, 'S')
+    .replace(/[Üü]/g, 'U')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9 /]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function toJulianDayOfYear(isoDate) {
+  if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return '001';
+  const [y, m, d] = isoDate.split('-').map(Number);
+  const start = Date.UTC(y, 0, 0);
+  const current = Date.UTC(y, m - 1, d);
+  const day = Math.max(1, Math.min(366, Math.round((current - start) / 86_400_000)));
+  return String(day).padStart(3, '0');
+}
+
+export function buildIataBcbpString({ passenger, pnr, fromCode, toCode, flightNumber, date, cabin, seat, sequenceNo }) {
+  const cleanName = toIataAscii(passenger);
+  const parts = cleanName.split(' ').filter(Boolean);
+  const last = parts.length > 1 ? parts[parts.length - 1] : parts[0] || 'PASSENGER';
+  const first = parts.length > 1 ? parts.slice(0, -1).join(' ') : '';
+  const nameField = `${last}/${first}`.slice(0, 20).padEnd(20, ' ');
+  const pnrField = toIataAscii(pnr).replace(/[^A-Z0-9]/g, '').slice(0, 7).padEnd(7, ' ');
+  const fromField = toIataAscii(fromCode).replace(/[^A-Z]/g, '').slice(0, 3).padEnd(3, 'X');
+  const toField = toIataAscii(toCode).replace(/[^A-Z]/g, '').slice(0, 3).padEnd(3, 'X');
+  const fltClean = toIataAscii(flightNumber || '').replace(/[^A-Z0-9]/g, '');
+  const carrierMatch = fltClean.match(/^([A-Z0-9]{2})(\d{1,4}[A-Z]?)$/);
+  const carrierField = (carrierMatch ? carrierMatch[1] : fltClean.slice(0, 2) || 'FT').padEnd(3, ' ');
+  const fltNumField = (carrierMatch ? carrierMatch[2] : fltClean.replace(/^[A-Z]+/, '') || '0001').padStart(4, '0').slice(0, 5).padEnd(5, ' ');
+  const julianField = toJulianDayOfYear(date);
+  const cabinField = /business|biz/i.test(cabin || '') ? 'C' : 'Y';
+  const firstSeat = toIataAscii((seat || '').split(',')[0] || '').replace(/[^A-Z0-9]/g, '');
+  const seatField = (firstSeat ? firstSeat.padStart(4, '0') : '0000').slice(-4);
+  const seqDigits = String(sequenceNo || '1').replace(/\D/g, '') || '1';
+  const seqField = seqDigits.padStart(4, '0').slice(-4).padEnd(5, ' ');
+  return `M1${nameField}E${pnrField}${fromField}${toField}${carrierField}${fltNumField}${julianField}${cabinField}${seatField}${seqField}100`;
+}
 
 function escapeHtml(raw) {
   return String(raw ?? '')
@@ -29,21 +77,25 @@ function wrapBrandedEmail(title, bodyHtml) {
 </html>`;
 }
 
-export async function sendMail({ to, subject, html }) {
+export async function sendMail({ to, subject, html, attachments }) {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   const from = process.env.MAIL_FROM?.trim() || 'FlyToAspan <noreply@flytoaspan.com>';
   if (!apiKey || !to) {
     return { sent: false, skipped: 'no_api_key' };
   }
   try {
+    const payload = { from, to: [to], subject, html };
+    if (Array.isArray(attachments) && attachments.length > 0) {
+      payload.attachments = attachments;
+    }
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ from, to: [to], subject, html }),
-      signal: AbortSignal.timeout(6000),
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(8000),
     });
     return { sent: res.ok, status: res.status };
   } catch {
@@ -125,6 +177,10 @@ function buildBoardingPassEmailHtml({
   sequenceNo,
   baggageDropNote,
   mobilePassUrl,
+  officialQrDataUrl,
+  officialPassFileName,
+  qrImageDataUrl,
+  bcbpCode: providedBcbp,
   lang = 'TR',
 }) {
   const copy = {
@@ -290,7 +346,19 @@ function buildBoardingPassEmailHtml({
       ? mobilePassUrl.trim()
       : '';
 
-  const bcbpCode = `M1${String(passenger || 'PASSENGER').toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 18).replace(/\s+/g, '/')} E${String(airlinePnr || pnr || '').toUpperCase()} ${String(fromCode || 'IST')}${String(toCode || 'ALA')}${String(flightNumber || '').toUpperCase()} ${String(seat || '14A').toUpperCase()} ${String(sequenceNo || '001')}`;
+  const bcbpCode = providedBcbp || buildIataBcbpString({
+    passenger,
+    pnr: airlinePnr || pnr,
+    fromCode: fromCode || 'IST',
+    toCode: toCode || 'AYT',
+    flightNumber,
+    date,
+    cabin,
+    seat,
+    sequenceNo,
+  });
+  const activeQrSrc = officialQrDataUrl || qrImageDataUrl || '';
+  const hasOfficialQr = Boolean(officialQrDataUrl);
 
   const paxTableHtml = `
     <div style="margin:18px 0 0;">
@@ -355,52 +423,72 @@ function buildBoardingPassEmailHtml({
           <strong>${escapeHtml(routeTitle)}</strong> · ${escapeHtml(c.dateLbl)}: <strong>${escapeHtml(date)}</strong>
         </div>
 
-        <!-- Key Boarding Grid (Seat, Boarding Time, Terminal, Gate, Group, Seq) -->
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:14px;border-collapse:separate;border-spacing:6px;">
+        <!-- Pegasus-Style Split 2D QR Barcode + Gate & Seat Box -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;border-collapse:collapse;">
           <tr>
-            <td style="background:#0B1E33;border-radius:10px;padding:10px 12px;width:33.3%;">
-              <div style="font-size:10px;font-weight:800;color:#94A3B8;letter-spacing:0.08em;">${escapeHtml(c.seatLbl)}</div>
-              <div style="font-size:24px;font-weight:900;color:#F2C85C;margin-top:2px;letter-spacing:0.06em;">${escapeHtml(seat || '—')}</div>
+            <td style="width:180px;vertical-align:top;padding-right:16px;text-align:center;">
+              <div style="border:1.5px solid #CBD5E1;border-radius:12px;padding:10px;background:#FFFFFF;display:inline-block;">
+                ${activeQrSrc ? `<img src="${escapeHtml(activeQrSrc)}" alt="Boarding Pass 2D QR Barcode" width="150" height="150" style="display:block;width:150px;height:150px;object-fit:contain;" />` : ''}
+                <div style="margin-top:6px;font-size:10px;font-weight:800;color:${hasOfficialQr ? '#047857' : '#475569'};">
+                  ${hasOfficialQr ? '✓ Resmi Havayolu Barkodu' : 'IATA 792 2D QR'}
+                </div>
+              </div>
             </td>
-            <td style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:10px 12px;width:33.3%;">
-              <div style="font-size:10px;font-weight:800;color:#047857;letter-spacing:0.08em;">${escapeHtml(c.boardingLbl)}</div>
-              <div style="font-size:20px;font-weight:900;color:#065F46;margin-top:2px;">${escapeHtml(boardingTime || '—')}</div>
-              ${gateCloseTime ? `<div style="font-size:10.5px;color:#047857;margin-top:2px;">${escapeHtml(c.gateCloseLbl)}: ${escapeHtml(gateCloseTime)}</div>` : ''}
-            </td>
-            <td style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:10px;padding:10px 12px;width:33.3%;">
-              <div style="font-size:10px;font-weight:800;color:#0369A1;letter-spacing:0.08em;">${escapeHtml(c.gateLbl)}</div>
-              <div style="font-size:20px;font-weight:900;color:#0C4A6E;margin-top:2px;">${escapeHtml(gate || c.tba)}</div>
-            </td>
-          </tr>
-          <tr>
-            <td style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:9px 12px;">
-              <div style="font-size:10px;font-weight:800;color:#64748B;">${escapeHtml(c.terminalLbl)}</div>
-              <div style="font-size:14px;font-weight:800;color:#0F172A;margin-top:2px;">${escapeHtml(terminal || '—')}</div>
-            </td>
-            <td style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:9px 12px;">
-              <div style="font-size:10px;font-weight:800;color:#64748B;">${escapeHtml(c.groupLbl)}</div>
-              <div style="font-size:14px;font-weight:800;color:#0F172A;margin-top:2px;">${escapeHtml(boardingGroup || 'Standard')}</div>
-            </td>
-            <td style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:9px 12px;">
-              <div style="font-size:10px;font-weight:800;color:#64748B;">${escapeHtml(c.seqLbl)}</div>
-              <div style="font-size:14px;font-weight:800;color:#0F172A;margin-top:2px;">${escapeHtml(sequenceNo || '—')}</div>
+            <td style="vertical-align:top;">
+              <div style="background:#0B1E33;border-radius:10px;padding:12px 14px;margin-bottom:8px;">
+                <div style="font-size:10px;font-weight:800;color:#94A3B8;letter-spacing:0.08em;">${escapeHtml(c.seatLbl)}</div>
+                <div style="font-size:28px;font-weight:900;color:#F2C85C;margin-top:2px;letter-spacing:0.06em;">${escapeHtml(seat || '—')}</div>
+              </div>
+              <div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:10px;padding:10px 14px;margin-bottom:8px;">
+                <div style="font-size:10px;font-weight:800;color:#0369A1;letter-spacing:0.08em;">${escapeHtml(c.gateLbl)}</div>
+                <div style="font-size:18px;font-weight:900;color:#0C4A6E;margin-top:2px;">${escapeHtml(gate || c.tba)}</div>
+              </div>
+              <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:8px 14px;font-size:12px;color:#334155;">
+                <strong>${escapeHtml(c.terminalLbl)}:</strong> ${escapeHtml(terminal || '—')}
+              </div>
             </td>
           </tr>
         </table>
 
-        <!-- Meta Details -->
-        <div style="margin-top:12px;padding:10px 12px;background:#F8FAFC;border-radius:10px;font-size:12px;color:#475569;">
-          <span><strong>${escapeHtml(c.pnrLbl)}:</strong> ${escapeHtml(pnr)}</span>
+        <!-- Status Ribbon -->
+        <div style="margin-top:14px;padding:9px 14px;border-radius:10px;background:#ECFDF5;border:1px solid #A7F3D0;color:#065F46;font-size:12.5px;font-weight:800;text-align:center;">
+          ✓ ${escapeHtml(c.header)}
+        </div>
+
+        <!-- 3-Column Timing Row (Boarding | Gate Close | Departure) -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;border-collapse:separate;border-spacing:6px;">
+          <tr>
+            <td style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;width:33.3%;text-align:center;">
+              <div style="font-size:10px;font-weight:800;color:#64748B;">${escapeHtml(c.boardingLbl)}</div>
+              <div style="font-size:18px;font-weight:900;color:#0B1E33;margin-top:2px;">${escapeHtml(boardingTime || '—')}</div>
+            </td>
+            <td style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;width:33.3%;text-align:center;">
+              <div style="font-size:10px;font-weight:800;color:#64748B;">${escapeHtml(c.gateCloseLbl)}</div>
+              <div style="font-size:18px;font-weight:900;color:#B45309;margin-top:2px;">${escapeHtml(gateCloseTime || '—')}</div>
+            </td>
+            <td style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;width:33.3%;text-align:center;">
+              <div style="font-size:10px;font-weight:800;color:#64748B;">${escapeHtml(c.departLbl)}</div>
+              <div style="font-size:18px;font-weight:900;color:#0B1E33;margin-top:2px;">${escapeHtml(departTime || '—')}</div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Meta Details Strip (PNR | Group | Seq | Baggage) -->
+        <div style="margin-top:12px;padding:10px 12px;background:#F8FAFC;border-radius:10px;font-size:12px;color:#475569;border:1px solid #E2E8F0;">
+          <span><strong>${escapeHtml(c.pnrLbl)}:</strong> ${escapeHtml(airlinePnr || pnr)}</span>
+          &nbsp;·&nbsp; <span><strong>${escapeHtml(c.groupLbl)}:</strong> ${escapeHtml(boardingGroup || 'Standard')}</span>
+          &nbsp;·&nbsp; <span><strong>${escapeHtml(c.seqLbl)}:</strong> ${escapeHtml(sequenceNo || '001')}</span>
           ${eticketNo ? ` &nbsp;·&nbsp; <span><strong>${escapeHtml(c.eticketLbl)}:</strong> ${escapeHtml(eticketNo)}</span>` : ''}
           ${cabin ? ` &nbsp;·&nbsp; <span><strong>${escapeHtml(c.cabinLbl)}:</strong> ${escapeHtml(cabin)}</span>` : ''}
           ${baggage ? `<div style="margin-top:4px;"><strong>${escapeHtml(c.baggageLbl)}:</strong> ${escapeHtml(baggage)}</div>` : ''}
+          ${officialPassFileName ? `<div style="margin-top:4px;color:#047857;"><strong>📎 Ekli Resmi Biniş Kartı:</strong> ${escapeHtml(officialPassFileName)}</div>` : ''}
         </div>
 
         ${paxTableHtml}
 
-        <!-- Barcode Footer Strip -->
-        <div style="margin-top:16px;padding:12px;background:#0F172A;border-radius:10px;text-align:center;">
-          <div style="font-family:monospace;font-size:11px;letter-spacing:2px;color:#F8FAFC;word-break:break-all;">${escapeHtml(bcbpCode)}</div>
+        <!-- IATA BCBP String Strip -->
+        <div style="margin-top:14px;padding:9px 12px;background:#0F172A;border-radius:10px;text-align:center;">
+          <div style="font-family:monospace;font-size:10.5px;letter-spacing:1.4px;color:#CBD5E1;word-break:break-all;">${escapeHtml(bcbpCode)}</div>
         </div>
       </div>
     </div>
@@ -435,12 +523,52 @@ function buildBoardingPassEmailHtml({
 }
 
 export async function sendBoardingPassEmail(payload) {
-  const { subject, html } = buildBoardingPassEmailHtml(payload);
-  const res = await sendMail({ to: payload.to, subject, html });
+  const bcbpCode = payload.bcbpString || buildIataBcbpString({
+    passenger: payload.passenger,
+    pnr: payload.airlinePnr || payload.pnr,
+    fromCode: payload.fromCode || 'IST',
+    toCode: payload.toCode || 'AYT',
+    flightNumber: payload.flightNumber,
+    date: payload.date,
+    cabin: payload.cabin,
+    seat: payload.seat,
+    sequenceNo: payload.sequenceNo,
+  });
+
+  let qrImageDataUrl = '';
+  try {
+    qrImageDataUrl = await QRCode.toDataURL(bcbpCode, {
+      errorCorrectionLevel: 'M',
+      width: 220,
+      margin: 1,
+      color: { dark: '#0B1E33', light: '#FFFFFF' },
+    });
+  } catch {
+    qrImageDataUrl = '';
+  }
+
+  const attachments = [];
+  if (typeof payload.officialPassDataUrl === 'string' && payload.officialPassDataUrl.includes(';base64,')) {
+    const base64Part = payload.officialPassDataUrl.split(';base64,')[1];
+    if (base64Part) {
+      attachments.push({
+        filename: payload.officialPassFileName || `BoardingPass_${payload.airlinePnr || payload.pnr}.pdf`,
+        content: base64Part,
+      });
+    }
+  }
+
+  const { subject, html } = buildBoardingPassEmailHtml({
+    ...payload,
+    bcbpCode,
+    qrImageDataUrl,
+  });
+  const res = await sendMail({ to: payload.to, subject, html, attachments });
   return {
     ...res,
     to: payload.to,
     subject,
+    bcbpCode,
     previewHtml: html,
   };
 }

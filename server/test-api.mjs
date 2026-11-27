@@ -1237,6 +1237,32 @@ test('FlyToAspan API & Security Suite', async (t) => {
     assert.ok(checkinUpdate.json.email.previewHtml.includes('204'));
     assert.ok(checkinUpdate.json.email.previewHtml.includes('07:35'));
     assert.ok(checkinUpdate.json.email.previewHtml.includes('TK99AB'));
+    // Real scannable 2D QR image (PNG data URL) & proper IATA 792 BCBP payload
+    assert.ok(checkinUpdate.json.email.previewHtml.includes('data:image/png;base64,'), 'Expected real 2D QR PNG in boarding pass email');
+    assert.ok(checkinUpdate.json.booking.boardingPass.bcbpString.startsWith('M1KAYA/MEHMET'), 'Expected standard IATA 792 BCBP string');
+
+    // Official airline QR image upload support
+    const tinyPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const officialQrUpload = await call(env.origin, `/api/admin/bookings/${autoBk.json.booking.id}/checkin`, {
+      method: 'PATCH',
+      cookie: adminCookie,
+      body: {
+        checkinStatus: 'completed',
+        assignedSeat: '28C',
+        sendEmail: true,
+        recipientEmail: 'mehmet.kaya@example.com',
+        boardingPass: {
+          seat: '28C',
+          officialQrDataUrl: tinyPng,
+          officialPassDataUrl: tinyPng,
+          officialPassFileName: 'Pegasus_QR_28C.png',
+          officialPassMime: 'image/png',
+        },
+      },
+    });
+    assert.equal(officialQrUpload.status, 200);
+    assert.equal(officialQrUpload.json.booking.boardingPass.officialPassFileName, 'Pegasus_QR_28C.png');
+    assert.ok(officialQrUpload.json.email.previewHtml.includes('Resmi Havayolu Barkodu'));
 
     // Validation: sendEmail=true without valid email must fail with 400
     const badEmailCheckin = await call(env.origin, `/api/admin/bookings/${autoBk.json.booking.id}/checkin`, {

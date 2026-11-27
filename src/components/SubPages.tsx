@@ -1270,14 +1270,26 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
                         {matchedBooking.boardingPass?.gate && ` · Gate: ${matchedBooking.boardingPass.gate}`}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      className="btn-gold-nav"
-                      style={{ height: 36, fontSize: 12.5, padding: '0 14px' }}
-                      onClick={() => openBoardingPassPdf(matchedBooking, { lang })}
-                    >
-                      🎫 {lang === 'EN' ? 'Download Boarding Pass (PDF)' : lang === 'RU' ? 'Посадочный талон (PDF)' : lang === 'KK' ? 'Отырғызу талоны (PDF)' : 'Biniş Kartı İndir (PDF)'}
-                    </button>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="btn-gold-nav"
+                        style={{ height: 36, fontSize: 12.5, padding: '0 14px' }}
+                        onClick={() => openBoardingPassPdf(matchedBooking, { lang })}
+                      >
+                        🎫 {lang === 'EN' ? 'Download Boarding Pass (PDF)' : lang === 'RU' ? 'Посадочный талон (PDF)' : lang === 'KK' ? 'Отырғызу талоны (PDF)' : 'Biniş Kartı İndir (PDF)'}
+                      </button>
+                      {matchedBooking.boardingPass?.officialPassDataUrl && (
+                        <a
+                          href={matchedBooking.boardingPass.officialPassDataUrl}
+                          download={matchedBooking.boardingPass.officialPassFileName || `BoardingPass_${matchedBooking.pnr}`}
+                          className="uf-quick-pill"
+                          style={{ height: 36, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', fontSize: 12.5 }}
+                        >
+                          📎 {lang === 'EN' ? 'Airline Official Pass' : lang === 'RU' ? 'Официальный талон' : lang === 'KK' ? 'Ресми әуе талоны' : 'Havayolu Resmi Kartı'}
+                        </a>
+                      )}
+                    </div>
                   </div>
                 )}
 

@@ -1,5 +1,6 @@
 import { AIRPORTS, formatDisplayDate, formatPrice, formatTRY } from '../data/mockData';
 import type { BookingRecord, CurrencyCode, LangCode } from '../types';
+import { buildIataBcbpString, generateQrSvg } from './iataBcbp';
 
 function escapeHtml(raw: string): string {
   return String(raw ?? '')
@@ -733,13 +734,21 @@ export function buildBoardingPassHtml(
     },
   }[lang];
 
-  const bcbp = `M1${booking.passenger.toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 18).replace(/\s+/g, '/')} E${airlinePnr} ${fromCode}${toCode}${flightNo} ${seat} ${bp?.sequenceNo || '001'}`;
-  const bars = Array.from({ length: 58 }, (_, i) => {
-    const code = bcbp.charCodeAt(i % bcbp.length) || 65;
-    const w = (code + i) % 3 === 0 ? 4 : (code + i) % 2 === 0 ? 2 : 1;
-    const gap = (code + i * 3) % 2 === 0 ? 2 : 3;
-    return `<span style="display:inline-block;width:${w}px;height:46px;background:#0F172A;margin-right:${gap}px;"></span>`;
-  }).join('');
+  const bcbp = bp?.bcbpString || buildIataBcbpString({
+    passenger: booking.passenger,
+    pnr: airlinePnr,
+    fromCode,
+    toCode,
+    flightNumber: flightNo,
+    date: booking.date,
+    cabin,
+    seat,
+    sequenceNo: bp?.sequenceNo || '001',
+  });
+  const hasOfficialQr = Boolean(bp?.officialQrDataUrl);
+  const qrBlockHtml = hasOfficialQr
+    ? `<img src="${escapeHtml(bp!.officialQrDataUrl!)}" alt="Official Airline Boarding Pass Barcode" style="width:164px;height:164px;object-fit:contain;display:block;margin:0 auto;" />`
+    : generateQrSvg(bcbp, 164);
 
   return `<!DOCTYPE html>
 <html lang="${escapeHtml(lang.toLowerCase())}">
@@ -758,22 +767,27 @@ export function buildBoardingPassHtml(
     .pass-body { padding: 24px 28px; }
     .route { display: flex; justify-content: space-between; align-items: center; padding-bottom: 18px; border-bottom: 2px dashed #CBD5E1; }
     .iata { font-size: 38px; font-weight: 900; letter-spacing: 0.04em; color: #0B1E33; line-height: 1; }
-    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 18px; }
+    .qr-split { display: grid; grid-template-columns: 200px 1fr; gap: 20px; align-items: center; margin-top: 18px; padding: 16px; border-radius: 16px; border: 1.5px solid #CBD5E1; background: #FFFFFF; }
+    .qr-frame { text-align: center; padding: 10px; border-radius: 12px; border: 1px solid #E2E8F0; background: #FFFFFF; }
+    .qr-badge { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 800; }
+    .qr-right { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .cell { border-radius: 12px; padding: 12px 14px; border: 1px solid #E2E8F0; background: #F8FAFC; }
-    .cell.seat-cell { background: #0B1E33; border-color: #0B1E33; color: #fff; }
-    .cell.board-cell { background: #ECFDF5; border-color: #6EE7B7; }
+    .cell.seat-cell { background: #0B1E33; border-color: #0B1E33; color: #fff; grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; }
     .cell.gate-cell { background: #F0F9FF; border-color: #7DD3FC; }
     .lbl { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: #64748B; text-transform: uppercase; }
     .seat-cell .lbl { color: #94A3B8; }
-    .val { font-size: 20px; font-weight: 900; margin-top: 4px; color: #0F172A; }
-    .seat-cell .val { font-size: 28px; color: #F2C85C; letter-spacing: 0.06em; }
-    .board-cell .val { color: #065F46; }
+    .val { font-size: 18px; font-weight: 900; margin-top: 3px; color: #0F172A; }
+    .seat-cell .val { font-size: 30px; color: #F2C85C; letter-spacing: 0.06em; margin-top: 0; }
     .gate-cell .val { color: #0369A1; }
+    .status-ribbon { margin-top: 14px; padding: 9px 14px; border-radius: 10px; background: #ECFDF5; border: 1px solid #6EE7B7; color: #065F46; font-size: 12.5px; font-weight: 800; text-align: center; }
+    .timing-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+    .timing-box { padding: 11px 12px; border-radius: 12px; background: #F8FAFC; border: 1px solid #E2E8F0; text-align: center; }
+    .meta-strip { margin-top: 12px; padding: 10px 14px; border-radius: 10px; background: #F8FAFC; border: 1px solid #E2E8F0; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; font-size: 12px; color: #334155; }
     table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; border: 1px solid #E2E8F0; }
     th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #E2E8F0; }
     th { background: #F8FAFC; font-size: 11px; color: #64748B; text-transform: uppercase; }
-    .barcode-box { margin-top: 18px; padding: 14px; border-radius: 12px; border: 1px solid #CBD5E1; background: #FFFFFF; text-align: center; }
-    .note { margin-top: 16px; padding: 13px 16px; border-radius: 12px; background: #FFFBEB; border: 1px solid #FCD34D; font-size: 12.5px; color: #92400E; line-height: 1.55; }
+    .bcbp-bar { margin-top: 14px; padding: 10px 12px; border-radius: 10px; background: #0F172A; color: #CBD5E1; text-align: center; font-family: ui-monospace, monospace; font-size: 11px; letter-spacing: 1.4px; word-break: break-all; }
+    .note { margin-top: 14px; padding: 13px 16px; border-radius: 12px; background: #FFFBEB; border: 1px solid #FCD34D; font-size: 12.5px; color: #92400E; line-height: 1.55; }
     @media print { .toolbar { display: none; } body { background: #fff; } .pass { margin: 0; box-shadow: none; } }
   </style>
 </head>
@@ -790,7 +804,6 @@ export function buildBoardingPassHtml(
       <div>
         <div style="font-size:11px;font-weight:800;letter-spacing:0.1em;color:#F2C85C;">${escapeHtml(t.docLabel)}</div>
         <div style="font-size:22px;font-weight:900;margin-top:4px;">${escapeHtml(airline)} ${flightNo ? `· ${escapeHtml(flightNo)}` : ''}</div>
-        <div style="display:inline-block;margin-top:8px;padding:3px 10px;border-radius:999px;background:rgba(16,185,129,0.22);border:1px solid #34D399;color:#A7F3D0;font-size:11px;font-weight:800;">${escapeHtml(t.checkedIn)}</div>
       </div>
       <div style="text-align:right;">
         <div style="font-size:10.5px;color:#CBD5E1;font-weight:700;">${escapeHtml(t.airlinePnr)}</div>
@@ -815,35 +828,56 @@ export function buildBoardingPassHtml(
         </div>
       </div>
 
-      <div class="grid">
-        <div class="cell seat-cell">
-          <div class="lbl">${escapeHtml(t.seat)}</div>
-          <div class="val">${escapeHtml(seat)}</div>
+      <!-- Pegasus-Style Split 2D QR Barcode + Seat / Gate / Terminal -->
+      <div class="qr-split">
+        <div class="qr-frame">
+          ${qrBlockHtml}
+          <span class="qr-badge" style="background:${hasOfficialQr ? '#DCFCE7' : '#F1F5F9'};color:${hasOfficialQr ? '#166534' : '#475569'};">
+            ${hasOfficialQr ? '✓ Resmi Havayolu Barkodu' : 'IATA 792 2D QR'}
+          </span>
         </div>
-        <div class="cell board-cell">
-          <div class="lbl" style="color:#047857;">${escapeHtml(t.boarding)}</div>
-          <div class="val">${escapeHtml(bp?.boardingTime || '—')}</div>
-          ${bp?.gateCloseTime ? `<div style="font-size:11px;color:#047857;font-weight:700;margin-top:2px;">${escapeHtml(t.gateClose)}: ${escapeHtml(bp.gateCloseTime)}</div>` : ''}
-        </div>
-        <div class="cell gate-cell">
-          <div class="lbl" style="color:#0369A1;">${escapeHtml(t.gate)}</div>
-          <div class="val">${escapeHtml(bp?.gate || t.tba)}</div>
-        </div>
-        <div class="cell">
-          <div class="lbl">${escapeHtml(t.terminal)}</div>
-          <div class="val" style="font-size:16px;">${escapeHtml(bp?.terminal || '—')}</div>
-        </div>
-        <div class="cell">
-          <div class="lbl">${escapeHtml(t.zone)}</div>
-          <div class="val" style="font-size:16px;">${escapeHtml(bp?.boardingGroup || 'Standard')}</div>
-        </div>
-        <div class="cell">
-          <div class="lbl">${escapeHtml(t.seq)}</div>
-          <div class="val" style="font-size:16px;">${escapeHtml(bp?.sequenceNo || '001')}</div>
+        <div class="qr-right">
+          <div class="cell seat-cell">
+            <div>
+              <div class="lbl">${escapeHtml(t.seat)}</div>
+              <div style="font-size:12px;color:#CBD5E1;margin-top:3px;">${escapeHtml(booking.passenger)}</div>
+            </div>
+            <div class="val">${escapeHtml(seat)}</div>
+          </div>
+          <div class="cell gate-cell">
+            <div class="lbl" style="color:#0369A1;">${escapeHtml(t.gate)}</div>
+            <div class="val">${escapeHtml(bp?.gate || t.tba)}</div>
+          </div>
+          <div class="cell">
+            <div class="lbl">${escapeHtml(t.terminal)}</div>
+            <div class="val" style="font-size:15px;">${escapeHtml(bp?.terminal || '—')}</div>
+          </div>
         </div>
       </div>
 
-      ${baggage ? `<div style="margin-top:12px;font-size:12.5px;color:#334155;"><strong>${escapeHtml(t.baggage)}:</strong> ${escapeHtml(baggage)}</div>` : ''}
+      <div class="status-ribbon">${escapeHtml(t.checkedIn)}</div>
+
+      <div class="timing-row">
+        <div class="timing-box">
+          <div class="lbl">${escapeHtml(t.boarding)}</div>
+          <div class="val" style="color:#065F46;">${escapeHtml(bp?.boardingTime || '—')}</div>
+        </div>
+        <div class="timing-box">
+          <div class="lbl">${escapeHtml(t.gateClose)}</div>
+          <div class="val" style="color:#B45309;">${escapeHtml(bp?.gateCloseTime || '—')}</div>
+        </div>
+        <div class="timing-box">
+          <div class="lbl">${escapeHtml(t.depart)}</div>
+          <div class="val">${escapeHtml(departTime)}</div>
+        </div>
+      </div>
+
+      <div class="meta-strip">
+        <span><strong>PNR:</strong> ${escapeHtml(airlinePnr)}</span>
+        <span><strong>${escapeHtml(t.zone)}:</strong> ${escapeHtml(bp?.boardingGroup || 'Standard')}</span>
+        <span><strong>${escapeHtml(t.seq)}:</strong> ${escapeHtml(bp?.sequenceNo || '001')}</span>
+        ${baggage ? `<span><strong>${escapeHtml(t.baggage)}:</strong> ${escapeHtml(baggage)}</span>` : ''}
+      </div>
 
       <table>
         <thead>
@@ -866,10 +900,7 @@ export function buildBoardingPassHtml(
         </tbody>
       </table>
 
-      <div class="barcode-box">
-        <div style="white-space:nowrap;overflow:hidden;">${bars}</div>
-        <div style="font-family:ui-monospace,monospace;font-size:11px;letter-spacing:1.8px;color:#334155;margin-top:6px;">${escapeHtml(bcbp)}</div>
-      </div>
+      <div class="bcbp-bar">${escapeHtml(bcbp)}</div>
 
       <div class="note">
         <strong>ℹ ${escapeHtml(t.noteTitle)}:</strong> ${escapeHtml(bp?.baggageDropNote || t.defaultNote)}

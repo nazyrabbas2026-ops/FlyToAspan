@@ -60,6 +60,7 @@ import { PanelNavigation } from './PanelNavigation';
 import { AdminFinanceCrmSection } from './AdminFinanceCrmSection';
 import { AdminDealsSection, AdminToursCard } from './AdminDealsSection';
 import { openBoardingPassPdf, openBrandedEticketPdf, openRawEmailPreview } from '../utils/eticketPdf';
+import { buildIataBcbpString, generateQrSvg } from '../utils/iataBcbp';
 import { useAdminDomI18n } from '../hooks/useAdminDomI18n';
 import { api, apiMessage, type AdminCatalog, type AdminCatalogState, type BookingDraft } from '../data/api';
 
@@ -145,6 +146,10 @@ interface BoardingPassDraftForm {
   boardingGroup: string;
   baggageDropNote: string;
   mobilePassUrl: string;
+  officialQrDataUrl: string;
+  officialPassDataUrl: string;
+  officialPassFileName: string;
+  officialPassMime: string;
   recipientEmail: string;
   mailLang: LangCode;
 }
@@ -928,6 +933,10 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
               ? 'Тіркелетін жолжүгіңіз болса ұшудан 2 сағат бұрын Bag-Drop тағанына келіңіз. Отырғызу қақпасы 20 минут бұрын жабылады.'
               : 'Kayıtlı bagajınız varsa uçuş saatinden en az 2 saat önce Bag-Drop kontuarına uğrayınız. Biniş kapısı kalkıştan 20 dk önce kapanır.'),
       mobilePassUrl: bp?.mobilePassUrl || '',
+      officialQrDataUrl: bp?.officialQrDataUrl || '',
+      officialPassDataUrl: bp?.officialPassDataUrl || '',
+      officialPassFileName: bp?.officialPassFileName || '',
+      officialPassMime: bp?.officialPassMime || '',
       recipientEmail: bp?.sentToEmail || b.contactEmail || '',
       mailLang: activePanelLang,
     };
@@ -2717,6 +2726,10 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                 sequenceNo: seatList[0]?.seqNo || '001',
                                 baggageDropNote: bpDraft.baggageDropNote.trim(),
                                 mobilePassUrl: bpDraft.mobilePassUrl.trim(),
+                                officialQrDataUrl: bpDraft.officialQrDataUrl || '',
+                                officialPassDataUrl: bpDraft.officialPassDataUrl || '',
+                                officialPassFileName: bpDraft.officialPassFileName || '',
+                                officialPassMime: bpDraft.officialPassMime || '',
                                 sentToEmail: bpDraft.recipientEmail.trim(),
                               },
                             });
@@ -3126,47 +3139,164 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                     />
                                   </label>
 
-                                  {/* Live Mini Boarding Pass Preview */}
+                                  {/* Official Airline QR / Boarding Pass File Uploader */}
                                   <div
                                     style={{
+                                      padding: '12px 14px',
                                       borderRadius: 12,
-                                      background: 'linear-gradient(135deg, #0B1E33 0%, #0E4D60 100%)',
-                                      color: '#FFFFFF',
-                                      padding: '12px 16px',
+                                      background: '#FFFFFF',
+                                      border: '1.5px dashed #94A3B8',
                                       display: 'flex',
-                                      justifyContent: 'space-between',
-                                      alignItems: 'center',
-                                      flexWrap: 'wrap',
-                                      gap: 12,
+                                      flexDirection: 'column',
+                                      gap: 8,
                                     }}
                                   >
-                                    <div>
-                                      <div style={{ fontSize: 10, fontWeight: 800, color: '#F2C85C', letterSpacing: '0.08em' }}>
-                                        {`CANLI BİNİŞ KARTI ÖNİZLEMESİ · ${bpDraft.airlinePnr || b.pnr}`}
-                                      </div>
-                                      <div style={{ fontSize: 14, fontWeight: 800, marginTop: 2 }}>
-                                        {b.title} · {b.date} {depTime}
-                                      </div>
+                                    <div style={{ fontSize: 12, fontWeight: 800, color: '#0B1E33' }}>
+                                      Havayolu Resmi Biniş Kartı / QR Barkod Yükle (PNG, JPG, PDF — Opsiyonel)
                                     </div>
-                                    <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-                                      <div>
-                                        <div style={{ fontSize: 9.5, color: '#CBD5E1' }}>KOLTUK</div>
-                                        <div style={{ fontSize: 18, fontWeight: 900, color: '#F2C85C' }}>{primarySeatText || '—'}</div>
-                                      </div>
-                                      <div>
-                                        <div style={{ fontSize: 9.5, color: '#CBD5E1' }}>BİNİŞ</div>
-                                        <div style={{ fontSize: 15, fontWeight: 800 }}>{bpDraft.boardingTime || '—'}</div>
-                                      </div>
-                                      <div>
-                                        <div style={{ fontSize: 9.5, color: '#CBD5E1' }}>KAPI</div>
-                                        <div style={{ fontSize: 15, fontWeight: 800 }}>{bpDraft.gate || 'Ekran'}</div>
-                                      </div>
-                                      <div>
-                                        <div style={{ fontSize: 9.5, color: '#CBD5E1' }}>TERMİNAL</div>
-                                        <div style={{ fontSize: 13.5, fontWeight: 800 }}>{bpDraft.terminal || '—'}</div>
-                                      </div>
+                                    <div style={{ fontSize: 11.5, color: 'var(--aspan-text-muted)' }}>
+                                      Pegasus / THY / Air Astana resmi QR görselini veya PDF biniş kartını yüklerseniz müşterinin kartına ve mail ekine doğrudan eklenir. Yüklemezseniz standart IATA 792 2D QR kodu otomatik üretilir.
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                                      <input
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/webp,application/pdf"
+                                        data-bp-file-input
+                                        style={{ fontSize: 12 }}
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          if (!file) return;
+                                          if (file.size > 2_000_000) {
+                                            setActionError('Dosya boyutu en fazla 2 MB olabilir.');
+                                            return;
+                                          }
+                                          const reader = new FileReader();
+                                          reader.onload = () => {
+                                            const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+                                            if (!dataUrl) return;
+                                            const isImg = /^image\/(png|jpeg|webp)$/i.test(file.type);
+                                            patchBpDraft(b, {
+                                              officialQrDataUrl: isImg ? dataUrl : bpDraft.officialQrDataUrl,
+                                              officialPassDataUrl: dataUrl,
+                                              officialPassFileName: file.name,
+                                              officialPassMime: file.type,
+                                            });
+                                          };
+                                          reader.readAsDataURL(file);
+                                        }}
+                                      />
+                                      {bpDraft.officialPassFileName && (
+                                        <span style={{ padding: '4px 10px', borderRadius: 8, background: '#DCFCE7', color: '#166534', fontSize: 11.5, fontWeight: 800 }}>
+                                          {`✓ Resmi Havayolu Dosyası Yüklendi: ${bpDraft.officialPassFileName}`}
+                                        </span>
+                                      )}
+                                      {(bpDraft.officialPassDataUrl || bpDraft.officialQrDataUrl) && (
+                                        <button
+                                          type="button"
+                                          className="uf-quick-pill"
+                                          style={{ fontSize: 11.5, color: '#B91C1C', borderColor: '#FCA5A5' }}
+                                          onClick={() =>
+                                            patchBpDraft(b, {
+                                              officialQrDataUrl: '',
+                                              officialPassDataUrl: '',
+                                              officialPassFileName: '',
+                                              officialPassMime: '',
+                                            })
+                                          }
+                                        >
+                                          Dosyayı Kaldır
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
+
+                                  {/* Live Mini Boarding Pass Preview WITH Real Scannable 2D QR Code */}
+                                  {(() => {
+                                    const routeMatches = b.title.match(/\(([A-Z]{3})\)/g)?.map((m) => m.slice(1, 4)) || [];
+                                    const previewBcbp = buildIataBcbpString({
+                                      passenger: b.passenger,
+                                      pnr: bpDraft.airlinePnr || b.pnr,
+                                      fromCode: b.legs?.[0]?.fromCode || routeMatches[0] || 'IST',
+                                      toCode: b.legs?.[0]?.toCode || routeMatches[1] || 'AYT',
+                                      flightNumber: b.flightNumber || b.legs?.[0]?.flightNumber,
+                                      date: b.date,
+                                      cabin: b.cabin || b.legs?.[0]?.cabin,
+                                      seat: primarySeatText,
+                                      sequenceNo: bpDraft.passengerSeats[0]?.seqNo || '001',
+                                    });
+                                    const liveQrSvg = generateQrSvg(previewBcbp, 92);
+                                    return (
+                                      <div
+                                        style={{
+                                          borderRadius: 14,
+                                          background: 'linear-gradient(135deg, #0B1E33 0%, #0E4D60 100%)',
+                                          color: '#FFFFFF',
+                                          padding: '14px 16px',
+                                          display: 'flex',
+                                          justifyContent: 'space-between',
+                                          alignItems: 'center',
+                                          flexWrap: 'wrap',
+                                          gap: 14,
+                                        }}
+                                      >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                                          <div
+                                            style={{
+                                              width: 102,
+                                              height: 102,
+                                              borderRadius: 10,
+                                              background: '#FFFFFF',
+                                              padding: 5,
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              flexShrink: 0,
+                                            }}
+                                            data-live-qr-preview
+                                          >
+                                            {bpDraft.officialQrDataUrl ? (
+                                              <img
+                                                src={bpDraft.officialQrDataUrl}
+                                                alt="Official QR"
+                                                style={{ width: 92, height: 92, objectFit: 'contain' }}
+                                              />
+                                            ) : (
+                                              <div dangerouslySetInnerHTML={{ __html: liveQrSvg }} />
+                                            )}
+                                          </div>
+                                          <div>
+                                            <div style={{ fontSize: 10, fontWeight: 800, color: '#F2C85C', letterSpacing: '0.08em' }}>
+                                              {`CANLI BİNİŞ KARTI ÖNİZLEMESİ · ${bpDraft.airlinePnr || b.pnr}`}
+                                            </div>
+                                            <div style={{ fontSize: 14.5, fontWeight: 800, marginTop: 2 }}>
+                                              {b.title} · {b.date} {depTime}
+                                            </div>
+                                            <div style={{ fontSize: 10.5, color: '#A7F3D0', fontWeight: 700, marginTop: 4 }}>
+                                              {bpDraft.officialQrDataUrl ? '✓ Resmi Havayolu Barkodu' : 'IATA 792 2D QR'}
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+                                          <div>
+                                            <div style={{ fontSize: 9.5, color: '#CBD5E1' }}>KOLTUK</div>
+                                            <div style={{ fontSize: 20, fontWeight: 900, color: '#F2C85C' }}>{primarySeatText || '—'}</div>
+                                          </div>
+                                          <div>
+                                            <div style={{ fontSize: 9.5, color: '#CBD5E1' }}>BİNİŞ</div>
+                                            <div style={{ fontSize: 15, fontWeight: 800 }}>{bpDraft.boardingTime || '—'}</div>
+                                          </div>
+                                          <div>
+                                            <div style={{ fontSize: 9.5, color: '#CBD5E1' }}>KAPI</div>
+                                            <div style={{ fontSize: 15, fontWeight: 800 }}>{bpDraft.gate || 'Ekran'}</div>
+                                          </div>
+                                          <div>
+                                            <div style={{ fontSize: 9.5, color: '#CBD5E1' }}>TERMİNAL</div>
+                                            <div style={{ fontSize: 13.5, fontWeight: 800 }}>{bpDraft.terminal || '—'}</div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
 
                                   {/* Primary Actions Row */}
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
@@ -3223,6 +3353,9 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                                 sequenceNo: bpDraft.passengerSeats[0]?.seqNo || '001',
                                                 baggageDropNote: bpDraft.baggageDropNote,
                                                 mobilePassUrl: bpDraft.mobilePassUrl,
+                                                officialQrDataUrl: bpDraft.officialQrDataUrl || undefined,
+                                                officialPassDataUrl: bpDraft.officialPassDataUrl || undefined,
+                                                officialPassFileName: bpDraft.officialPassFileName || undefined,
                                               },
                                             },
                                             { lang: bpDraft.mailLang, autoPrint: false }

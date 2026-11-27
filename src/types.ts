@@ -185,6 +185,11 @@ export interface BoardingPassInfo {
   sequenceNo?: string;
   baggageDropNote?: string;
   mobilePassUrl?: string;
+  officialQrDataUrl?: string;
+  officialPassDataUrl?: string;
+  officialPassFileName?: string;
+  officialPassMime?: string;
+  bcbpString?: string;
   sentToEmail?: string;
   emailSentAt?: number;
   emailDeliveryStatus?: 'sent' | 'queued_preview' | 'failed';
