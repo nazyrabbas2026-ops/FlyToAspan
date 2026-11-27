@@ -222,13 +222,34 @@ function newDemoBooking(db, body, owner) {
     ? Math.round(rawProfit * 100) / 100
     : (netCostTRY !== undefined ? Math.round((salePrice - netCostTRY) * 100) / 100 : undefined);
   const passengersDetail = Array.isArray(body.passengersDetail)
-    ? body.passengersDetail.slice(0, 12).map((p) => ({
-        fullName: typeof p?.fullName === 'string' ? p.fullName.trim().slice(0, 120) : '',
-        tcOrPassport: typeof p?.tcOrPassport === 'string' ? p.tcOrPassport.trim().slice(0, 32) : undefined,
-        birthDate: typeof p?.birthDate === 'string' ? p.birthDate.trim().slice(0, 16) : undefined,
-        gender: typeof p?.gender === 'string' ? p.gender.trim().slice(0, 12) : undefined,
-        paxType: typeof p?.paxType === 'string' ? p.paxType.trim().slice(0, 32) : undefined,
-      })).filter((p) => p.fullName)
+    ? body.passengersDetail.slice(0, 12).map((p) => {
+        const docType = p?.documentType === 'pasaport' ? 'pasaport' : p?.documentType === 'kimlik' ? 'kimlik' : undefined;
+        const issueDate = typeof p?.passportIssueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.passportIssueDate.trim())
+          ? p.passportIssueDate.trim()
+          : undefined;
+        const expiryDate = typeof p?.passportExpiryDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.passportExpiryDate.trim())
+          ? p.passportExpiryDate.trim()
+          : undefined;
+        if (expiryDate && expiryDate < date) {
+          fail(400, 'Pasaport geçerlilik bitiş tarihi seyahat tarihinden önce olamaz.');
+        }
+        if (issueDate && expiryDate && expiryDate <= issueDate) {
+          fail(400, 'Pasaport bitiş tarihi başlangıç tarihinden sonra olmalıdır.');
+        }
+        return {
+          fullName: typeof p?.fullName === 'string' ? p.fullName.trim().slice(0, 120) : '',
+          documentType: docType,
+          tcOrPassport: typeof p?.tcOrPassport === 'string' ? p.tcOrPassport.trim().slice(0, 32) : undefined,
+          nationality: typeof p?.nationality === 'string' ? p.nationality.trim().slice(0, 48) : undefined,
+          passportCountry: typeof p?.passportCountry === 'string' ? p.passportCountry.trim().slice(0, 48) : undefined,
+          passportIssueDate: issueDate,
+          passportExpiryDate: expiryDate,
+          passportIssuer: typeof p?.passportIssuer === 'string' ? p.passportIssuer.trim().slice(0, 64) : undefined,
+          birthDate: typeof p?.birthDate === 'string' ? p.birthDate.trim().slice(0, 16) : undefined,
+          gender: typeof p?.gender === 'string' ? p.gender.trim().slice(0, 12) : undefined,
+          paxType: typeof p?.paxType === 'string' ? p.paxType.trim().slice(0, 32) : undefined,
+        };
+      }).filter((p) => p.fullName)
     : undefined;
   const legs = Array.isArray(body.legs)
     ? body.legs.slice(0, 4).map((l) => ({
@@ -748,8 +769,9 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
             fail(403, `${body.type} satışı yapma yetkiniz bulunmuyor (${neededSellPerm}).`);
           }
         }
-        // B2B Organization Credit Limit check & auto-deduction
+        // B2B Organization Credit Limit — atomic conditional deduction (prevents concurrent race overdraw)
         let orgRow = null;
+        let debitedCreditAmount = 0;
         if (user && user.role !== 'admin' && user.organization_id) {
           orgRow = db.prepare('SELECT * FROM organizations WHERE id = ?').get(user.organization_id);
           if (orgRow && orgRow.status === 'suspended') {
@@ -757,22 +779,37 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           }
           if (orgRow && orgRow.credit_limit > 0) {
             const saleAmount = Math.round(Number(body.price) || 0);
-            if ((orgRow.used_credit || 0) + saleAmount > orgRow.credit_limit) {
-              fail(402, `Şirket B2B cari kredi limiti yetersiz! Kalan limit: ₺${Math.max(0, orgRow.credit_limit - (orgRow.used_credit || 0)).toLocaleString('tr-TR')}`);
+            if (!Number.isFinite(saleAmount) || saleAmount <= 0) fail(400, 'Tutar geçersiz.');
+            const upd = db.prepare(`
+              UPDATE organizations
+              SET used_credit = used_credit + ?
+              WHERE id = ? AND status = 'active' AND (used_credit + ? <= credit_limit)
+            `).run(saleAmount, orgRow.id, saleAmount);
+            if (!upd.changes) {
+              const latest = db.prepare('SELECT credit_limit, used_credit FROM organizations WHERE id = ?').get(orgRow.id);
+              const remaining = Math.max(0, (latest?.credit_limit || 0) - (latest?.used_credit || 0));
+              fail(402, `Şirket B2B cari kredi limiti yetersiz! Kalan limit: ₺${remaining.toLocaleString('tr-TR')}`);
             }
+            debitedCreditAmount = saleAmount;
           }
         }
-        const booking = newDemoBooking(db, body, user ?? null);
-        if (orgRow && orgRow.credit_limit > 0) {
-          const debitAmt = Math.round(booking.price);
-          db.prepare('UPDATE organizations SET used_credit = used_credit + ? WHERE id = ?').run(debitAmt, orgRow.id);
+        let booking;
+        try {
+          booking = newDemoBooking(db, body, user ?? null);
+        } catch (err) {
+          if (debitedCreditAmount > 0 && orgRow) {
+            db.prepare('UPDATE organizations SET used_credit = MAX(0, used_credit - ?) WHERE id = ?').run(debitedCreditAmount, orgRow.id);
+          }
+          throw err;
+        }
+        if (debitedCreditAmount > 0 && orgRow) {
           db.prepare(`
             INSERT INTO org_ledger (id, organization_id, type, amount, description, pnr, created_by, created_at)
             VALUES (?, ?, 'debit', ?, ?, ?, ?, ?)
           `).run(
             randomBytes(12).toString('hex'),
             orgRow.id,
-            debitAmt,
+            debitedCreditAmount,
             `${booking.type} Satışı: ${booking.title} (${booking.passenger})`,
             booking.pnr,
             user.email,
@@ -825,7 +862,10 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         }
         send(res, 200, { bookings: rows.map((row) => stripHouseMargin(bookingRecord(row), user)) });
       } else if (method === 'GET' && path === '/api/admin/catalog') {
-        const rows = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'catalog:%'").all();
+        const canReadProviders = user.role === 'admin' || hasPerm(user, 'apis.manage');
+        const rows = canReadProviders
+          ? db.prepare("SELECT key, value FROM settings WHERE key LIKE 'catalog:%'").all()
+          : db.prepare("SELECT key, value FROM settings WHERE key LIKE 'catalog:%' AND key != 'catalog:providers'").all();
         const catalog = Object.fromEntries(rows.map(({ key, value }) => [key.slice('catalog:'.length), JSON.parse(value)]));
         send(res, 200, { catalog });
       } else if (method === 'PUT' && /^\/api\/admin\/catalog\/(rules|coupons|agencies|hotels|transfers|tours|deals|operators|flights|providers)$/.test(path)) {
@@ -875,7 +915,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           const row = db.prepare('UPDATE bookings SET status = ? WHERE id = ? AND status = ? RETURNING *').get(status, id, existingBk.status);
           if (!row) fail(409, 'Bu rezervasyon eşzamanlı olarak güncellendi. Lütfen yenileyip tekrar deneyin.');
           writeAuditLog(db, { actorEmail: user.email, action: 'admin:booking_status', target: `${row.pnr}:${existingBk.status}->${status}`, ip });
-          send(res, 200, { booking: bookingRecord(row) });
+          send(res, 200, { booking: stripHouseMargin(bookingRecord(row), user) });
         }
       } else if (method === 'PATCH' && path === '/api/admin/pricing') {
         const body = await readJson(req);
@@ -920,9 +960,14 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         writeAuditLog(db, { actorEmail: user.email, action: 'admin:fx_reset', target: 'live', ip });
         send(res, 200, await readFxRates(true));
       } else if (method === 'GET' && path === '/api/admin/users') {
-        const rows = db.prepare('SELECT id, email, role, profile, status, organization_id, permissions FROM users ORDER BY rowid DESC').all();
+        const rows = user.role === 'admin'
+          ? db.prepare('SELECT id, email, role, profile, status, organization_id, permissions FROM users ORDER BY rowid DESC').all()
+          : user.organization_id
+            ? db.prepare('SELECT id, email, role, profile, status, organization_id, permissions FROM users WHERE organization_id = ? ORDER BY rowid DESC').all(user.organization_id)
+            : [];
         send(res, 200, { users: rows.map(accountProfile) });
       } else if (method === 'POST' && /^\/api\/admin\/users\/[a-f0-9]{32}\/approve$/.test(path)) {
+        if (user.role !== 'admin') fail(403, 'Kurumsal başvuru onaylama yetkisi yalnızca Süper Admin içindir.');
         const targetId = path.split('/')[4];
         const targetRow = db.prepare('SELECT * FROM users WHERE id = ?').get(targetId);
         if (!targetRow) fail(404, 'Kullanıcı bulunamadı.');
@@ -956,9 +1001,18 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         send(res, 200, { user: approvedProfile });
       } else if (method === 'PATCH' && /^\/api\/admin\/users\/[a-f0-9]{32}\/permissions$/.test(path)) {
         const targetId = path.split('/')[4];
+        const targetRow = db.prepare('SELECT id, role, organization_id FROM users WHERE id = ?').get(targetId);
+        if (!targetRow) fail(404, 'Kullanıcı bulunamadı.');
         const body = await readJson(req);
-        const permissions = cleanPermissions(body.permissions);
-        const orgId = body.organizationId === undefined ? undefined : (body.organizationId || null);
+        let permissions = cleanPermissions(body.permissions);
+        if (user.role !== 'admin') {
+          if (targetRow.role === 'admin' || targetId === user.id || !user.organization_id || targetRow.organization_id !== user.organization_id) {
+            fail(403, 'Yalnızca kendi şirketinizdeki ekip üyelerinin yetkilerini düzenleyebilirsiniz.');
+          }
+          // Non-admin company managers can NEVER escalate beyond their own held permissions
+          permissions = permissions.filter((p) => hasPerm(user, p));
+        }
+        const orgId = user.role !== 'admin' || body.organizationId === undefined ? undefined : (body.organizationId || null);
         const row = orgId === undefined
           ? db.prepare('UPDATE users SET permissions = ? WHERE id = ? RETURNING id, email, role, profile, status, organization_id, permissions').get(JSON.stringify(permissions), targetId)
           : db.prepare('UPDATE users SET permissions = ?, organization_id = ? WHERE id = ? RETURNING id, email, role, profile, status, organization_id, permissions').get(JSON.stringify(permissions), orgId, targetId);
@@ -968,6 +1022,11 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
       } else if (method === 'PATCH' && /^\/api\/admin\/users\/[a-f0-9]{32}\/status$/.test(path)) {
         const targetId = path.split('/')[4];
         if (targetId === user.id) fail(400, 'Kendi hesabınızı askıya alamazsınız.');
+        const targetRow = db.prepare('SELECT id, role, organization_id FROM users WHERE id = ?').get(targetId);
+        if (!targetRow) fail(404, 'Kullanıcı bulunamadı.');
+        if (user.role !== 'admin' && (targetRow.role === 'admin' || !user.organization_id || targetRow.organization_id !== user.organization_id)) {
+          fail(403, 'Yalnızca kendi şirketinizdeki ekip üyelerinin durumunu değiştirebilirsiniz.');
+        }
         const { status } = await readJson(req);
         if (status !== 'active' && status !== 'suspended') fail(400, 'Geçersiz hesap durumu.');
         const row = db.prepare('UPDATE users SET status = ? WHERE id = ? RETURNING id, email, role, profile, status, organization_id, permissions').get(status, targetId);
@@ -978,9 +1037,14 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         writeAuditLog(db, { actorEmail: user.email, action: `admin:user_${status}`, target: row.email, ip });
         send(res, 200, { user: accountProfile(row) });
       } else if (method === 'GET' && path === '/api/admin/organizations') {
-        const rows = db.prepare('SELECT * FROM organizations ORDER BY created_at DESC').all();
+        const rows = user.role === 'admin'
+          ? db.prepare('SELECT * FROM organizations ORDER BY created_at DESC').all()
+          : user.organization_id
+            ? db.prepare('SELECT * FROM organizations WHERE id = ?').all(user.organization_id)
+            : [];
         send(res, 200, { organizations: rows.map(organizationRecord) });
       } else if (method === 'POST' && path === '/api/admin/organizations') {
+        if (user.role !== 'admin') fail(403, 'Yeni şirket oluşturma yetkisi yalnızca Süper Admin içindir.');
         const body = await readJson(req);
         const id = randomBytes(12).toString('hex');
         const name = text(body.name, 120);
@@ -995,6 +1059,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         writeAuditLog(db, { actorEmail: user.email, action: 'admin:org_create', target: name, ip });
         send(res, 201, { organization: organizationRecord(row) });
       } else if (method === 'PATCH' && /^\/api\/admin\/organizations\/[a-f0-9]{24}$/.test(path)) {
+        if (user.role !== 'admin') fail(403, 'Şirket limit, indirim ve durum düzenleme yetkisi yalnızca Süper Admin içindir.');
         const orgId = path.split('/')[4];
         const existing = db.prepare('SELECT * FROM organizations WHERE id = ?').get(orgId);
         if (!existing) fail(404, 'Şirket bulunamadı.');
@@ -1018,9 +1083,11 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         send(res, 200, { organization: organizationRecord(row) });
       } else if (method === 'GET' && /^\/api\/admin\/organizations\/[a-f0-9]{24}\/ledger$/.test(path)) {
         const orgId = path.split('/')[4];
+        if (user.role !== 'admin' && user.organization_id !== orgId) fail(403, 'Başka bir şirketin cari ekstresini görüntüleyemezsiniz.');
         const rows = db.prepare('SELECT * FROM org_ledger WHERE organization_id = ? ORDER BY created_at DESC LIMIT 100').all(orgId);
         send(res, 200, { entries: rows.map(orgLedgerRecord) });
       } else if (method === 'POST' && /^\/api\/admin\/organizations\/[a-f0-9]{24}\/payment$/.test(path)) {
+        if (user.role !== 'admin') fail(403, 'Cari tahsilat işleme yetkisi yalnızca Süper Admin içindir.');
         const orgId = path.split('/')[4];
         const org = db.prepare('SELECT * FROM organizations WHERE id = ?').get(orgId);
         if (!org) fail(404, 'Şirket bulunamadı.');
@@ -1141,7 +1208,17 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const birthDate = typeof body.birthDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.birthDate.trim())
           ? body.birthDate.trim()
           : '';
+        const documentType = body.documentType === 'pasaport' ? 'pasaport' : body.documentType === 'kimlik' ? 'kimlik' : undefined;
         const tcOrPassport = typeof body.tcOrPassport === 'string' ? body.tcOrPassport.trim().slice(0, 32) : '';
+        const nationality = typeof body.nationality === 'string' ? body.nationality.trim().slice(0, 48) : '';
+        const passportCountry = typeof body.passportCountry === 'string' ? body.passportCountry.trim().slice(0, 48) : '';
+        const passportIssueDate = typeof body.passportIssueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.passportIssueDate.trim())
+          ? body.passportIssueDate.trim()
+          : '';
+        const passportExpiryDate = typeof body.passportExpiryDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.passportExpiryDate.trim())
+          ? body.passportExpiryDate.trim()
+          : '';
+        const passportIssuer = typeof body.passportIssuer === 'string' ? body.passportIssuer.trim().slice(0, 64) : '';
         const gender = body.gender === 'F' ? 'F' : body.gender === 'M' ? 'M' : undefined;
         const paxCount = Math.max(1, Math.min(9, Math.round(Number(body.paxCount) || 1)));
         const type = ['Uçak', 'Otel', 'Transfer', 'Tur'].includes(body.type) ? body.type : 'Uçak';
@@ -1150,13 +1227,22 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const travelDate = typeof body.travelDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.travelDate)
           ? body.travelDate
           : new Date().toISOString().slice(0, 10);
+        if (passportExpiryDate && passportExpiryDate < travelDate) {
+          fail(400, 'Pasaport geçerlilik bitiş tarihi seyahat tarihinden önce olamaz.');
+        }
         const price = Math.round(Number(body.price));
         if (!Number.isFinite(price) || price <= 0 || price > 50_000_000) fail(400, 'Geçerli bir teklif tutarı girin.');
         const metadata = {
           firstName: firstName || undefined,
           lastName: lastName || undefined,
           birthDate: birthDate || undefined,
+          documentType,
           tcOrPassport: tcOrPassport || undefined,
+          nationality: nationality || undefined,
+          passportCountry: passportCountry || undefined,
+          passportIssueDate: passportIssueDate || undefined,
+          passportExpiryDate: passportExpiryDate || undefined,
+          passportIssuer: passportIssuer || undefined,
           gender,
           customerEmail: customerEmail || undefined,
           paxCount,
@@ -1236,8 +1322,14 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           legs,
           passengersDetail: [{
             fullName: qRow.customer_name,
+            documentType: parsedQuote.documentType,
             birthDate: parsedQuote.birthDate,
             tcOrPassport: parsedQuote.tcOrPassport,
+            nationality: parsedQuote.nationality,
+            passportCountry: parsedQuote.passportCountry,
+            passportIssueDate: parsedQuote.passportIssueDate,
+            passportExpiryDate: parsedQuote.passportExpiryDate,
+            passportIssuer: parsedQuote.passportIssuer,
             gender: parsedQuote.gender,
             paxType: (parsedQuote.paxCount || 1) > 1 ? `Yetişkin (${parsedQuote.paxCount} Kişi)` : 'Yetişkin',
           }],

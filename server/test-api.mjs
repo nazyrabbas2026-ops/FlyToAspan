@@ -1015,10 +1015,50 @@ test('FlyToAspan API & Security Suite', async (t) => {
     await setPerms(['team.manage']);
     assert.equal((await call(env.origin, '/api/admin/users', { cookie: sCookie })).status, 200);
     assert.equal((await call(env.origin, '/api/admin/organizations', { cookie: sCookie })).status, 200);
-    // Privilege escalation guard: team.manage CANNOT promote to Super Admin!
+    // Privilege escalation guard: team.manage CANNOT promote to Super Admin, suspend Super Admin,
+    // self-escalate permissions, read API provider secrets, or alter org credit/discount/payments!
     assert.equal((await call(env.origin, `/api/admin/users/${staff.id}/role`, {
       method: 'PATCH', cookie: sCookie, body: { role: 'admin' },
     })).status, 403);
+    const adminRow = uList.json.users.find((u) => u.role === 'admin');
+    assert.equal((await call(env.origin, `/api/admin/users/${adminRow.id}/status`, {
+      method: 'PATCH', cookie: sCookie, body: { status: 'suspended' },
+    })).status, 403);
+    assert.equal((await call(env.origin, `/api/admin/users/${staff.id}/permissions`, {
+      method: 'PATCH', cookie: sCookie, body: { permissions: ['apis.manage', 'fx.manage'] },
+    })).status, 403);
+    assert.equal((await call(env.origin, `/api/admin/organizations/${orgId}`, {
+      method: 'PATCH', cookie: sCookie, body: { creditLimitTRY: 9999999, discountPercent: 25 },
+    })).status, 403);
+    assert.equal((await call(env.origin, `/api/admin/organizations/${orgId}/payment`, {
+      method: 'POST', cookie: sCookie, body: { amount: 5000, description: 'Fake payment' },
+    })).status, 403);
+    const staffCat = await call(env.origin, '/api/admin/catalog', { cookie: sCookie });
+    assert.equal(staffCat.status, 200);
+    assert.equal('providers' in staffCat.json.catalog, false);
+
+    // Expired passport date validation guard
+    const expiredPassRes = await call(env.origin, '/api/bookings', {
+      method: 'POST',
+      cookie: adminCookie,
+      body: {
+        type: 'Uçak',
+        title: 'Antalya (AYT) → Almatı (ALA)',
+        subtitle: 'Air Astana · KC912',
+        date: '2026-12-30',
+        passenger: 'Test Yolcu',
+        lookupSurname: 'Yolcu',
+        price: 6500,
+        passengersDetail: [{
+          fullName: 'Test Yolcu',
+          documentType: 'pasaport',
+          tcOrPassport: 'U12345678',
+          passportIssueDate: '2016-01-01',
+          passportExpiryDate: '2026-01-01',
+        }],
+      },
+    });
+    assert.equal(expiredPassRes.status, 400);
 
     // 16: Automated Daily XML Showcase Sync (5 cheapest hotels 1-per-country & 4 tours from 4 countries)
     const xmlSync = await call(env.origin, '/api/admin/xml-showcase/sync', {

@@ -782,6 +782,10 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
 
   const fromAirport = AIRPORTS.find((a) => a.code === query.fromCode) || AIRPORTS[0];
   const toAirport = AIRPORTS.find((a) => a.code === query.toCode) || AIRPORTS[4];
+  const isIntlFlight = !fromAirport.domestic || !toAirport.domestic;
+  const [paxDocTypes, setPaxDocTypes] = useState<Record<number, 'kimlik' | 'pasaport'>>({});
+  const getPaxDocType = (idx: number): 'kimlik' | 'pasaport' =>
+    paxDocTypes[idx] ?? (isIntlFlight ? 'pasaport' : 'kimlik');
   const bookingLegs = bookingChoice ? (outboundChoice ? [outboundChoice, bookingChoice] : [bookingChoice]) : [];
   const unitLegTotal = bookingLegs.reduce((total, { flight, pkg }) => total + flight.basePrice + pkg.priceDelta, 0);
   const adultSubtotalTRY = Math.round(unitLegTotal * query.adults);
@@ -1030,17 +1034,56 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
         const passengersDetail = paxSlots.map((slot, idx) => {
           const fn = String(fields.get(`firstName_${idx}`) || '').trim();
           const ln = String(fields.get(`surname_${idx}`) || '').trim();
-          const doc = String(fields.get(`doc_${idx}`) || '').trim();
+          const docType = getPaxDocType(idx);
+          const doc = String(fields.get(`doc_${idx}`) || '').trim().toUpperCase();
           const dob = String(fields.get(`dob_${idx}`) || '').trim();
+          const nationality = String(fields.get(`nationality_${idx}`) || '').trim();
+          const passportCountry = docType === 'pasaport' ? String(fields.get(`passportCountry_${idx}`) || nationality || '').trim() : '';
+          const passportIssueDate = docType === 'pasaport' ? String(fields.get(`passportIssue_${idx}`) || '').trim() : '';
+          const passportExpiryDate = docType === 'pasaport' ? String(fields.get(`passportExpiry_${idx}`) || '').trim() : '';
           const rawGender = String(fields.get(`gender_${idx}`) || 'M');
           return {
             fullName: `${fn} ${ln}`.trim(),
+            documentType: docType,
             tcOrPassport: doc || undefined,
+            nationality: nationality || undefined,
+            passportCountry: passportCountry || undefined,
+            passportIssueDate: passportIssueDate || undefined,
+            passportExpiryDate: passportExpiryDate || undefined,
             birthDate: dob || undefined,
             gender: rawGender === 'F' ? 'Kadın' : 'Erkek',
             paxType: slot.label,
           };
         }).filter((p) => p.fullName);
+
+        for (const p of passengersDetail) {
+          if (p.documentType === 'pasaport' && p.passportExpiryDate && p.passportExpiryDate < query.departDate) {
+            setBookingPending(false);
+            setBookingError(
+              lang === 'EN'
+                ? 'Passport expiry date cannot be earlier than the flight date.'
+                : lang === 'RU'
+                  ? 'Срок действия паспорта не может быть раньше даты вылета.'
+                  : lang === 'KK'
+                    ? 'Төлқұжаттың жарамдылық мерзімі ұшу күнінен ерте болмауы керек.'
+                    : 'Pasaport geçerlilik bitiş tarihi uçuş tarihinden önce olamaz.'
+            );
+            return;
+          }
+          if (p.documentType === 'pasaport' && p.passportIssueDate && p.passportExpiryDate && p.passportExpiryDate <= p.passportIssueDate) {
+            setBookingPending(false);
+            setBookingError(
+              lang === 'EN'
+                ? 'Passport expiry date must be later than the issue date.'
+                : lang === 'RU'
+                  ? 'Дата окончания паспорта должна быть позже даты выдачи.'
+                  : lang === 'KK'
+                    ? 'Төлқұжаттың біту күні берілген күнінен кейін болуы тиіс.'
+                    : 'Pasaport bitiş tarihi başlangıç (veriliş) tarihinden sonra olmalıdır.'
+            );
+            return;
+          }
+        }
         const contactEmail = String(fields.get('contactEmail') || '').trim() || undefined;
         const contactPhone = String(fields.get('contactPhone') || '').trim() || undefined;
         const providerSources = Array.from(
@@ -1383,7 +1426,17 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                     )}
 
                     <div className="uf-co-pax-list">
-                      {paxSlots.map((slot, idx) => (
+                      {paxSlots.map((slot, idx) => {
+                        const docType = getPaxDocType(idx);
+                        const docCountries =
+                          lang === 'EN'
+                            ? ['Turkey', 'Kazakhstan', 'Russia', 'Uzbekistan', 'Azerbaijan', 'Kyrgyzstan', 'Germany', 'United Kingdom', 'Other']
+                            : lang === 'RU'
+                              ? ['Турция', 'Казахстан', 'Россия', 'Узбекистан', 'Азербайджан', 'Кыргызстан', 'Германия', 'Великобритания', 'Другое']
+                              : lang === 'KK'
+                                ? ['Түркия', 'Қазақстан', 'Ресей', 'Өзбекстан', 'Әзербайжан', 'Қырғызстан', 'Германия', 'Ұлыбритания', 'Басқа']
+                                : ['Türkiye', 'Kazakistan', 'Rusya', 'Özbekistan', 'Azerbaycan', 'Kırgızistan', 'Almanya', 'İngiltere', 'Diğer'];
+                        return (
                         <div key={slot.key} className="uf-co-pax-box">
                           <div className="uf-co-pax-box-head">
                             <span className="uf-co-pax-badge">
@@ -1403,22 +1456,113 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
 
                           <div className="uf-co-form-grid-2">
                             <label className="uf-co-label">{co.firstName} *
-                              <input name={`firstName_${idx}`} autoComplete="given-name" className="uf-co-input" required maxLength={64} />
+                              <input name={`firstName_${idx}`} autoComplete="given-name" className="uf-co-input" required maxLength={64} placeholder={isIntlFlight ? (lang === 'EN' ? 'Latin letters as on passport' : lang === 'RU' ? 'Латиницей как в паспорте' : lang === 'KK' ? 'Төлқұжаттағыдай латынша' : 'Pasaporttaki gibi (Latin)') : ''} />
                             </label>
                             <label className="uf-co-label">{co.surname} *
-                              <input name={`surname_${idx}`} autoComplete="family-name" className="uf-co-input" required maxLength={64} />
+                              <input name={`surname_${idx}`} autoComplete="family-name" className="uf-co-input" required maxLength={64} placeholder={isIntlFlight ? (lang === 'EN' ? 'Latin letters as on passport' : lang === 'RU' ? 'Латиницей как в паспорте' : lang === 'KK' ? 'Төлқұжаттағыдай латынша' : 'Pasaporttaki gibi (Latin)') : ''} />
                             </label>
                             <label className="uf-co-label">
-                              {lang === 'EN' ? 'ID / Passport No (Optional · Demo)' : lang === 'RU' ? 'Паспорт / ИИН (необяз. · Демо)' : lang === 'KK' ? 'Төлқұжат / ЖСН (міндетті емес)' : 'T.C. Kimlik / Pasaport No (Opsiyonel · Deneme)'}
-                              <input name={`doc_${idx}`} className="uf-co-input" maxLength={24} placeholder="TCKN / Pasaport" />
-                            </label>
-                            <label className="uf-co-label">
-                              {lang === 'EN' ? 'Date of Birth (Optional)' : lang === 'RU' ? 'Дата рождения (необяз.)' : lang === 'KK' ? 'Туған күні (міндетті емес)' : 'Doğum Tarihi (Opsiyonel)'}
+                              {lang === 'EN' ? 'Date of Birth' : lang === 'RU' ? 'Дата рождения' : lang === 'KK' ? 'Туған күні' : 'Doğum Tarihi'}
                               <input name={`dob_${idx}`} type="date" className="uf-co-input" />
                             </label>
+                            <label className="uf-co-label">
+                              {lang === 'EN' ? 'Nationality / Citizenship' : lang === 'RU' ? 'Гражданство' : lang === 'KK' ? 'Азаматтығы' : 'Uyruk / Vatandaşlık'}
+                              <select name={`nationality_${idx}`} className="uf-co-input" defaultValue={docCountries[0]}>
+                                {docCountries.map((c) => (
+                                  <option key={c} value={c}>{c}</option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+
+                          {/* Document Type Selector (Kimlik vs Pasaport) */}
+                          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed var(--aspan-border)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                              <span style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--aspan-text)' }}>
+                                {lang === 'EN' ? 'Document Type' : lang === 'RU' ? 'Тип документа' : lang === 'KK' ? 'Құжат түрі' : 'Belge Tipi'}
+                              </span>
+                              <div style={{ display: 'inline-flex', gap: 8 }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setPaxDocTypes((prev) => ({ ...prev, [idx]: 'kimlik' }))}
+                                  style={{
+                                    padding: '6px 13px',
+                                    borderRadius: 9,
+                                    fontSize: 12,
+                                    fontWeight: 800,
+                                    cursor: 'pointer',
+                                    border: docType === 'kimlik' ? '1.5px solid #0B1E33' : '1.5px solid #cbd5e1',
+                                    background: docType === 'kimlik' ? '#0B1E33' : '#ffffff',
+                                    color: docType === 'kimlik' ? '#ffffff' : '#0f172a',
+                                  }}
+                                >
+                                  {lang === 'EN' ? 'National ID' : lang === 'RU' ? 'Удостоверение личности' : lang === 'KK' ? 'Жеке куәлік' : 'T.C. Kimlik Kartı'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPaxDocTypes((prev) => ({ ...prev, [idx]: 'pasaport' }))}
+                                  style={{
+                                    padding: '6px 13px',
+                                    borderRadius: 9,
+                                    fontSize: 12,
+                                    fontWeight: 800,
+                                    cursor: 'pointer',
+                                    border: docType === 'pasaport' ? '1.5px solid #0B1E33' : '1.5px solid #cbd5e1',
+                                    background: docType === 'pasaport' ? '#0B1E33' : '#ffffff',
+                                    color: docType === 'pasaport' ? '#ffffff' : '#0f172a',
+                                  }}
+                                >
+                                  {lang === 'EN' ? 'Passport' : lang === 'RU' ? 'Загранпаспорт' : lang === 'KK' ? 'Төлқұжат (Паспорт)' : 'Pasaport'}
+                                </button>
+                              </div>
+                            </div>
+
+                            {isIntlFlight && docType === 'pasaport' && (
+                              <div style={{ fontSize: 11.5, color: '#0369A1', background: 'rgba(2,132,199,0.08)', border: '1px solid rgba(2,132,199,0.22)', borderRadius: 9, padding: '7px 10px', marginBottom: 10, fontWeight: 600 }}>
+                                {lang === 'EN'
+                                  ? 'International route: enter passport number, issue date and expiry date exactly as shown on your passport.'
+                                  : lang === 'RU'
+                                    ? 'Международный рейс: укажите номер паспорта, дату выдачи и срок действия как в документе.'
+                                    : lang === 'KK'
+                                      ? 'Халықаралық рейс: төлқұжат нөмірін, берілген және жарамдылық мерзімін құжаттағыдай енгізіңіз.'
+                                      : 'Dış hat uçuşu: pasaport numarası, başlangıç (veriliş) ve bitiş (geçerlilik) tarihini pasaportunuzdaki gibi girin.'}
+                              </div>
+                            )}
+
+                            {docType === 'kimlik' ? (
+                              <div className="uf-co-form-grid-2">
+                                <label className="uf-co-label">
+                                  {lang === 'EN' ? 'National ID Number' : lang === 'RU' ? 'Номер удостоверения / ИИН' : lang === 'KK' ? 'ЖСН / Куәлік нөмірі' : 'T.C. Kimlik / Kimlik No'}
+                                  <input name={`doc_${idx}`} className="uf-co-input" maxLength={24} placeholder="11111111111" />
+                                </label>
+                              </div>
+                            ) : (
+                              <div className="uf-co-form-grid-2">
+                                <label className="uf-co-label">
+                                  {lang === 'EN' ? 'Passport Number' : lang === 'RU' ? 'Номер паспорта' : lang === 'KK' ? 'Төлқұжат нөмірі' : 'Pasaport No'}
+                                  <input name={`doc_${idx}`} className="uf-co-input" maxLength={24} placeholder="U12345678" />
+                                </label>
+                                <label className="uf-co-label">
+                                  {lang === 'EN' ? 'Issuing Country' : lang === 'RU' ? 'Страна выдачи паспорта' : lang === 'KK' ? 'Төлқұжат берген ел' : 'Pasaport Veren Ülke'}
+                                  <select name={`passportCountry_${idx}`} className="uf-co-input" defaultValue={docCountries[0]}>
+                                    {docCountries.map((c) => (
+                                      <option key={c} value={c}>{c}</option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label className="uf-co-label">
+                                  {lang === 'EN' ? 'Passport Issue Date (Start)' : lang === 'RU' ? 'Дата выдачи паспорта' : lang === 'KK' ? 'Төлқұжат берілген күні' : 'Pasaport Başlangıç (Veriliş) Tarihi'}
+                                  <input name={`passportIssue_${idx}`} type="date" className="uf-co-input" />
+                                </label>
+                                <label className="uf-co-label">
+                                  {lang === 'EN' ? 'Passport Expiry Date (Valid Until)' : lang === 'RU' ? 'Действителен до' : lang === 'KK' ? 'Жарамдылық мерзімі (дейін)' : 'Pasaport Bitiş (Geçerlilik) Tarihi'}
+                                  <input name={`passportExpiry_${idx}`} type="date" min={query.departDate} className="uf-co-input" />
+                                </label>
+                              </div>
+                            )}
                           </div>
                         </div>
-                      ))}
+                      );})}
                     </div>
 
                     <div className="uf-co-contact-block" style={{ marginTop: 18 }}>

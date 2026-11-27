@@ -140,7 +140,13 @@ export interface UserProfile {
 
 export interface BookingPassengerDetail {
   fullName: string;
+  documentType?: 'kimlik' | 'pasaport';
   tcOrPassport?: string;
+  nationality?: string;
+  passportCountry?: string;
+  passportIssueDate?: string;
+  passportExpiryDate?: string;
+  passportIssuer?: string;
   birthDate?: string;
   gender?: string;
   paxType?: string;
@@ -233,7 +239,13 @@ export interface CrmQuote {
   firstName?: string;
   lastName?: string;
   birthDate?: string;
+  documentType?: 'kimlik' | 'pasaport';
   tcOrPassport?: string;
+  nationality?: string;
+  passportCountry?: string;
+  passportIssueDate?: string;
+  passportExpiryDate?: string;
+  passportIssuer?: string;
   gender?: 'M' | 'F';
   customerEmail?: string;
   customerPhone: string;

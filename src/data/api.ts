@@ -167,7 +167,13 @@ export const api = {
     firstName?: string;
     lastName?: string;
     birthDate?: string;
+    documentType?: 'kimlik' | 'pasaport';
     tcOrPassport?: string;
+    nationality?: string;
+    passportCountry?: string;
+    passportIssueDate?: string;
+    passportExpiryDate?: string;
+    passportIssuer?: string;
     gender?: 'M' | 'F';
     customerEmail?: string;
     customerPhone?: string;

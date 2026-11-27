@@ -160,11 +160,17 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [busy, setBusy] = useState(false);
 
-  // Detailed Quote Builder form (separate passenger fields + automatic XML price list)
+  // Detailed Quote Builder form (separate passenger fields + ID/Passport + automatic XML price list)
   const [qFirstName, setQFirstName] = useState('');
   const [qLastName, setQLastName] = useState('');
   const [qBirthDate, setQBirthDate] = useState('1992-05-15');
+  const [qDocType, setQDocType] = useState<'kimlik' | 'pasaport'>('pasaport');
+  const [qNationality, setQNationality] = useState('Kazakistan');
   const [qPassport, setQPassport] = useState('');
+  const [qPassportCountry, setQPassportCountry] = useState('Kazakistan');
+  const [qPassportIssue, setQPassportIssue] = useState('');
+  const [qPassportExpiry, setQPassportExpiry] = useState('');
+  const [qPassportIssuer, setQPassportIssuer] = useState('');
   const [qGender, setQGender] = useState<'F' | 'M'>('F');
   const [qPhone, setQPhone] = useState('');
   const [qEmail, setQEmail] = useState('');
@@ -1205,7 +1211,13 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
                   firstName: qFirstName.trim(),
                   lastName: qLastName.trim(),
                   birthDate: qBirthDate || undefined,
+                  documentType: qDocType,
                   tcOrPassport: qPassport.trim() || undefined,
+                  nationality: qNationality || undefined,
+                  passportCountry: qDocType === 'pasaport' ? (qPassportCountry || qNationality) : undefined,
+                  passportIssueDate: qDocType === 'pasaport' && qPassportIssue ? qPassportIssue : undefined,
+                  passportExpiryDate: qDocType === 'pasaport' && qPassportExpiry ? qPassportExpiry : undefined,
+                  passportIssuer: qDocType === 'pasaport' && qPassportIssuer.trim() ? qPassportIssuer.trim() : undefined,
                   gender: qGender,
                   customerEmail: qEmail.trim() || undefined,
                   customerPhone: qPhone.trim(),
@@ -1231,6 +1243,9 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
                 setQFirstName('');
                 setQLastName('');
                 setQPassport('');
+                setQPassportIssue('');
+                setQPassportExpiry('');
+                setQPassportIssuer('');
                 setQPhone('');
                 setQEmail('');
                 onFlash(`Teklif oluşturuldu: ${quote.quoteNo}`);
@@ -1243,7 +1258,7 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
           >
             {/* 1. Detailed Passenger & Contact Fields */}
             <div className="adm-form-box" style={{ marginTop: 0, marginBottom: 14 }}>
-              <div className="adm-form-title">1. Yolcu &amp; İletişim Bilgileri</div>
+              <div className="adm-form-title">1. Yolcu, Belge (Kimlik / Pasaport) &amp; İletişim Bilgileri</div>
               <div className="panel-form-grid">
                 <div>
                   <label className="adm-field-lbl">Yolcu Adı *</label>
@@ -1258,16 +1273,67 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
                   <input required type="date" className="modal-input" value={qBirthDate} onChange={(e) => setQBirthDate(e.target.value)} />
                 </div>
                 <div>
-                  <label className="adm-field-lbl">TC / Pasaport No</label>
-                  <input className="modal-input" placeholder="Örn: U12345678" value={qPassport} onChange={(e) => setQPassport(e.target.value.toUpperCase())} />
-                </div>
-                <div>
                   <label className="adm-field-lbl">Cinsiyet</label>
                   <select className="modal-input" value={qGender} onChange={(e) => setQGender(e.target.value as 'F' | 'M')}>
                     <option value="F">Kadın</option>
                     <option value="M">Erkek</option>
                   </select>
                 </div>
+                <div>
+                  <label className="adm-field-lbl">Uyruk / Vatandaşlık</label>
+                  <select className="modal-input" value={qNationality} onChange={(e) => { setQNationality(e.target.value); setQPassportCountry(e.target.value); }}>
+                    <option value="Türkiye">Türkiye</option>
+                    <option value="Kazakistan">Kazakistan</option>
+                    <option value="Rusya">Rusya</option>
+                    <option value="Özbekistan">Özbekistan</option>
+                    <option value="Azerbaycan">Azerbaycan</option>
+                    <option value="Kırgızistan">Kırgızistan</option>
+                    <option value="Almanya">Almanya</option>
+                    <option value="İngiltere">İngiltere</option>
+                    <option value="Diğer">Diğer</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="adm-field-lbl">Belge Tipi</label>
+                  <select className="modal-input" value={qDocType} onChange={(e) => setQDocType(e.target.value as 'kimlik' | 'pasaport')}>
+                    <option value="pasaport">Pasaport</option>
+                    <option value="kimlik">T.C. Kimlik Kartı</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="adm-field-lbl">{qDocType === 'pasaport' ? 'Pasaport No' : 'T.C. Kimlik / Kimlik No'}</label>
+                  <input className="modal-input" placeholder={qDocType === 'pasaport' ? 'Örn: U12345678' : '11111111111'} value={qPassport} onChange={(e) => setQPassport(e.target.value.toUpperCase())} />
+                </div>
+                {qDocType === 'pasaport' && (
+                  <>
+                    <div>
+                      <label className="adm-field-lbl">Pasaport Veren Ülke</label>
+                      <select className="modal-input" value={qPassportCountry} onChange={(e) => setQPassportCountry(e.target.value)}>
+                        <option value="Türkiye">Türkiye</option>
+                        <option value="Kazakistan">Kazakistan</option>
+                        <option value="Rusya">Rusya</option>
+                        <option value="Özbekistan">Özbekistan</option>
+                        <option value="Azerbaycan">Azerbaycan</option>
+                        <option value="Kırgızistan">Kırgızistan</option>
+                        <option value="Almanya">Almanya</option>
+                        <option value="İngiltere">İngiltere</option>
+                        <option value="Diğer">Diğer</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="adm-field-lbl">Pasaport Başlangıç Tarihi</label>
+                      <input type="date" className="modal-input" value={qPassportIssue} onChange={(e) => setQPassportIssue(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="adm-field-lbl">Pasaport Bitiş Tarihi</label>
+                      <input type="date" min={qDate} className="modal-input" value={qPassportExpiry} onChange={(e) => setQPassportExpiry(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="adm-field-lbl">Veren Makam (Opsiyonel)</label>
+                      <input className="modal-input" placeholder="Örn: MVD RK / NVI" value={qPassportIssuer} onChange={(e) => setQPassportIssuer(e.target.value)} />
+                    </div>
+                  </>
+                )}
                 <div>
                   <label className="adm-field-lbl">Yolcu Sayısı</label>
                   <select className="modal-input" value={qPaxCount} onChange={(e) => setQPaxCount(Number(e.target.value))}>

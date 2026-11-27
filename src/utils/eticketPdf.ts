@@ -309,27 +309,41 @@ export function buildBrandedEticketHtml(
           <div style="background: #F1F5F9; padding: 9px 16px; font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: #334155; border-bottom: 1px solid #E2E8F0;">
             Yolcu Bilgileri (${booking.passengersDetail.length} Kişi)
           </div>
-          <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
             <thead>
               <tr style="background: #F8FAFC; color: #64748B; text-align: left; border-bottom: 1px solid #E2E8F0;">
-                <th style="padding: 8px 14px;">Ad Soyad</th>
-                <th style="padding: 8px 14px;">Doğum Tarihi</th>
-                <th style="padding: 8px 14px;">TC / Pasaport</th>
-                <th style="padding: 8px 14px;">Cinsiyet</th>
-                <th style="padding: 8px 14px;">Tip</th>
+                <th style="padding: 8px 12px;">Ad Soyad / Uyruk</th>
+                <th style="padding: 8px 12px;">Doğum Tarihi</th>
+                <th style="padding: 8px 12px;">Belge Tipi &amp; No</th>
+                <th style="padding: 8px 12px;">Geçerlilik</th>
+                <th style="padding: 8px 12px;">Cinsiyet / Tip</th>
               </tr>
             </thead>
             <tbody>
               ${booking.passengersDetail
-                .map(
-                  (p) => `<tr style="border-bottom: 1px solid #F1F5F9;">
-                    <td style="padding: 9px 14px; font-weight: 700; color: #0F172A;">${escapeHtml(p.fullName)}</td>
-                    <td style="padding: 9px 14px; color: #334155;">${p.birthDate ? escapeHtml(formatDisplayDate(p.birthDate, lang)) : '—'}</td>
-                    <td style="padding: 9px 14px; font-family: ui-monospace, monospace; color: #334155;">${escapeHtml(p.tcOrPassport || '—')}</td>
-                    <td style="padding: 9px 14px; color: #334155;">${escapeHtml(formatGenderLabel(p.gender, lang))}</td>
-                    <td style="padding: 9px 14px; color: #334155;">${escapeHtml(p.paxType || 'Yetişkin')}</td>
-                  </tr>`
-                )
+                .map((p) => {
+                  const docTypeLbl = p.documentType === 'pasaport' ? 'Pasaport' : p.documentType === 'kimlik' ? 'Kimlik' : 'Belge';
+                  const validityParts = [
+                    p.passportIssueDate ? `Başl: ${formatDisplayDate(p.passportIssueDate, lang)}` : '',
+                    p.passportExpiryDate ? `Bitiş: ${formatDisplayDate(p.passportExpiryDate, lang)}` : '',
+                  ].filter(Boolean);
+                  return `<tr style="border-bottom: 1px solid #F1F5F9;">
+                    <td style="padding: 9px 12px; font-weight: 700; color: #0F172A;">
+                      ${escapeHtml(p.fullName)}
+                      ${p.nationality ? `<div style="font-size: 11px; font-weight: 600; color: #64748B;">${escapeHtml(p.nationality)}</div>` : ''}
+                    </td>
+                    <td style="padding: 9px 12px; color: #334155;">${p.birthDate ? escapeHtml(formatDisplayDate(p.birthDate, lang)) : '—'}</td>
+                    <td style="padding: 9px 12px; color: #334155;">
+                      <span style="font-size: 10.5px; font-weight: 800; color: #0369A1;">${escapeHtml(docTypeLbl)}</span><br/>
+                      <span style="font-family: ui-monospace, monospace;">${escapeHtml(p.tcOrPassport || '—')}</span>
+                    </td>
+                    <td style="padding: 9px 12px; color: #334155; font-size: 11.5px;">
+                      ${validityParts.length > 0 ? escapeHtml(validityParts.join(' · ')) : '—'}
+                      ${p.passportCountry ? `<div style="font-size: 10.5px; color: #64748B;">${escapeHtml(p.passportCountry)}${p.passportIssuer ? ` · ${escapeHtml(p.passportIssuer)}` : ''}</div>` : ''}
+                    </td>
+                    <td style="padding: 9px 12px; color: #334155;">${escapeHtml(formatGenderLabel(p.gender, lang))} · ${escapeHtml(p.paxType || 'Yetişkin')}</td>
+                  </tr>`;
+                })
                 .join('')}
             </tbody>
           </table>

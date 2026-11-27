@@ -65,7 +65,7 @@ const server = createServer({ requestTimeout: 20_000, headersTimeout: 10_000 }, 
       res.writeHead(404).end();
       return;
     }
-    res.writeHead(200, {
+    const headers = {
       'Content-Type': mimeTypes[extname(file)] ?? 'application/octet-stream',
       'Content-Length': info.size,
       'X-Content-Type-Options': 'nosniff',
@@ -74,7 +74,11 @@ const server = createServer({ requestTimeout: 20_000, headersTimeout: 10_000 }, 
       'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
       'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src 'self' https://open.er-api.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
       'Cache-Control': path.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
-    });
+    };
+    if (process.env.NODE_ENV === 'production') {
+      headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains';
+    }
+    res.writeHead(200, headers);
     if (req.method === 'HEAD') res.end();
     else createReadStream(file).on('error', () => res.destroy()).pipe(res);
   } catch (error) {

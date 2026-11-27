@@ -2173,7 +2173,17 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                       <div key={`${b.id}-px-${pIdx}`} style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', color: 'var(--aspan-text-body)' }}>
                                         <span><strong>{pIdx + 1}. {px.fullName}</strong>{px.paxType ? ` (${px.paxType})` : ''}</span>
                                         {px.gender && <span>· {px.gender}</span>}
-                                        {px.tcOrPassport && <span>· <strong>TC/Pasaport:</strong> {px.tcOrPassport}</span>}
+                                        {px.nationality && <span>· {px.nationality}</span>}
+                                        {px.tcOrPassport && (
+                                          <span>
+                                            · <strong>{px.documentType === 'pasaport' ? 'Pasaport' : px.documentType === 'kimlik' ? 'Kimlik' : 'TC/Pasaport'}:</strong> {px.tcOrPassport}
+                                          </span>
+                                        )}
+                                        {px.passportExpiryDate && (
+                                          <span>
+                                            · <strong>Geçerlilik:</strong> {px.passportIssueDate ? `${px.passportIssueDate} → ` : ''}{px.passportExpiryDate}
+                                          </span>
+                                        )}
                                         {px.birthDate && <span>· <strong>Doğum:</strong> {px.birthDate}</span>}
                                       </div>
                                     ))}
