@@ -236,6 +236,119 @@ export function detectCharterFlight(info: {
   return CHARTER_KEYWORD_RE.test(combined);
 }
 
+const CITY_I18N: Record<string, [en: string, ru: string, kk: string]> = {
+  İstanbul: ['Istanbul', 'Стамбул', 'Ыстамбұл'],
+  Ankara: ['Ankara', 'Анкара', 'Анкара'],
+  İzmir: ['Izmir', 'Измир', 'Измир'],
+  Antalya: ['Antalya', 'Анталья', 'Анталья'],
+  Trabzon: ['Trabzon', 'Трабзон', 'Трабзон'],
+  Bodrum: ['Bodrum', 'Бодрум', 'Бодрум'],
+  Dalaman: ['Dalaman', 'Даламан', 'Даламан'],
+  Adana: ['Adana', 'Адана', 'Адана'],
+  Gaziantep: ['Gaziantep', 'Газиантеп', 'Газиантеп'],
+  Konya: ['Konya', 'Конья', 'Конья'],
+  Erzurum: ['Erzurum', 'Эрзурум', 'Эрзурум'],
+  Şanlıurfa: ['Sanliurfa', 'Шанлыурфа', 'Шанлыурфа'],
+  Van: ['Van', 'Ван', 'Ван'],
+  Almatı: ['Almaty', 'Алматы', 'Алматы'],
+  Astana: ['Astana', 'Астана', 'Астана'],
+  Taşkent: ['Tashkent', 'Ташкент', 'Ташкент'],
+  Bakü: ['Baku', 'Баку', 'Баку'],
+  Tiflis: ['Tbilisi', 'Тбилиси', 'Тбилиси'],
+  Londra: ['London', 'Лондон', 'Лондон'],
+  Paris: ['Paris', 'Париж', 'Париж'],
+  Amsterdam: ['Amsterdam', 'Амстердам', 'Амстердам'],
+  Berlin: ['Berlin', 'Берлин', 'Берлин'],
+  Frankfurt: ['Frankfurt', 'Франкфурт', 'Франкфурт'],
+  Roma: ['Rome', 'Рим', 'Рим'],
+  Barselona: ['Barcelona', 'Барселона', 'Барселона'],
+  Viyana: ['Vienna', 'Вена', 'Вена'],
+  Prag: ['Prague', 'Прага', 'Прага'],
+  Dubai: ['Dubai', 'Дубай', 'Дубай'],
+  'New York': ['New York', 'Нью-Йорк', 'Нью-Йорк'],
+  Seul: ['Seoul', 'Сеул', 'Сеул'],
+  Tokyo: ['Tokyo', 'Токио', 'Токио'],
+  Çimkent: ['Shymkent', 'Шымкент', 'Шымкент'],
+  'Şarm El-Şeyh': ['Sharm El Sheikh', 'Шарм-эль-Шейх', 'Шарм-эль-Шейх'],
+  'ŞARM EL-ŞEYH': ['SHARM EL SHEIKH', 'ШАРМ-ЭЛЬ-ШЕЙХ', 'ШАРМ-ЭЛЬ-ШЕЙХ'],
+  'DUBAİ': ['DUBAI', 'ДУБАЙ', 'ДУБАЙ'],
+  'ALMATI': ['ALMATY', 'АЛМАТЫ', 'АЛМАТЫ'],
+  'ANTALYA': ['ANTALYA', 'АНТАЛЬЯ', 'АНТАЛЬЯ'],
+  'BODRUM': ['BODRUM', 'БОДРУМ', 'БОДРУМ'],
+  'İSTANBUL': ['ISTANBUL', 'СТАМБУЛ', 'ЫСТАМБҰЛ'],
+  'İZMİR': ['IZMIR', 'ИЗМИР', 'ИЗМИР'],
+  'TRABZON': ['TRABZON', 'ТРАБЗОН', 'ТРАБЗОН'],
+  'KAPADOKYA': ['CAPPADOCIA', 'КАППАДОКИЯ', 'КАППАДОКИЯ'],
+  Kemer: ['Kemer', 'Кемер', 'Кемер'],
+  Belek: ['Belek', 'Белек', 'Белек'],
+  Side: ['Side', 'Сиде', 'Сиде'],
+  Alanya: ['Alanya', 'Аланья', 'Аланья'],
+  Kapadokya: ['Cappadocia', 'Каппадокия', 'Каппадокия'],
+  Fethiye: ['Fethiye', 'Фетхие', 'Фетхие'],
+  Marmaris: ['Marmaris', 'Мармарис', 'Мармарис'],
+};
+
+export function localizeCityName(city: string, lang: 'TR' | 'EN' | 'RU' | 'KK' = 'TR'): string {
+  if (!city || lang === 'TR') return city;
+  const entry = CITY_I18N[city];
+  if (!entry) return city;
+  return lang === 'EN' ? entry[0] : lang === 'RU' ? entry[1] : entry[2];
+}
+
+export function localizeDurationLabel(raw: string | undefined, durMins: number, lang: 'TR' | 'EN' | 'RU' | 'KK' = 'TR'): string {
+  const units: Record<'TR' | 'EN' | 'RU' | 'KK', [string, string]> = {
+    TR: ['sa', 'dk'],
+    EN: ['h', 'm'],
+    RU: ['ч', 'м'],
+    KK: ['сағ', 'м'],
+  };
+  const [hUnit, mUnit] = units[lang] || units.TR;
+  if (raw && raw.trim()) {
+    const match = raw.match(/(\d+)\s*(?:sa|s|h|ч|сағ)\s*(\d+)?\s*(?:dk|m|м)?/i);
+    if (match) {
+      const h = Number(match[1]) || 0;
+      const m = Number(match[2]) || 0;
+      return m > 0 ? `${h}${hUnit} ${m}${mUnit}` : `${h}${hUnit}`;
+    }
+  }
+  const h = Math.floor(durMins / 60);
+  const m = durMins % 60;
+  return m > 0 ? `${h}${hUnit} ${m}${mUnit}` : `${h}${hUnit}`;
+}
+
+export function localizeBaggageText(raw: string, lang: 'TR' | 'EN' | 'RU' | 'KK' = 'TR'): string {
+  if (!raw || lang === 'TR') return raw;
+  const s = raw.trim();
+  const kgUnit = lang === 'EN' ? 'kg' : 'кг';
+  if (/bagaj\s+dahil\s+de[gğ]il/i.test(s) || /^0\s*kg/i.test(s)) {
+    return lang === 'EN' ? 'No checked baggage' : lang === 'RU' ? 'Без багажа' : 'Жолжүк кірмейді';
+  }
+  const cabinMatch = s.match(/(\d+\s*[x×]\s*)?(\d+)\s*kg\s*(?:kabin|el)\s*bagaj[ıi]?/i);
+  if (cabinMatch) {
+    const prefix = cabinMatch[1] ? cabinMatch[1].replace(/x/i, '×') : '';
+    const kg = cabinMatch[2];
+    const lbl = lang === 'EN' ? 'cabin baggage' : lang === 'RU' ? 'ручная кладь' : 'қол жүгі';
+    return `${prefix}${kg} ${kgUnit} ${lbl}`;
+  }
+  const checkedMatch = s.match(/(\d+\s*[x×]\s*)?(\d+)\s*kg(?:\s*(?:u[çc]ak\s+alt[ıi]\s+)?bagaj[ıi]?)?/i);
+  if (checkedMatch) {
+    const prefix = checkedMatch[1] ? checkedMatch[1].replace(/x/i, '×') : '';
+    const kg = checkedMatch[2];
+    const lbl = lang === 'EN' ? 'checked baggage' : lang === 'RU' ? 'багаж' : 'жолжүк';
+    return `${prefix}${kg} ${kgUnit} ${lbl}`;
+  }
+  return s;
+}
+
+export function localizeOperatorText(raw: string, lang: 'TR' | 'EN' | 'RU' | 'KK' = 'TR'): string {
+  if (!raw || lang === 'TR') return raw;
+  return raw
+    .replace(/Blok Koltuk\s*\(Özel\)/gi, lang === 'EN' ? 'Block Seat (Special)' : lang === 'RU' ? 'Блок мест (Спец.)' : 'Блок орын (Арнайы)')
+    .replace(/Blok Koltuk/gi, lang === 'EN' ? 'Block Seat' : lang === 'RU' ? 'Блок мест' : 'Блок орын')
+    .replace(/Manuel XML Envanteri/gi, lang === 'EN' ? 'Manual XML Inventory' : lang === 'RU' ? 'Ручной XML инвентарь' : 'Қолмен XML инвентарь')
+    .replace(/Özel/gi, lang === 'EN' ? 'Special' : lang === 'RU' ? 'Спец.' : 'Арнайы');
+}
+
 export const AIRPORTS: Airport[] = [
   { code: 'IST', city: 'İstanbul', airport: 'İstanbul Havalimanı', country: 'Türkiye', domestic: true, aliases: ['Istanbul', 'Стамбул', 'Ыстамбұл', 'Turkey', 'Турция', 'Түркия'] },
   { code: 'SAW', city: 'İstanbul', airport: 'Sabiha Gökçen Havalimanı', country: 'Türkiye', domestic: true, aliases: ['Istanbul', 'Sabiha Gokcen', 'Стамбул', 'Сабиха Гёкчен', 'Ыстамбұл'] },
@@ -1200,9 +1313,9 @@ export function generateFlights(
       airlineColor: t.color,
       flightNumber: flightNum,
       fromCode: fromObj.code,
-      fromCity: fromObj.city,
+      fromCity: localizeCityName(fromObj.city, lang),
       toCode: toObj.code,
-      toCity: toObj.city,
+      toCity: localizeCityName(toObj.city, lang),
       departTime: `${depH}:${depM}`,
       arriveTime: `${ah}:${am}`,
       departureDate,

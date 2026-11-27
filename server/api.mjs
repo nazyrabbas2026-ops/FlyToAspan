@@ -293,6 +293,14 @@ function newDemoBooking(db, body, owner) {
     }
   }
 
+  const autoCheckin = Boolean(body.autoCheckin);
+  const rawAutoCheckinFee = Number(body.autoCheckinFeeTRY);
+  const autoCheckinFeeTRY = autoCheckin
+    ? (Number.isFinite(rawAutoCheckinFee) && rawAutoCheckinFee >= 0 && rawAutoCheckinFee <= 50_000
+        ? Math.round(rawAutoCheckinFee)
+        : 250)
+    : undefined;
+
   const details = {
     type, date, returnDate,
     title: text(body.title, 160),
@@ -313,6 +321,9 @@ function newDemoBooking(db, body, owner) {
     baggage: typeof body.baggage === 'string' ? body.baggage.trim().slice(0, 60) : undefined,
     cabin: typeof body.cabin === 'string' ? body.cabin.trim().slice(0, 32) : undefined,
     duration: typeof body.duration === 'string' ? body.duration.trim().slice(0, 24) : undefined,
+    autoCheckin: autoCheckin || undefined,
+    autoCheckinFeeTRY,
+    checkinStatus: autoCheckin ? 'pending' : undefined,
     demo: true,
   };
   const id = randomBytes(16).toString('hex');
@@ -910,6 +921,28 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         if (!result.changes) fail(409, 'Bu liste başka bir yerde güncellendi. Paneli yenileyip tekrar deneyin.');
         writeAuditLog(db, { actorEmail: user.email, action: 'admin:catalog_update', target: `${section}:rev${entry.revision}`, ip });
         send(res, 200, { entry });
+      } else if (method === 'PATCH' && /^\/api\/admin\/bookings\/[a-f0-9]{32}\/checkin$/.test(path)) {
+        if (user.role !== 'admin') fail(403, 'Online Check-In kontrol yetkisi yalnızca Süper Admin içindir.');
+        const id = path.split('/')[4];
+        const existingBk = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id);
+        if (!existingBk) fail(404, 'Rezervasyon bulunamadı.');
+        const body = await readJson(req);
+        const nextCheckinStatus = body.checkinStatus === 'completed' ? 'completed' : body.checkinStatus === 'pending' ? 'pending' : null;
+        if (!nextCheckinStatus) fail(400, 'Check-in durumu geçersiz.');
+        const seatRaw = typeof body.assignedSeat === 'string' ? body.assignedSeat.trim().toUpperCase().slice(0, 12) : undefined;
+        const details = JSON.parse(existingBk.details || '{}');
+        details.autoCheckin = true;
+        details.checkinStatus = nextCheckinStatus;
+        if (seatRaw !== undefined) details.assignedSeat = seatRaw || undefined;
+        const row = db.prepare('UPDATE bookings SET details = ? WHERE id = ? RETURNING *').get(JSON.stringify(details), id);
+        if (!row) fail(404, 'Rezervasyon güncellenemedi.');
+        writeAuditLog(db, {
+          actorEmail: user.email,
+          action: 'admin:checkin_update',
+          target: `${row.pnr}:${nextCheckinStatus}${seatRaw ? ':' + seatRaw : ''}`,
+          ip,
+        });
+        send(res, 200, { booking: stripHouseMargin(bookingRecord(row), user) });
       } else if ((method === 'PATCH' || method === 'DELETE') && /^\/api\/admin\/bookings\/[a-f0-9]{32}$/.test(path)) {
         const id = path.split('/').at(-1);
         const existingBk = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id);

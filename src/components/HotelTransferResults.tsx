@@ -18,7 +18,9 @@ import {
   TransferDeal,
   formatDisplayDate,
   formatPrice,
+  localizeCityName,
 } from '../data/mockData';
+import { localizeXmlText } from '../utils/localizeXmlText';
 import { apiMessage, type BookingDraft } from '../data/api';
 import {
   AdminMarkupConfig,
@@ -266,7 +268,7 @@ export const HotelResultsPage: React.FC<{
             {ui.changeSearch}
           </button>
           <h1 className="inner-h1">
-            {query.destination || ui.allCities} {ui.hotelsSuffix}
+            {query.destination ? localizeCityName(query.destination, lang) : ui.allCities} {ui.hotelsSuffix}
           </h1>
           <div className="route-pills">
             <span className="route-pill">
@@ -313,7 +315,7 @@ export const HotelResultsPage: React.FC<{
                   <div style={{ padding: 20 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                       <span className="hotel-city-stars">
-                        {h.city} <span className="stars-gold">{'★'.repeat(h.stars)}</span>
+                        {localizeCityName(h.city, lang)} <span className="stars-gold">{'★'.repeat(h.stars)}</span>
                       </span>
                       <span
                         style={{
@@ -334,7 +336,7 @@ export const HotelResultsPage: React.FC<{
                     </div>
                     <h3 style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 800 }}>{h.name}</h3>
                     <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)', marginBottom: 16 }}>
-                      {h.boardType} · {ui.freeCancel} · {h.nights} {ui.nights}
+                      {localizeXmlText(h.boardType, lang)} · {ui.freeCancel} · {h.nights} {ui.nights}
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                       <div>

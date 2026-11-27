@@ -32,6 +32,7 @@ import {
   DEFAULT_MARKUP,
   formatDisplayDate,
   formatPrice,
+  localizeCityName,
 } from '../data/mockData';
 import { resolveCityImage, resolveRegionColor } from '../utils/cityImages';
 import { localizeXmlText } from '../utils/localizeXmlText';
@@ -658,8 +659,13 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
     : DEFAULT_SHOWCASE_TOURS
   ).slice(0, 4);
 
-  const trCity = (name: string) => loc.cities[name] || name;
-  const trBoard = (bt: string) => loc.boardTypes[bt] || bt;
+  const trCity = (name: string) => {
+    if (loc.cities[name]) return loc.cities[name];
+    const byCity = localizeCityName(name, lang);
+    if (byCity !== name) return byCity;
+    return localizeXmlText(name, lang);
+  };
+  const trBoard = (bt: string) => loc.boardTypes[bt] || localizeXmlText(bt, lang);
 
   const copyCode = (code: string) => {
     navigator.clipboard?.writeText(code).catch(() => {});

@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import {
   CAMPAIGNS,
+  CHECKIN_AIRLINES,
   DEFAULT_MARKUP,
   HOTEL_DEALS,
   TRANSFER_DEALS,
@@ -136,6 +137,7 @@ interface AdminPanelPageProps {
   bookings: BookingRecord[];
   onAddBooking: (draft: BookingDraft) => Promise<BookingRecord>;
   onUpdateBookingStatus: (id: string, status: BookingRecord['status']) => Promise<void>;
+  onUpdateBookingCheckin?: (id: string, payload: { checkinStatus: 'pending' | 'completed'; assignedSeat?: string }) => Promise<void>;
   onDeleteBooking: (id: string) => Promise<void>;
   onBookingCreated?: (booking: BookingRecord) => void;
   onCatalogUpdated?: () => void;
@@ -146,6 +148,7 @@ interface AdminPanelPageProps {
 type AdminSection =
   | 'dashboard'
   | 'bookings'
+  | 'checkin'
   | 'finance'
   | 'pricing'
   | 'deals'
@@ -157,6 +160,7 @@ type AdminSection =
 const ADMIN_SECTIONS = [
   { id: 'dashboard', label: 'Genel bakış', description: 'Kayıt özeti, bekleyen işler ve fiyat bilgileri.', icon: <LayoutDashboard size={18} /> },
   { id: 'bookings', label: 'Rezervasyonlar', description: 'Rezervasyon koduyla arayın, durumları güncelleyin veya rapor alın.', icon: <Ticket size={18} /> },
+  { id: 'checkin', label: 'Online Check-In Kontrol', description: 'Otomatik check-in ve koltuk atama hizmeti alan yolcuları uçuş tarihine göre takip edin.', icon: <UserCheck size={18} /> },
   { id: 'finance', label: 'Finans & CRM', description: 'Günlük gelir-gider grafikleri, 360° satış/uçuş defteri, ekip liderliği ve CRM takip listesi.', icon: <BarChart3 size={18} /> },
   { id: 'pricing', label: 'Fiyatlandırma', description: 'Hizmet bedellerini ve komisyonları ayarlayıp örnek fiyatları karşılaştırın.', icon: <Sliders size={18} /> },
   { id: 'deals', label: 'Fırsat Uçuşlar', description: 'Ana sayfa Günün Fırsatı ve 6 vitrin uçuşunu, rotaları ve şehir görsellerini yönetin.', icon: <Zap size={18} /> },
@@ -475,6 +479,7 @@ const ADMIN_I18N: Record<LangCode, {
     sections: {
       dashboard: { label: 'Genel bakış', description: 'Kayıt özeti, bekleyen işler ve fiyat bilgileri.' },
       bookings: { label: 'Rezervasyonlar', description: 'PNR ile arayın, tarih aralığına göre filtreleyin ve durumları güncelleyin.' },
+      checkin: { label: 'Online Check-In Kontrol', description: 'Otomatik check-in ve koltuk atama hizmeti alan yolcular (en yakın uçuş tarihine göre sıralı).' },
       finance: { label: 'Finans & CRM', description: 'Gelir-gider defteri, CRM teklifleri ve ekip liderliği.' },
       pricing: { label: 'Fiyatlandırma & XML', description: 'Operatör XML kâr kurallarını ve komisyonları yönetin.' },
       deals: { label: 'Fırsat Uçuşlar', description: 'Ana sayfa Günün Fırsatı ve 6 vitrin uçuşunu, rotaları ve şehir görsellerini yönetin.' },
@@ -516,6 +521,7 @@ const ADMIN_I18N: Record<LangCode, {
     sections: {
       dashboard: { label: 'Overview', description: 'Sales summary, pending items, FX rates and quick actions.' },
       bookings: { label: 'Bookings', description: 'Search by PNR, filter by date range, update status or download PDF.' },
+      checkin: { label: 'Online Check-In Control', description: 'Auto check-in & seat assignment passengers sorted chronologically by flight date.' },
       finance: { label: 'Finance & CRM', description: 'Income/expense ledger, CRM quotes and sales analytics.' },
       pricing: { label: 'Pricing & XML', description: 'Manage operator XML markup rules (FUN&SUN, Kompas, Selfie) and margins.' },
       deals: { label: 'Featured Flight Deals', description: 'Manage homepage Deal of the Day + 6 featured flight cards and city photos.' },
@@ -557,6 +563,7 @@ const ADMIN_I18N: Record<LangCode, {
     sections: {
       dashboard: { label: 'Обзор', description: 'Сводка продаж, статусы, курсы валют и быстрые действия.' },
       bookings: { label: 'Бронирования', description: 'Поиск по PNR, фильтр по датам, смена статуса и PDF билет.' },
+      checkin: { label: 'Контроль Онлайн Check-In', description: 'Пассажиры с услугой авторегистрации и выбора места, отсортированные по дате вылета.' },
       finance: { label: 'Финансы и CRM', description: 'Учет доходов/расходов, CRM предложения и аналитика.' },
       pricing: { label: 'Ценообразование XML', description: 'Наценки операторов XML (FUN&SUN, Kompas, Selfie) и комиссии.' },
       deals: { label: 'Выгодные рейсы', description: 'Управление блоком «Предложение дня» и 6 витринными рейсами на главной.' },
@@ -598,6 +605,7 @@ const ADMIN_I18N: Record<LangCode, {
     sections: {
       dashboard: { label: 'Жалпы шолу', description: 'Жазбалар қорытындысы, күтудегі істер және валюта бағамдары.' },
       bookings: { label: 'Брондаулар', description: 'PNR бойынша іздеу, күн бойынша сүзу және күйді жаңарту.' },
+      checkin: { label: 'Онлайн Check-In бақылау', description: 'Автоматты тіркелу және орын таңдау қызметін алған жолаушылар (ұшу күні бойынша сұрыпталған).' },
       finance: { label: 'Қаржы және CRM', description: 'Кіріс-шығыс кітабы, CRM ұсыныстары және команда рейтингі.' },
       pricing: { label: 'Бағалау және XML', description: 'Оператор XML пайда ережелері мен комиссияларды басқару.' },
       deals: { label: 'Тиімді рейстер', description: 'Басты беттегі Күн ұсынысы мен 6 витрина рейсін басқару.' },
@@ -639,6 +647,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   bookings,
   onAddBooking,
   onUpdateBookingStatus,
+  onUpdateBookingCheckin,
   onDeleteBooking,
   onBookingCreated,
   onCatalogUpdated,
@@ -850,6 +859,57 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   const [manDate, setManDate] = useState(() => addCalendarDays(toCalendarDate(new Date()), 15));
   const [manPrice, setManPrice] = useState('6890');
   const [pendingDeletion, setPendingDeletion] = useState<string | null>(null);
+
+  // Module 2.2: Online Check-In Kontrol state (Super Admin only)
+  const [checkinFilter, setCheckinFilter] = useState<'pending' | 'completed' | 'all'>('pending');
+  const [checkinSearch, setCheckinSearch] = useState('');
+  const [seatDrafts, setSeatDrafts] = useState<Record<string, string>>({});
+
+  const autoCheckinBookings = useMemo(() => {
+    return bookings
+      .filter((b) => Boolean(b.autoCheckin))
+      .slice()
+      .sort((a, b) => {
+        const keyA = `${a.date || '9999-99-99'} ${a.departTime || a.legs?.[0]?.departTime || '99:99'}`;
+        const keyB = `${b.date || '9999-99-99'} ${b.departTime || b.legs?.[0]?.departTime || '99:99'}`;
+        return keyA.localeCompare(keyB);
+      });
+  }, [bookings]);
+
+  const pendingAutoCheckinCount = useMemo(
+    () =>
+      autoCheckinBookings.filter(
+        (b) => b.checkinStatus !== 'completed' && b.status !== 'İptal Edildi' && b.status !== 'İade Edildi'
+      ).length,
+    [autoCheckinBookings]
+  );
+
+  const completedAutoCheckinCount = useMemo(
+    () => autoCheckinBookings.filter((b) => b.checkinStatus === 'completed').length,
+    [autoCheckinBookings]
+  );
+
+  const autoCheckinRevenueTRY = useMemo(
+    () =>
+      autoCheckinBookings
+        .filter((b) => b.status !== 'İptal Edildi' && b.status !== 'İade Edildi')
+        .reduce((sum, b) => sum + (b.autoCheckinFeeTRY ?? 250), 0),
+    [autoCheckinBookings]
+  );
+
+  const filteredAutoCheckin = useMemo(() => {
+    const q = checkinSearch.trim().toLowerCase();
+    return autoCheckinBookings.filter((b) => {
+      if (checkinFilter === 'pending') {
+        if (b.checkinStatus === 'completed' || b.status === 'İptal Edildi' || b.status === 'İade Edildi') return false;
+      } else if (checkinFilter === 'completed') {
+        if (b.checkinStatus !== 'completed') return false;
+      }
+      if (!q) return true;
+      const hay = `${b.pnr} ${b.passenger} ${b.title} ${b.airline || ''} ${b.flightNumber || ''} ${b.contactPhone || ''} ${b.contactEmail || ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [autoCheckinBookings, checkinFilter, checkinSearch]);
 
   // Module 3: Airline-Specific Markup Rules
   const [newCarrier, setNewCarrier] = useState('');
@@ -1365,9 +1425,11 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                 count:
                   item.id === 'bookings'
                     ? bookings.length
-                    : item.id === 'agents' && pendingUsers.length > 0
-                      ? pendingUsers.length
-                      : undefined,
+                    : item.id === 'checkin' && pendingAutoCheckinCount > 0
+                      ? pendingAutoCheckinCount
+                      : item.id === 'agents' && pendingUsers.length > 0
+                        ? pendingUsers.length
+                        : undefined,
               }))}
               onSelect={setSection}
             />
@@ -1637,6 +1699,16 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                         <span>🎫 PNR &amp; Rezervasyonlar</span>
                         <span>→</span>
                       </button>
+                      {isSuperAdmin && (
+                        <button
+                          type="button"
+                          className="drawer-link"
+                          onClick={() => setSection('checkin')}
+                        >
+                          <span>✈ Online Check-In Kontrol ({pendingAutoCheckinCount})</span>
+                          <span>→</span>
+                        </button>
+                      )}
                       {canEditPricing && (
                         <button
                           type="button"
@@ -2403,6 +2475,262 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                           </div>
                         );
                       })
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* ==================== MODULE 2.2: ONLINE CHECK-IN KONTROL (SUPER ADMIN ONLY) ==================== */}
+              {section === 'checkin' && isSuperAdmin && (
+                <>
+                  <div className="panel-stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))' }}>
+                    <div className="panel-stat-card">
+                      <div className="filter-label">Bekleyen Check-In</div>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: '#D97706' }}>
+                        {pendingAutoCheckinCount}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>
+                        Koltuk atama ve check-in bekleyen yolcular
+                      </div>
+                    </div>
+                    <div className="panel-stat-card">
+                      <div className="filter-label">Tamamlanan Check-In</div>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: '#059669' }}>
+                        {completedAutoCheckinCount}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>
+                        Check-in ve koltuk ataması biten kayıtlar
+                      </div>
+                    </div>
+                    <div className="panel-stat-card">
+                      <div className="filter-label">Check-In Ek Hizmet Geliri</div>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--aspan-teal-deep)' }}>
+                        +{formatPrice(autoCheckinRevenueTRY, currency)}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>
+                        Otomatik Check-In &amp; Koltuk Atama (₺250 / yolcu)
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="panel-card">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
+                      <div>
+                        <strong style={{ fontSize: 17.5 }}>
+                          Online Check-In &amp; Koltuk Atama Kuyruğu
+                        </strong>
+                        <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)' }}>
+                          En yakın uçuş tarihinden en uzak tarihe göre otomatik sıralanır.
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className={`adm-subtab ${checkinFilter === 'pending' ? 'is-active' : ''}`}
+                          onClick={() => setCheckinFilter('pending')}
+                        >
+                          {`Bekleyenler (${pendingAutoCheckinCount})`}
+                        </button>
+                        <button
+                          type="button"
+                          className={`adm-subtab ${checkinFilter === 'completed' ? 'is-active' : ''}`}
+                          onClick={() => setCheckinFilter('completed')}
+                        >
+                          {`Tamamlananlar (${completedAutoCheckinCount})`}
+                        </button>
+                        <button
+                          type="button"
+                          className={`adm-subtab ${checkinFilter === 'all' ? 'is-active' : ''}`}
+                          onClick={() => setCheckinFilter('all')}
+                        >
+                          {`Tümü (${autoCheckinBookings.length})`}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: 16 }}>
+                      <input
+                        className="modal-input"
+                        style={{ maxWidth: 420 }}
+                        placeholder="PNR, yolcu adı, uçuş no veya rota ara..."
+                        value={checkinSearch}
+                        onChange={(e) => setCheckinSearch(e.target.value)}
+                      />
+                    </div>
+
+                    {filteredAutoCheckin.length === 0 ? (
+                      <div style={{ padding: '28px 18px', textAlign: 'center', color: 'var(--aspan-text-muted)', background: 'var(--aspan-bg-soft)', borderRadius: 14, border: '1px dashed var(--aspan-border)' }}>
+                        Bu filtrede Otomatik Check-In &amp; Koltuk Atama hizmeti alan yolcu bulunmuyor.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {filteredAutoCheckin.map((b, index) => {
+                          const depTime = b.departTime || b.legs?.[0]?.departTime || '';
+                          const todayIso = toCalendarDate(new Date());
+                          const msDiff = Date.parse(`${b.date}T00:00:00`) - Date.parse(`${todayIso}T00:00:00`);
+                          const daysDiff = Number.isFinite(msDiff) ? Math.round(msDiff / 86_400_000) : 99;
+                          const isDone = b.checkinStatus === 'completed';
+                          const seatVal = seatDrafts[b.id] ?? b.assignedSeat ?? '';
+                          const airlineCode = (b.flightNumber || '').slice(0, 2).toUpperCase();
+                          const airlinePortal = CHECKIN_AIRLINES.find(
+                            (a) =>
+                              (airlineCode && a.code.toUpperCase() === airlineCode) ||
+                              (b.airline && b.airline.toLowerCase().includes(a.name.toLowerCase()))
+                          );
+                          const urgencyBg = isDone
+                            ? 'rgba(5, 150, 105, 0.12)'
+                            : daysDiff <= 0
+                              ? 'rgba(220, 38, 38, 0.14)'
+                              : daysDiff <= 2
+                                ? 'rgba(245, 158, 11, 0.18)'
+                                : 'rgba(0, 168, 181, 0.12)';
+                          const urgencyColor = isDone
+                            ? '#047857'
+                            : daysDiff <= 0
+                              ? '#B91C1C'
+                              : daysDiff <= 2
+                                ? '#B45309'
+                                : '#0E7490';
+                          const urgencyLabel = isDone
+                            ? '✓ Check-In Yapıldı'
+                            : daysDiff <= 0
+                              ? 'Acil · Bugün / Geçmiş'
+                              : daysDiff <= 2
+                                ? 'Check-In Açık (≤48 Saat)'
+                                : `Yaklaşan (${daysDiff} gün)`;
+
+                          return (
+                            <div
+                              key={b.id}
+                              data-checkin-pnr={b.pnr}
+                              data-flight-date={b.date}
+                              style={{
+                                padding: '16px 18px',
+                                borderRadius: 16,
+                                background: isDone ? '#F0FDF4' : '#FFFFFF',
+                                border: isDone ? '1.5px solid #86EFAC' : daysDiff <= 2 ? '1.5px solid #F59E0B' : '1.5px solid var(--aspan-border)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 12,
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                  <span style={{ padding: '3px 9px', borderRadius: 8, background: '#0B1E33', color: '#FFFFFF', fontWeight: 800, fontSize: 12 }}>
+                                    #{index + 1}
+                                  </span>
+                                  <span style={{ padding: '4px 10px', borderRadius: 9, background: '#EEF2FF', color: '#1E3A8A', fontWeight: 800, fontSize: 12.5, letterSpacing: '0.04em' }}>
+                                    {b.pnr}
+                                  </span>
+                                  <span style={{ padding: '4px 10px', borderRadius: 9, background: urgencyBg, color: urgencyColor, fontWeight: 800, fontSize: 12 }}>
+                                    {urgencyLabel}
+                                  </span>
+                                  <span style={{ padding: '4px 10px', borderRadius: 9, background: 'rgba(221, 168, 56, 0.16)', color: '#92400E', fontWeight: 800, fontSize: 12 }}>
+                                    +{formatPrice(b.autoCheckinFeeTRY ?? 250, currency)}
+                                  </span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 14, color: '#0B1E33' }}>
+                                  <Calendar size={15} color="#00A8B5" />
+                                  <span>{formatDisplayDate(b.date, activePanelLang)} ({b.date})</span>
+                                  {depTime && (
+                                    <span style={{ padding: '2px 8px', borderRadius: 7, background: '#E0F2FE', color: '#0369A1', fontSize: 12.5 }}>
+                                      {depTime}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                                <div>
+                                  <div style={{ fontWeight: 800, fontSize: 15.5, color: 'var(--aspan-text)' }}>{b.title}</div>
+                                  <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)', marginTop: 2 }}>
+                                    {[b.airline, b.flightNumber, b.subtitle].filter(Boolean).join(' · ')}
+                                  </div>
+                                  <div style={{ fontSize: 12.5, color: 'var(--aspan-text-body)', marginTop: 6 }}>
+                                    <strong>Yolcu:</strong> {b.passenger}
+                                    {b.contactPhone && <span> · Tel: {b.contactPhone}</span>}
+                                    {b.contactEmail && <span> · {b.contactEmail}</span>}
+                                  </div>
+                                  {b.passengersDetail && b.passengersDetail.length > 0 && (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                                      {b.passengersDetail.map((p, pIdx) => (
+                                        <span
+                                          key={`${b.id}-pax-${pIdx}`}
+                                          style={{ fontSize: 11.5, padding: '3px 8px', borderRadius: 8, background: 'var(--aspan-bg-soft)', border: '1px solid var(--aspan-border)' }}
+                                        >
+                                          {p.fullName}
+                                          {p.tcOrPassport ? ` · ${p.documentType === 'pasaport' ? 'Pasaport' : 'Kimlik'}: ${p.tcOrPassport}` : ''}
+                                          {p.birthDate ? ` · ${p.birthDate}` : ''}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                  <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, fontWeight: 700, color: 'var(--aspan-text-muted)' }}>
+                                    Koltuk No
+                                    <input
+                                      className="modal-input"
+                                      style={{ width: 96, height: 36, fontWeight: 800, textTransform: 'uppercase' }}
+                                      placeholder="14A"
+                                      maxLength={12}
+                                      value={seatVal}
+                                      onChange={(e) => setSeatDrafts((prev) => ({ ...prev, [b.id]: e.target.value.toUpperCase() }))}
+                                    />
+                                  </label>
+
+                                  {airlinePortal && (
+                                    <a
+                                      href={airlinePortal.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="uf-quick-pill"
+                                      style={{ textDecoration: 'none', alignSelf: 'flex-end', height: 36, display: 'inline-flex', alignItems: 'center' }}
+                                    >
+                                      ✈ Havayolu Check-In
+                                    </a>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    disabled={busy || !onUpdateBookingCheckin}
+                                    className="adm-btn"
+                                    style={{
+                                      alignSelf: 'flex-end',
+                                      height: 36,
+                                      padding: '0 14px',
+                                      borderRadius: 10,
+                                      fontWeight: 800,
+                                      background: isDone ? '#FEF3C7' : '#059669',
+                                      color: isDone ? '#92400E' : '#FFFFFF',
+                                      border: isDone ? '1.5px solid #F59E0B' : '1.5px solid #047857',
+                                      cursor: 'pointer',
+                                    }}
+                                    onClick={() =>
+                                      void runAction(async () => {
+                                        if (!onUpdateBookingCheckin) return;
+                                        const nextStatus = isDone ? 'pending' : 'completed';
+                                        await onUpdateBookingCheckin(b.id, {
+                                          checkinStatus: nextStatus,
+                                          assignedSeat: seatVal.trim(),
+                                        });
+                                        flash(
+                                          nextStatus === 'completed'
+                                            ? `${b.pnr} Online Check-In tamamlandı olarak işaretlendi.`
+                                            : `${b.pnr} tekrar bekleyen listesine alındı.`
+                                        );
+                                      })
+                                    }
+                                  >
+                                    {isDone ? 'Bekleyene Al' : '✓ Check-In Yapıldı'}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
                 </>

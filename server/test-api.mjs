@@ -1178,5 +1178,46 @@ test('FlyToAspan API & Security Suite', async (t) => {
     assert.equal(xmlStatus.json.status.intervalHours, 24);
     assert.equal(xmlStatus.json.hotels.length, 5);
     assert.equal(xmlStatus.json.tours.length, 4);
+
+    // 17: Auto Check-In & Seat Assignment (250 TL) + Super Admin Check-In Control endpoint
+    const autoBk = await call(env.origin, '/api/bookings', {
+      method: 'POST',
+      cookie: adminCookie,
+      body: {
+        type: 'Uçak',
+        title: 'İstanbul (IST) → Antalya (AYT)',
+        subtitle: 'Turkish Airlines · TK2410',
+        airline: 'Turkish Airlines',
+        flightNumber: 'TK2410',
+        departTime: '08:15',
+        date: '2026-12-18',
+        passenger: 'Mehmet Kaya',
+        lookupSurname: 'Kaya',
+        price: 2100,
+        autoCheckin: true,
+        autoCheckinFeeTRY: 250,
+      },
+    });
+    assert.equal(autoBk.status, 201);
+    assert.equal(autoBk.json.booking.autoCheckin, true);
+    assert.equal(autoBk.json.booking.autoCheckinFeeTRY, 250);
+    assert.equal(autoBk.json.booking.checkinStatus, 'pending');
+
+    const checkinUpdate = await call(env.origin, `/api/admin/bookings/${autoBk.json.booking.id}/checkin`, {
+      method: 'PATCH',
+      cookie: adminCookie,
+      body: { checkinStatus: 'completed', assignedSeat: '14A' },
+    });
+    assert.equal(checkinUpdate.status, 200);
+    assert.equal(checkinUpdate.json.booking.checkinStatus, 'completed');
+    assert.equal(checkinUpdate.json.booking.assignedSeat, '14A');
+
+    // Non-admin user must be rejected with 403 on /checkin endpoint
+    const staffCheckinForbidden = await call(env.origin, `/api/admin/bookings/${autoBk.json.booking.id}/checkin`, {
+      method: 'PATCH',
+      cookie: sCookie,
+      body: { checkinStatus: 'pending' },
+    });
+    assert.equal(staffCheckinForbidden.status, 403);
   });
 });

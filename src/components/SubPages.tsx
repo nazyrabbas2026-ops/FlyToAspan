@@ -19,6 +19,79 @@ import { PHONE_DISPLAY, PHONE_HREF, WA_HREF } from '../i18n/translations';
 import { CurrencyCode, LangCode, SearchTab } from '../types';
 import { api, ApiError, apiMessage, type BookingLookup } from '../data/api';
 import { openBrandedEticketPdf } from '../utils/eticketPdf';
+import { localizeXmlText } from '../utils/localizeXmlText';
+
+const CAMPAIGNS_PAGE_I18N: Record<
+  Exclude<LangCode, 'TR'>,
+  Record<string, { badge: string; title: string; subtitle: string }>
+> = {
+  EN: {
+    'cmp-1': {
+      badge: 'DOMESTIC & INTERNATIONAL',
+      title: 'Instant 350 TL Discount on Your First Flight',
+      subtitle: 'Join FlyToAspan and enjoy instant savings on Istanbul – Almaty, Antalya, and European routes.',
+    },
+    'cmp-2': {
+      badge: 'CENTRAL ASIA OFFER',
+      title: '18% Off Direct Flights to Almaty & Astana',
+      subtitle: 'Special fares with baggage allowance included across Kazakhstan and Central Asia.',
+    },
+    'cmp-3': {
+      badge: 'EARLY BOOKING',
+      title: 'Up to 30% Off Selected 5-Star Hotels',
+      subtitle: 'Free cancellation and transparent all-in rates at top resorts in Antalya, Bodrum, and Dubai.',
+    },
+    'cmp-4': {
+      badge: 'PACKAGE TOURS',
+      title: '20% Advantage on Flight + Hotel Package Tours in 4 Countries',
+      subtitle: 'Curated flight & hotel packages updated daily from XML suppliers.',
+    },
+  },
+  RU: {
+    'cmp-1': {
+      badge: 'ВНУТРЕННИЕ И МЕЖДУНАРОДНЫЕ',
+      title: 'Мгновенная скидка 350 TL на первый перелёт',
+      subtitle: 'Зарегистрируйтесь в FlyToAspan и получите скидку на рейсы Стамбул — Алматы, Анталья и Европа.',
+    },
+    'cmp-2': {
+      badge: 'ЦЕНТРАЛЬНАЯ АЗИЯ',
+      title: 'Выгода 18% на прямые рейсы в Алматы и Астану',
+      subtitle: 'Специальные тарифы с включённым багажом на направления Казахстана.',
+    },
+    'cmp-3': {
+      badge: 'РАННЕЕ БРОНИРОВАНИЕ',
+      title: 'Скидки до 30% в избранных отелях 5★',
+      subtitle: 'Бесплатная отмена и честные цены в лучших отелях Антальи, Бодрума и Дубая.',
+    },
+    'cmp-4': {
+      badge: 'ПАКЕТНЫЕ ТУРЫ',
+      title: 'Выгода 20% на пакетные туры (перелёт + отель) в 4 странах',
+      subtitle: 'Готовые туры с ежедневным автоматическим обновлением цен из XML.',
+    },
+  },
+  KK: {
+    'cmp-1': {
+      badge: 'ІШКІ ЖӘНЕ ХАЛЫҚАРАЛЫҚ',
+      title: 'Алғашқы рейсіңізге 350 TL жедел жеңілдік',
+      subtitle: 'FlyToAspan мүшесі болыңыз, Ыстамбұл – Алматы, Анталья және Еуропа рейстерінде үнемдеңіз.',
+    },
+    'cmp-2': {
+      badge: 'ОРТАЛЫҚ АЗИЯ ҰСЫНЫСЫ',
+      title: 'Алматы мен Астана тікелей рейстерінде 18% тиімділік',
+      subtitle: 'Қазақстан бағытына тегін жолжүк кіретін арнайы тарифтер.',
+    },
+    'cmp-3': {
+      badge: 'ЕРТЕ БРОНДАУ',
+      title: 'Таңдаулы 5 жұлдызды қонақүйлерде 30% дейін жеңілдік',
+      subtitle: 'Анталья, Бодрум және Дубайдың үздік қонақүйлерінде тегін бас тарту мүмкіндігі.',
+    },
+    'cmp-4': {
+      badge: 'ПАКЕТТІК ТУРЛАР',
+      title: '4 елдегі ұшақ + қонақүй пакеттік турларына 20% жеңілдік',
+      subtitle: 'Күн сайын XML арқылы жаңаратын тиімді ұшақ + қонақүй турлары.',
+    },
+  },
+};
 
 const SUBPAGES_I18N: Record<
   LangCode,
@@ -241,7 +314,18 @@ export const CampaignsPage: React.FC<{
         })
     : CAMPAIGNS.filter((c) => c.category !== 'Transfer');
 
-  const list = cat === 'Tümü' ? sourceList : sourceList.filter((c) => c.category === cat);
+  const list = (cat === 'Tümü' ? sourceList : sourceList.filter((c) => c.category === cat)).map((c) => {
+    if (lang === 'TR') return c;
+    const trMap = CAMPAIGNS_PAGE_I18N[lang];
+    const baseMatch = CAMPAIGNS.find((m) => m.id === c.id || m.code === c.code);
+    const localized = trMap[c.id] || (baseMatch ? trMap[baseMatch.id] : undefined);
+    return {
+      ...c,
+      badge: localized?.badge ?? localizeXmlText(c.badge, lang),
+      title: localized?.title ?? localizeXmlText(c.title, lang),
+      subtitle: localized?.subtitle ?? localizeXmlText(c.subtitle, lang),
+    };
+  });
 
   return (
     <>

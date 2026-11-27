@@ -197,6 +197,10 @@ export interface BookingRecord {
   baggage?: string;
   cabin?: string;
   duration?: string;
+  autoCheckin?: boolean;
+  autoCheckinFeeTRY?: number;
+  checkinStatus?: 'pending' | 'completed';
+  assignedSeat?: string;
   createdAt?: number;
   sellerName?: string | null;
   sellerEmail?: string | null;

@@ -28,6 +28,10 @@ import {
   formatPrice,
   generateFlights,
   getLiveRatesSnapshot,
+  localizeBaggageText,
+  localizeCityName,
+  localizeDurationLabel,
+  localizeOperatorText,
 } from '../data/mockData';
 import { addCalendarDays, toCalendarDate } from '../data/calendarDates';
 import { api, apiMessage, type AdminCatalog, type BookingDraft } from '../data/api';
@@ -398,8 +402,6 @@ const CHECKOUT_I18N: Record<
     surname: string;
     nameRequiredErr: string;
     addonsTitle: string;
-    cancelShieldTitle: string;
-    cancelShieldSub: string;
     autoCheckinTitle: string;
     autoCheckinSub: string;
     priceSummary: string;
@@ -443,11 +445,9 @@ const CHECKOUT_I18N: Record<
     firstName: 'Ad',
     surname: 'Soyadı',
     nameRequiredErr: 'Adınızı ve soyadınızı girin.',
-    addonsTitle: 'Örnek ek hizmetler',
-    cancelShieldTitle: 'Koşulsuz İptal & İade Güvencesi',
-    cancelShieldSub: 'İptal güvencesinin örnek fiyata etkisini gösterir.',
+    addonsTitle: 'Ek Hizmetler',
     autoCheckinTitle: 'Otomatik Check-In & Koltuk Atama',
-    autoCheckinSub: 'Otomatik check-in seçeneğinin örnek fiyatını gösterir.',
+    autoCheckinSub: 'Uçuşunuzdan 24–48 saat önce online check-in işleminiz operasyon ekibimizce yapılır ve koltuğunuz atanır.',
     priceSummary: 'Fiyat özeti',
     usePromoCode: 'İndirim kodu kullan',
     couponPh: 'Kupon kodu',
@@ -488,11 +488,9 @@ const CHECKOUT_I18N: Record<
     firstName: 'First name',
     surname: 'Last name',
     nameRequiredErr: 'Please enter your first and last name.',
-    addonsTitle: 'Sample add-on services',
-    cancelShieldTitle: 'Unconditional Cancellation Shield',
-    cancelShieldSub: 'Shows the sample price impact of cancellation protection.',
+    addonsTitle: 'Add-On Services',
     autoCheckinTitle: 'Auto Check-In & Seat Assignment',
-    autoCheckinSub: 'Shows the sample price of automatic check-in.',
+    autoCheckinSub: 'Our operations team completes your online check-in 24–48h before departure and assigns your seat.',
     priceSummary: 'Price summary',
     usePromoCode: 'Use a promo code',
     couponPh: 'Promo code',
@@ -533,11 +531,9 @@ const CHECKOUT_I18N: Record<
     firstName: 'Имя',
     surname: 'Фамилия',
     nameRequiredErr: 'Введите имя и фамилию.',
-    addonsTitle: 'Примеры доп. услуг',
-    cancelShieldTitle: 'Гарантия отмены и возврата',
-    cancelShieldSub: 'Показывает влияние услуги защиты от отмены на примерную цену.',
+    addonsTitle: 'Дополнительные услуги',
     autoCheckinTitle: 'Авторегистрация и выбор места',
-    autoCheckinSub: 'Показывает примерную стоимость авторегистрации.',
+    autoCheckinSub: 'Наша команда выполнит онлайн-регистрацию за 24–48 ч до вылета и назначит вам место.',
     priceSummary: 'Сводка по цене',
     usePromoCode: 'Использовать промокод',
     couponPh: 'Промокод',
@@ -578,11 +574,9 @@ const CHECKOUT_I18N: Record<
     firstName: 'Аты',
     surname: 'Тегі',
     nameRequiredErr: 'Атыңыз бен тегіңізді енгізіңіз.',
-    addonsTitle: 'Үлгі қосымша қызметтер',
-    cancelShieldTitle: 'Шартсыз бас тарту және қайтару кепілдігі',
-    cancelShieldSub: 'Бас тарту кепілдігінің үлгі бағаға әсерін көрсетеді.',
+    addonsTitle: 'Қосымша қызметтер',
     autoCheckinTitle: 'Автоматты тіркелу және орын таңдау',
-    autoCheckinSub: 'Автоматты тіркелудің үлгі бағасын көрсетеді.',
+    autoCheckinSub: 'Ұшудан 24–48 сағат бұрын біздің команда онлайн тіркеуді орындап, орныңызды белгілейді.',
     priceSummary: 'Баға қорытындысы',
     usePromoCode: 'Жеңілдік кодын қолдану',
     couponPh: 'Купон коды',
@@ -658,7 +652,6 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const [showPromoCodeBox, setShowPromoCodeBox] = useState(false);
-  const [addonCancelShield, setAddonCancelShield] = useState(false);
   const [addonAutoCheckin, setAddonAutoCheckin] = useState(false);
 
   const totalPax = query.adults + query.children + query.infants;
@@ -700,16 +693,22 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
         const durMins = arrMins > depMins ? arrMins - depMins : (24 * 60 - depMins + arrMins);
         const nextDay = arrMins < depMins ? 1 : 0;
         const xmlAdjustedPrice = applyOperatorXmlMarkup(mf.priceTRY, mf.operator);
+        const locOperator = localizeOperatorText(mf.operator, lang);
+        const blockSeatWord =
+          lang === 'EN' ? 'Block Seat' : lang === 'RU' ? 'Блок мест' : lang === 'KK' ? 'Блок орын' : 'Blok Koltuk';
+        const pkgTitle = /blok koltuk|block seat|блок мест|блок орын/i.test(locOperator)
+          ? locOperator
+          : `${locOperator} ${blockSeatWord}`;
         return {
           id: `manual-${mf.id}`,
-          airline: `${mf.airline} (${mf.operator})`,
+          airline: `${mf.airline} (${locOperator})`,
           airlineCode: mf.airlineCode.toUpperCase(),
           airlineColor: '#00A8B5',
           flightNumber: mf.flightNumber.toUpperCase(),
           fromCode: mf.fromCode.toUpperCase(),
-          fromCity: fromObj?.city || mf.fromCode.toUpperCase(),
+          fromCity: localizeCityName(fromObj?.city || mf.fromCode.toUpperCase(), lang),
           toCode: mf.toCode.toUpperCase(),
-          toCity: toObj?.city || mf.toCode.toUpperCase(),
+          toCity: localizeCityName(toObj?.city || mf.toCode.toUpperCase(), lang),
           departureDate: query.departDate,
           arrivalDate: addCalendarDays(query.departDate, nextDay),
           departTime: mf.departTime,
@@ -717,7 +716,7 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
           departMinutes: depMins,
           arriveMinutes: arrMins,
           durationMinutes: durMins,
-          durationLabel: mf.duration || `${Math.floor(durMins / 60)}sa ${durMins % 60}dk`,
+          durationLabel: localizeDurationLabel(mf.duration, durMins, lang),
           stops: 0,
           seatsLeft: mf.quota,
           basePrice: xmlAdjustedPrice,
@@ -727,17 +726,45 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
           packages: [
             {
               id: `man-eco-${mf.id}`,
-              name: `${mf.operator} Blok Koltuk`,
+              name: pkgTitle,
               cabin: 'ECONOMY',
               priceDelta: 0,
-              cabinBag: '8 kg kabin bagajı',
-              checkedBag: mf.baggage || '20 kg bagaj',
+              cabinBag: localizeBaggageText('8 kg kabin bagajı', lang),
+              checkedBag: localizeBaggageText(mf.baggage || '20 kg bagaj', lang),
               refundable: false,
-              refundText: 'Operatör kuralları',
+              refundText:
+                lang === 'EN'
+                  ? 'Operator fare rules'
+                  : lang === 'RU'
+                    ? 'Правила туроператора'
+                    : lang === 'KK'
+                      ? 'Оператор ережелері'
+                      : 'Operatör kuralları',
               changeable: true,
-              changeText: 'Operatör koşullarına göre',
-              meal: 'Standart ikram',
-              seat: 'Standart koltuk',
+              changeText:
+                lang === 'EN'
+                  ? 'Subject to operator terms'
+                  : lang === 'RU'
+                    ? 'По условиям оператора'
+                    : lang === 'KK'
+                      ? 'Оператор шарттары бойынша'
+                      : 'Operatör koşullarına göre',
+              meal:
+                lang === 'EN'
+                  ? 'Standard catering'
+                  : lang === 'RU'
+                    ? 'Стандартное питание'
+                    : lang === 'KK'
+                      ? 'Стандартты тағам'
+                      : 'Standart ikram',
+              seat:
+                lang === 'EN'
+                  ? 'Standard seat'
+                  : lang === 'RU'
+                    ? 'Стандартное место'
+                    : lang === 'KK'
+                      ? 'Стандартты орын'
+                      : 'Standart koltuk',
             },
           ],
         };
@@ -827,10 +854,10 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
     }
     return 300;
   }, [appliedCoupon, rawBookingTotal, activeCouponRecords]);
-  const addonsTotalTRY =
-    ((addonCancelShield ? 240 : 0) + (addonAutoCheckin ? 145 : 0)) * totalPax;
+  const autoCheckinFeeTRY = addonAutoCheckin ? 250 * totalPax : 0;
+  const addonsTotalTRY = autoCheckinFeeTRY;
   const bookingTotal = Math.max(250, rawBookingTotal + addonsTotalTRY - discountTRY);
-  const bookingTitle = `${fromAirport.city} (${fromAirport.code}) ${isRoundTrip ? '↔' : '→'} ${toAirport.city} (${toAirport.code})`;
+  const bookingTitle = `${localizeCityName(fromAirport.city, lang)} (${fromAirport.code}) ${isRoundTrip ? '↔' : '→'} ${localizeCityName(toAirport.city, lang)} (${toAirport.code})`;
 
   const availableAirlines = useMemo(() => {
     const map = new Map<string, { code: string; name: string; count: number }>();
@@ -1170,6 +1197,8 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
           baggage: firstLeg ? `${firstLeg.pkg.cabinBag} + ${firstLeg.pkg.checkedBag}` : undefined,
           cabin: firstLeg?.pkg.cabin === 'BUSINESS' ? 'Business Class' : 'Ekonomi',
           duration: firstLeg?.flight.durationLabel,
+          autoCheckin: addonAutoCheckin || undefined,
+          autoCheckinFeeTRY: addonAutoCheckin ? autoCheckinFeeTRY : undefined,
           idempotencyKey: checkoutIdemKey,
         });
         setConfirmedBooking(booking);
@@ -1245,7 +1274,9 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                       setPnrCopied(true);
                     }}
                   >
-                    {pnrCopied ? '✓ Kopyalandı' : 'PNR Kopyala'}
+                    {pnrCopied
+                      ? (lang === 'EN' ? '✓ Copied' : lang === 'RU' ? '✓ Скопировано' : lang === 'KK' ? '✓ Көшірілді' : '✓ Kopyalandı')
+                      : (lang === 'EN' ? 'Copy PNR' : lang === 'RU' ? 'Копировать PNR' : lang === 'KK' ? 'PNR көшіру' : 'PNR Kopyala')}
                   </button>
                 </div>
                 <p>{co.lookupHint}</p>
@@ -1632,7 +1663,14 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                       </h3>
                       <div className="uf-co-form-grid-2">
                         <label className="uf-co-label">{ui.emailLbl}
-                          <input name="contactEmail" type="email" autoComplete="email" className="uf-co-input" required placeholder="ornek@eposta.com" />
+                          <input
+                            name="contactEmail"
+                            type="email"
+                            autoComplete="email"
+                            className="uf-co-input"
+                            required
+                            placeholder={lang === 'EN' ? 'example@email.com' : lang === 'RU' ? 'example@mail.ru' : lang === 'KK' ? 'example@email.kz' : 'ornek@eposta.com'}
+                          />
                         </label>
                         <label className="uf-co-label">{ui.phoneLbl}
                           <input name="contactPhone" type="tel" autoComplete="tel" className="uf-co-input" required placeholder="+90 5xx xxx xx xx" />
@@ -1641,24 +1679,7 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                     </div>
                     <div className="uf-co-addons-block">
                       <h3 className="uf-co-subhead">{co.addonsTitle}</h3>
-                      <div className="uf-co-addons-grid">
-                        <label className={`uf-co-addon-card ${addonCancelShield ? 'is-checked' : ''}`}>
-                          <input
-                            type="checkbox"
-                            checked={addonCancelShield}
-                            onChange={(e) => setAddonCancelShield(e.target.checked)}
-                          />
-                          <div className="uf-co-addon-body">
-                            <div className="uf-co-addon-top">
-                              <strong>{co.cancelShieldTitle}</strong>
-                              <span className="uf-co-addon-price">
-                                +{formatPrice(240 * totalPax, currency)}
-                              </span>
-                            </div>
-                            <p>{co.cancelShieldSub}</p>
-                          </div>
-                        </label>
-
+                      <div className="uf-co-addons-grid" style={{ gridTemplateColumns: '1fr' }}>
                         <label className={`uf-co-addon-card ${addonAutoCheckin ? 'is-checked' : ''}`}>
                           <input
                             type="checkbox"
@@ -1669,7 +1690,7 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                             <div className="uf-co-addon-top">
                               <strong>{co.autoCheckinTitle}</strong>
                               <span className="uf-co-addon-price">
-                                +{formatPrice(145 * totalPax, currency)}
+                                +{formatPrice(250 * totalPax, currency)}
                               </span>
                             </div>
                             <p>{co.autoCheckinSub}</p>
@@ -1821,9 +1842,9 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
             {ui.changeSearch}
           </button>
           <h1 className="inner-h1">
-            {fromAirport.city} ({fromAirport.code}){' '}
+            {localizeCityName(fromAirport.city, lang)} ({fromAirport.code}){' '}
             <Plane size={26} style={{ display: 'inline', verticalAlign: 'middle', color: '#F2C85C', margin: '0 8px' }} />{' '}
-            {toAirport.city} ({toAirport.code})
+            {localizeCityName(toAirport.city, lang)} ({toAirport.code})
           </h1>
           <div className="route-pills">
             <span className="route-pill">

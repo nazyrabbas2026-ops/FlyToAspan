@@ -113,6 +113,8 @@ export const api = {
   setStatus: (id: string, status: BookingRecord['status'], expectedStatus?: BookingRecord['status']) => request<{ booking: BookingRecord }>(
     `/admin/bookings/${encodeURIComponent(id)}`, 'PATCH', expectedStatus ? { status, expectedStatus } : { status }
   ),
+  updateBookingCheckin: (id: string, payload: { checkinStatus: 'pending' | 'completed'; assignedSeat?: string }) =>
+    request<{ booking: BookingRecord }>(`/admin/bookings/${encodeURIComponent(id)}/checkin`, 'PATCH', payload),
   deleteBooking: (id: string) => request<{ ok: true }>(`/admin/bookings/${encodeURIComponent(id)}`, 'DELETE'),
   pricing: (signal?: AbortSignal) => request<{ markup: AdminMarkupConfig | null }>('/pricing', 'GET', undefined, signal),
   publicCatalog: (signal?: AbortSignal) => request<{ catalog: Partial<AdminCatalog> }>('/catalog', 'GET', undefined, signal),
@@ -244,7 +246,7 @@ export const api = {
     }>('/admin/xml-showcase/sync', 'POST', {}),
 };
 
-export type BookingDraft = Pick<BookingRecord, 'type' | 'title' | 'subtitle' | 'date' | 'returnDate' | 'passenger' | 'passengersDetail' | 'legs' | 'contactEmail' | 'contactPhone' | 'providerSource' | 'netCostTRY' | 'profitTRY' | 'price' | 'departTime' | 'arriveTime' | 'flightNumber' | 'airline' | 'baggage' | 'cabin' | 'duration'> & {
+export type BookingDraft = Pick<BookingRecord, 'type' | 'title' | 'subtitle' | 'date' | 'returnDate' | 'passenger' | 'passengersDetail' | 'legs' | 'contactEmail' | 'contactPhone' | 'providerSource' | 'netCostTRY' | 'profitTRY' | 'price' | 'departTime' | 'arriveTime' | 'flightNumber' | 'airline' | 'baggage' | 'cabin' | 'duration' | 'autoCheckin' | 'autoCheckinFeeTRY'> & {
   lookupSurname: string;
   isCharter?: boolean;
   idempotencyKey?: string;

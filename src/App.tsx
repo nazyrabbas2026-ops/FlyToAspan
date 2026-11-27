@@ -188,6 +188,13 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     document.documentElement.lang = lang === 'KK' ? 'kk' : lang.toLowerCase();
+    const titles: Record<LangCode, string> = {
+      TR: 'FlyToAspan — Uçak Bileti, Otel, Transfer ve Paket Turlar',
+      EN: 'FlyToAspan — Flights, Hotels, Transfers & Tour Packages',
+      RU: 'FlyToAspan — Авиабилеты, Отели, Трансферы и Туры',
+      KK: 'FlyToAspan — Әуе билеттері, Қонақүйлер, Трансфер және Турлар',
+    };
+    document.title = titles[lang] || titles.TR;
   }, [lang]);
 
   useEffect(() => {
@@ -304,6 +311,11 @@ export const App: React.FC = () => {
 
   const handleUpdateBookingStatus = async (id: string, status: BookingRecord['status']) => {
     const { booking } = await api.setStatus(id, status);
+    changeRecords((records) => records.map((record) => record.id === id ? booking : record));
+  };
+
+  const handleUpdateBookingCheckin = async (id: string, payload: { checkinStatus: 'pending' | 'completed'; assignedSeat?: string }) => {
+    const { booking } = await api.updateBookingCheckin(id, payload);
     changeRecords((records) => records.map((record) => record.id === id ? booking : record));
   };
 
@@ -454,11 +466,21 @@ export const App: React.FC = () => {
         {page === 'panel' && !user && (
           <section className="inner-hero">
             <div className="container">
-              <h1 className="inner-h1">Hesabım</h1>
-              {sessionLoading ? <p role="status">Oturum kontrol ediliyor…</p> : (
+              <h1 className="inner-h1">
+                {lang === 'EN' ? 'My Account' : lang === 'RU' ? 'Личный кабинет' : lang === 'KK' ? 'Жеке кабинет' : 'Hesabım'}
+              </h1>
+              {sessionLoading ? (
+                <p role="status">
+                  {lang === 'EN' ? 'Checking session…' : lang === 'RU' ? 'Проверка сессии…' : lang === 'KK' ? 'Сессия тексерілуде…' : 'Oturum kontrol ediliyor…'}
+                </p>
+              ) : (
                 <>
-                  <p>Rezervasyonlarınızı görmek için giriş yapın.</p>
-                  <button type="button" className="btn-gold-nav" onClick={() => setAuthMode('login')}>Giriş Yap</button>
+                  <p>
+                    {lang === 'EN' ? 'Sign in to view your bookings.' : lang === 'RU' ? 'Войдите, чтобы увидеть свои бронирования.' : lang === 'KK' ? 'Брондауларыңызды көру үшін кіріңіз.' : 'Rezervasyonlarınızı görmek için giriş yapın.'}
+                  </p>
+                  <button type="button" className="btn-gold-nav" onClick={() => setAuthMode('login')}>
+                    {lang === 'EN' ? 'Sign In' : lang === 'RU' ? 'Войти' : lang === 'KK' ? 'Кіру' : 'Giriş Yap'}
+                  </button>
                 </>
               )}
             </div>
@@ -619,6 +641,7 @@ export const App: React.FC = () => {
               onAddBooking={(draft) => handleAddBooking(draft, true)}
               onLogout={signOut}
               onUpdateBookingStatus={handleUpdateBookingStatus}
+              onUpdateBookingCheckin={handleUpdateBookingCheckin}
               onDeleteBooking={handleDeleteBooking}
               onBookingCreated={(bk) =>
                 setBookingView((prev) => ({

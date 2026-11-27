@@ -79,6 +79,7 @@ const AUDIT_LABELS: Record<string, string> = {
   'admin:fx_override': 'Manuel Döviz Kuru Ayarı',
   'admin:fx_reset': 'Canlı Kura Dönüş',
   'admin:booking_status': 'Rezervasyon Durum Değişikliği',
+  'admin:checkin_update': 'Online Check-In & Koltuk Güncelleme',
   'admin:booking_delete': 'Rezervasyon Silme',
   'admin:user_approve': 'Kurumsal Başvuru Onayı',
   'admin:user_permissions': 'Yetki Güncelleme',

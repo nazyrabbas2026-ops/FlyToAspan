@@ -19,6 +19,14 @@ interface LegalPagesProps {
   onBackHome: () => void;
 }
 
+interface LegalSectionContent {
+  heading: string;
+  paragraphs: string[];
+  subSections?: Array<{ title: string; body: string }>;
+  bullets?: Array<{ label: string; text: string }>;
+  closing?: string;
+}
+
 const LEGAL_UI: Record<
   LangCode,
   {
@@ -26,7 +34,10 @@ const LEGAL_UI: Record<
     eyebrow: string;
     title: string;
     tabs: Record<LegalDocKey, string>;
-    langNotice?: string;
+    contactTitle: string;
+    contactSub: string;
+    contactNote: string;
+    docs: Record<LegalDocKey, LegalSectionContent>;
   }
 > = {
   TR: {
@@ -40,6 +51,97 @@ const LEGAL_UI: Record<
       commercial: 'Ticari Elektronik İleti Onayı',
       cookies: 'Çerez (Cookie) Politikası',
     },
+    contactTitle: 'FlyToAspan by Infinitive Travel — Hukuk & Müşteri İlişkileri',
+    contactSub: 'Almatı, Kazakistan & İstanbul, Türkiye · info@flytoaspan.com',
+    contactNote: 'Resmi şirket ve Kazakistan tescil bilgileri güncellenecektir.',
+    docs: {
+      terms: {
+        heading: '1. Kullanım Koşulları ve Mesafeli Hizmet / Bilet Satış Sözleşmesi',
+        paragraphs: [
+          `İşbu sözleşme, bir tarafta FlyToAspan by Infinitive Travel (Kazakistan ve uluslararası seyahat standartlarında faaliyet gösteren seyahat platformu, İletişim: ${PHONE_DISPLAY}, E-posta: info@flytoaspan.com) ile diğer tarafta FlyToAspan web sitesi üzerinden uçak bileti, otel konaklaması veya paket tur satın alan Yolcu / Tüketici arasında elektronik ortamda akdedilmiştir.`,
+        ],
+        subSections: [
+          {
+            title: '1.1. Hizmetin Niteliği ve Biletleme',
+            body: 'FlyToAspan; ulusal ve uluslararası havayollarının (THY, Pegasus, AJet, SunExpress, Air Astana, FlyArystan, Lufthansa, Emirates vb.), konaklama tesislerinin ve paket tur operatörlerinin tarifeli/charter seferlerini GDS ve XML sistemleri üzerinden anlık olarak listeleyen ve biletleme aracılık hizmeti sunan dijital seyahat platformudur.',
+          },
+          {
+            title: '1.2. Fiyatlandırma ve 3D Secure Ödeme Güvenliği',
+            body: 'Ekranda görüntülenen toplam bilet, otel veya paket tur bedeline ilgili vergiler ve acente hizmet bedeli (Service Fee) dahildir. Tüm ödemeler 256-Bit SSL şifreleme ve banka 3D Secure doğrulaması ile tahsil edilir; kredi kartı numarası ve CVV bilgileri hiçbir şekilde FlyToAspan sunucularında saklanmaz.',
+          },
+        ],
+      },
+      kvkk: {
+        heading: '2. 6698 Sayılı Kişisel Verilerin Korunması Kanunu (KVKK) ve GDPR Aydınlatma Metni',
+        paragraphs: [
+          'FlyToAspan by Infinitive Travel ("Veri Sorumlusu") olarak, 6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK") ve Avrupa Birliği Genel Veri Koruma Tüzüğü ("GDPR") kapsamında kişisel verilerinizin güvenliğine en üst düzeyde önem veriyoruz.',
+        ],
+        bullets: [
+          {
+            label: 'Kimlik ve Seyahat Belgeleri',
+            text: 'Ad, soyad, doğum tarihi, uyruk, T.C. Kimlik Numarası veya Pasaport numarası (yalnızca havayolu PNR/E-Bilet kesimi ve otel/paket tur rezervasyonunun resmi olarak oluşturulması amacıyla işlenir).',
+          },
+          {
+            label: 'İletişim Bilgileri',
+            text: 'E-posta adresi ve cep telefonu numarası (PNR kodu, E-Bilet PDF belgesi, uçuş rötar/kapı bildirimleri ve tur operasyon bilgilerinin iletilmesi amacıyla).',
+          },
+          {
+            label: 'İşlem Güvenliği',
+            text: 'IP adresi, oturum logları ve yasal erişim kayıtları.',
+          },
+        ],
+        closing:
+          'Kimlik ve pasaport verileriniz AES-256 standardıyla korunur. KVKK Madde 11 kapsamındaki veri erişim, düzeltme ve silme taleplerinizi Üye Panelinizdeki "Güvenlik & KVKK" sekmesinden veya info@flytoaspan.com adresinden iletebilirsiniz.',
+      },
+      refund: {
+        heading: '3. Bilet İptal, İade ve Değişiklik Koşulları',
+        paragraphs: [
+          'Uçak bileti iptal, iade ve tarih/saat değişikliği işlemleri, satın alınan biletin tarife sınıfına (Eco Fly, Extra Fly, Prime Fly, Business Class) ve ilgili havayolunun resmi kurallarına tabidir:',
+        ],
+        bullets: [
+          {
+            label: 'Eco Fly (Promosyon / Ekonomik Paket)',
+            text: 'Havayolu kuralları gereği genellikle iade edilemez; uçuşa belirli bir süre kalana kadar ücret farkı ve ceza bedeli ödenerek değişiklik yapılabilir.',
+          },
+          {
+            label: 'Extra Fly & Prime Fly',
+            text: 'Esnek değişiklik ve kesintili/tam iade hakkı sunar. Paket seçimi sırasında her uçuş kartının altında iade ve değişiklik şartları şeffaf biçimde yazılıdır.',
+          },
+          {
+            label: 'Business Class',
+            text: 'Kalkış öncesine kadar ücretsiz değişiklik ve kesintisiz iade ayrıcalığı sağlar.',
+          },
+          {
+            label: 'Paket Tur & Otel İptali',
+            text: 'İlgili otel veya tur operatörünün ücretsiz iptal süresi içinde yapılan iptallerde kesintisiz iade sağlanır.',
+          },
+        ],
+        closing: `İptal veya değişiklik talebinizi üst menüdeki Bilet İşlemleri (PNR Sorgulama) ekranından veya 7/24 ${PHONE_DISPLAY} destek hattımızdan anında gerçekleştirebilirsiniz.`,
+      },
+      commercial: {
+        heading: '4. 6563 Sayılı Kanun Kapsamında Ticari Elektronik İleti Onayı',
+        paragraphs: [
+          'Üyelik veya bilet satın alma aşamasında açık rıza vermeniz halinde; FlyToAspan tarafından sunulan indirim kuponları (örn. ASPAN350, SKYALA18), erken rezervasyon otel fırsatları ve fiyat alarmı bildirimleri SMS, WhatsApp veya e-posta kanalıyla tarafınıza iletilebilir.',
+          'Ticari ileti izninizi dilediğiniz zaman Üye Panelinizden veya gelen iletilerdeki ücretsiz ret bağlantısından tek tıkla iptal edebilirsiniz. (Bilet PNR ve uçuş bilgilendirme mesajları bilgilendirme amaçlı olup ticari ileti kapsamında değildir.)',
+        ],
+      },
+      cookies: {
+        heading: '5. Çerez (Cookie) Aydınlatma Metni',
+        paragraphs: [
+          'FlyToAspan web sitesinde güvenli oturum yönetimi, dil ve para birimi tercihlerinizin (TR / EN / RU / KK ve TRY / USD / EUR / KZT / RUB) hatırlanması ve uçuş arama hızının optimize edilmesi amacıyla çerezler kullanılmaktadır:',
+        ],
+        bullets: [
+          {
+            label: 'Zorunlu Oturum & Güvenlik Çerezleri',
+            text: '3D Secure ödeme akışı, güvenlik koruması ve güvenli üye girişi için zorunludur.',
+          },
+          {
+            label: 'İşlevsel Tercih Çerezleri',
+            text: 'Seçtiğiniz dil, para birimi ve son baktığınız rotaları tarayıcınızda hatırlar.',
+          },
+        ],
+      },
+    },
   },
   EN: {
     back: 'Back to Homepage',
@@ -52,7 +154,97 @@ const LEGAL_UI: Record<
       commercial: 'Commercial Electronic Message Consent',
       cookies: 'Cookie Policy',
     },
-    langNotice: 'Official statutory agreements under Turkish Law No. 6502 and 6698 (KVKK) are displayed below in their binding Turkish legal text. For English assistance, contact info@flytoaspan.com.',
+    contactTitle: 'FlyToAspan by Infinitive Travel — Legal & Customer Relations',
+    contactSub: 'Almaty, Kazakhstan & Istanbul, Turkey · info@flytoaspan.com',
+    contactNote: 'Official corporate & Kazakhstan registration details are maintained by Infinitive Travel.',
+    docs: {
+      terms: {
+        heading: '1. Terms of Use & Distance Travel Sales Agreement',
+        paragraphs: [
+          `This agreement is concluded electronically between FlyToAspan by Infinitive Travel (operating under Kazakhstan and international travel standards, Contact: ${PHONE_DISPLAY}, E-Mail: info@flytoaspan.com) and the Passenger / Customer purchasing flights, hotels, transfers, or package tours via the FlyToAspan platform.`,
+        ],
+        subSections: [
+          {
+            title: '1.1. Scope of Services & Ticketing',
+            body: 'FlyToAspan is a digital travel platform aggregating scheduled and charter fares from domestic and international airlines (Turkish Airlines, Pegasus, AJet, SunExpress, Air Astana, FlyArystan, Lufthansa, Emirates, etc.), hotels, and tour operators via GDS and XML integrations.',
+          },
+          {
+            title: '1.2. Pricing & 3D Secure Payment Protection',
+            body: 'The total price displayed includes applicable taxes and agency service fees. All card transactions are processed through 256-Bit SSL encryption and bank 3D Secure verification; credit card numbers and CVV codes are never stored on FlyToAspan servers.',
+          },
+        ],
+      },
+      kvkk: {
+        heading: '2. Privacy Notice & Data Protection (KVKK / GDPR)',
+        paragraphs: [
+          'As FlyToAspan by Infinitive Travel ("Data Controller"), we protect your personal data in strict compliance with applicable data protection laws (KVKK and EU GDPR).',
+        ],
+        bullets: [
+          {
+            label: 'Identity & Travel Documents',
+            text: 'Full name, date of birth, nationality, National ID or Passport details (processed exclusively for issuing airline PNR/E-Tickets and hotel or tour reservations).',
+          },
+          {
+            label: 'Contact Details',
+            text: 'Email address and mobile number (used to deliver PNR codes, E-Ticket PDFs, schedule alerts, and operational support).',
+          },
+          {
+            label: 'Security Logs',
+            text: 'IP address, session audit records, and legally required access logs.',
+          },
+        ],
+        closing:
+          'Identity and passport fields are protected with modern encryption standards. You may submit access, correction, or deletion requests at any time via info@flytoaspan.com.',
+      },
+      refund: {
+        heading: '3. Cancellation, Refund & Change Policy',
+        paragraphs: [
+          'Flight ticket cancellations, refunds, and schedule changes are governed by the fare family selected (Eco Fly, Extra Fly, Prime Fly, Business Class) and the operating airline’s official fare rules:',
+        ],
+        bullets: [
+          {
+            label: 'Eco Fly (Economy Saver)',
+            text: 'Typically non-refundable per airline rules; date changes may be permitted for a fee plus fare difference prior to departure.',
+          },
+          {
+            label: 'Extra Fly & Prime Fly',
+            text: 'Offer flexible changes and partial or full refunds as clearly displayed under each fare card during booking.',
+          },
+          {
+            label: 'Business Class',
+            text: 'Includes complimentary schedule changes and full refund privileges prior to departure.',
+          },
+          {
+            label: 'Package Tour & Hotel Cancellations',
+            text: 'Full refunds apply when cancelled within the supplier’s free-cancellation window.',
+          },
+        ],
+        closing: `You can submit cancellation or change requests via Manage Booking (PNR Lookup) or our 24/7 support desk at ${PHONE_DISPLAY}.`,
+      },
+      commercial: {
+        heading: '4. Commercial Electronic Message Consent',
+        paragraphs: [
+          'With your explicit consent during registration or checkout, FlyToAspan may send promo codes (e.g., ASPAN350, SKYALA18), early-booking hotel offers, and price alert notifications via SMS, WhatsApp, or email.',
+          'You may opt out of marketing messages at any time from your Account Panel or via the unsubscribe link. Transactional PNR and flight notifications are operational and unaffected.',
+        ],
+      },
+      cookies: {
+        heading: '5. Cookie Policy',
+        paragraphs: [
+          'FlyToAspan uses cookies to maintain secure sessions, remember your language and currency preferences (TR / EN / RU / KK and TRY / USD / EUR / KZT / RUB), and optimize search speed:',
+        ],
+        bullets: [
+          {
+            label: 'Essential Security & Session Cookies',
+            text: 'Required for authentication, CSRF protection, and 3D Secure checkout flows.',
+          },
+          {
+            label: 'Preference Cookies',
+            text: 'Remember your chosen display language, currency, and recent search parameters.',
+          },
+        ],
+      },
+    },
   },
   RU: {
     back: 'На главную',
@@ -65,7 +257,97 @@ const LEGAL_UI: Record<
       commercial: 'Согласие на рассылку',
       cookies: 'Политика файлов Cookie',
     },
-    langNotice: 'Официальные юридические тексты в соответствии с законодательством Турции (KVKK) приведены ниже на турецком языке. По вопросам на русском пишите на info@flytoaspan.com.',
+    contactTitle: 'FlyToAspan by Infinitive Travel — Юридический отдел и поддержка',
+    contactSub: 'Алматы, Казахстан и Стамбул, Турция · info@flytoaspan.com',
+    contactNote: 'Официальные регистрационные данные компании обновляются Infinitive Travel.',
+    docs: {
+      terms: {
+        heading: '1. Условия использования и договор оказания туристических услуг',
+        paragraphs: [
+          `Настоящее соглашение заключается в электронной форме между платформой FlyToAspan by Infinitive Travel (работающей по стандартам Казахстана и международной авиации, тел.: ${PHONE_DISPLAY}, E-mail: info@flytoaspan.com) и Пассажиром / Клиентом, оформляющим авиабилеты, отели или пакетные туры на сайте.`,
+        ],
+        subSections: [
+          {
+            title: '1.1. Характер услуг и оформление билетов',
+            body: 'FlyToAspan — цифровая тревел-платформа, агрегирующая регулярные и чартерные рейсы авиакомпаний (Turkish Airlines, Air Astana, Pegasus, FlyArystan, SCAT, Lufthansa, Emirates и др.), отели и пакетные туры через системы GDS и XML.',
+          },
+          {
+            title: '1.2. Ценообразование и безопасность 3D Secure',
+            body: 'Отображаемая итоговая стоимость включает сборы и сервисный сбор агентства. Все платежи проходят с шифрованием 256-Bit SSL и подтверждением 3D Secure; данные банковских карт и CVV никогда не хранятся на серверах FlyToAspan.',
+          },
+        ],
+      },
+      kvkk: {
+        heading: '2. Политика конфиденциальности и защита персональных данных (KVKK / GDPR)',
+        paragraphs: [
+          'FlyToAspan by Infinitive Travel («Оператор данных») обеспечивает высокий уровень защиты персональных данных в соответствии с международными стандартами KVKK и GDPR.',
+        ],
+        bullets: [
+          {
+            label: 'Паспортные и идентификационные данные',
+            text: 'Имя, фамилия, дата рождения, гражданство, номер паспорта или удостоверения личности (используются исключительно для выписки PNR/авиабилетов и бронирования отелей/туров).',
+          },
+          {
+            label: 'Контактные данные',
+            text: 'Электронная почта и номер телефона (для отправки кода PNR, PDF-маршрутной квитанции и уведомлений о рейсе).',
+          },
+          {
+            label: 'Журналы безопасности',
+            text: 'IP-адрес, журналы сессий и обязательные технические логи доступа.',
+          },
+        ],
+        closing:
+          'Паспортные данные хранятся с применением современного шифрования. Запросы на доступ, исправление или удаление данных можно направлять на info@flytoaspan.com.',
+      },
+      refund: {
+        heading: '3. Условия отмены, возврата и обмена билетов',
+        paragraphs: [
+          'Отмена, возврат и изменение даты/времени вылета регулируются выбранным тарифным пакетом (Eco Fly, Extra Fly, Prime Fly, Business Class) и официальными правилами авиакомпании:',
+        ],
+        bullets: [
+          {
+            label: 'Eco Fly (Базовый эконом)',
+            text: 'Как правило, невозвратный по правилам перевозчика; обмен возможен со штрафом и доплатой разницы тарифа.',
+          },
+          {
+            label: 'Extra Fly и Prime Fly',
+            text: 'Предусматривают гибкий обмен и частичный или полный возврат согласно условиям, указанным в карточке тарифа.',
+          },
+          {
+            label: 'Business Class',
+            text: 'Бесплатное изменение даты и полный возврат до вылета.',
+          },
+          {
+            label: 'Отмена отелей и туров',
+            text: 'При отмене в период бесплатной аннуляции поставщика возврат выполняется в полном объёме.',
+          },
+        ],
+        closing: `Запрос на обмен или возврат можно оформить в разделе «Мои билеты» (по PNR) или через круглосуточную поддержку ${PHONE_DISPLAY}.`,
+      },
+      commercial: {
+        heading: '4. Согласие на получение информационных и рекламных рассылок',
+        paragraphs: [
+          'При вашем явном согласии FlyToAspan может направлять промокоды (например, ASPAN350, SKYALA18), спецпредложения по отелям и уведомления о снижении цен через SMS, WhatsApp или E-mail.',
+          'Вы можете отписаться от рассылки в любой момент в личном кабинете или по ссылке в письме. Сервисные уведомления по PNR и вылету не относятся к рекламе.',
+        ],
+      },
+      cookies: {
+        heading: '5. Политика использования файлов Cookie',
+        paragraphs: [
+          'Сайт FlyToAspan использует файлы cookie для безопасной авторизации, сохранения выбранного языка и валюты (TR / EN / RU / KK и TRY / USD / EUR / KZT / RUB), а также ускорения поиска:',
+        ],
+        bullets: [
+          {
+            label: 'Обязательные cookie безопасности',
+            text: 'Необходимы для входа в аккаунт, защиты от CSRF и безопасной оплаты 3D Secure.',
+          },
+          {
+            label: 'Функциональные cookie',
+            text: 'Запоминают выбранный язык интерфейса, валюту и последние маршруты.',
+          },
+        ],
+      },
+    },
   },
   KK: {
     back: 'Басты бетке оралу',
@@ -78,7 +360,97 @@ const LEGAL_UI: Record<
       commercial: 'Хабарлама келісімі',
       cookies: 'Cookie саясаты',
     },
-    langNotice: 'Түркия заңнамасына (KVKK) сәйкес ресми заңды мәтіндер төменде берілген. Қазақ тілінде кеңес алу үшін info@flytoaspan.com поштасына жазыңыз.',
+    contactTitle: 'FlyToAspan by Infinitive Travel — Құқық және клиенттермен байланыс',
+    contactSub: 'Алматы, Қазақстан және Ыстамбұл, Түркия · info@flytoaspan.com',
+    contactNote: 'Ресми компания және Қазақстан тіркеу деректері Infinitive Travel арқылы жаңартылады.',
+    docs: {
+      terms: {
+        heading: '1. Пайдалану шарттары және қашықтан қызмет көрсету шарты',
+        paragraphs: [
+          `Осы шарт бір тараптан FlyToAspan by Infinitive Travel (Қазақстан және халықаралық туризм стандарттарымен жұмыс істейтін платформа, тел.: ${PHONE_DISPLAY}, E-mail: info@flytoaspan.com) және екінші тараптан сайт арқылы әуе билеті, қонақүй немесе пакеттік тур сатып алатын Жолаушы / Тұтынушы арасында электронды түрде жасалады.`,
+        ],
+        subSections: [
+          {
+            title: '1.1. Қызмет сипаты және билет рәсімдеу',
+            body: 'FlyToAspan — халықаралық және ішкі әуекомпаниялардың (Turkish Airlines, Air Astana, Pegasus, FlyArystan, SCAT, Lufthansa, Emirates және т.б.) тұрақты және чартерлік рейстерін, қонақүйлер мен турларды GDS және XML арқылы ұсынатын цифрлық платформа.',
+          },
+          {
+            title: '1.2. Баға және 3D Secure төлем қауіпсіздігі',
+            body: 'Экранда көрсетілген жалпы сомаға алымдар мен агенттік қызмет ақысы кіреді. Барлық төлемдер 256-Bit SSL және 3D Secure арқылы қорғалады; банк картасының нөмірі мен CVV кодтары серверде сақталмайды.',
+          },
+        ],
+      },
+      kvkk: {
+        heading: '2. Дербес деректерді қорғау және құпиялылық саясаты (KVKK / GDPR)',
+        paragraphs: [
+          'FlyToAspan by Infinitive Travel («Деректер операторы») халықаралық KVKK және GDPR стандарттарына сәйкес дербес деректеріңіздің қауіпсіздігін қамтамасыз етеді.',
+        ],
+        bullets: [
+          {
+            label: 'Жеке басты куәландыратын және сапар құжаттары',
+            text: 'Аты-жөні, туған күні, азаматтығы, жеке куәлік немесе төлқұжат нөмірі (тек PNR/E-Билет рәсімдеу және қонақүй/тур брондау үшін қолданылады).',
+          },
+          {
+            label: 'Байланыс деректері',
+            text: 'Электрондық пошта және телефон нөмірі (PNR коды, PDF билет және рейс хабарламаларын жіберу үшін).',
+          },
+          {
+            label: 'Қауіпсіздік жазбалары',
+            text: 'IP-мекенжай, сессия журналдары және заңды техникалық логтар.',
+          },
+        ],
+        closing:
+          'Құжат деректері заманауи шифрлаумен қорғалады. Деректерге қол жеткізу, түзету немесе жою сұрауларын info@flytoaspan.com мекенжайына жолдай аласыз.',
+      },
+      refund: {
+        heading: '3. Билеттен бас тарту, қайтару және өзгерту шарттары',
+        paragraphs: [
+          'Әуе билетін қайтару және күнін өзгерту таңдалған тариф пакетіне (Eco Fly, Extra Fly, Prime Fly, Business Class) және әуекомпанияның ресми ережелеріне сәйкес орындалады:',
+        ],
+        bullets: [
+          {
+            label: 'Eco Fly (Эконом пакет)',
+            text: 'Әуекомпания ережесі бойынша әдетте қайтарылмайды; айыппұл және тариф айырмасымен өзгертуге болады.',
+          },
+          {
+            label: 'Extra Fly және Prime Fly',
+            text: 'Икемді өзгерту және тариф карточкасында көрсетілген шарттармен ішінара немесе толық қайтару мүмкіндігін береді.',
+          },
+          {
+            label: 'Business Class',
+            text: 'Ұшу алдында тегін өзгерту және толық қайтару артықшылығын қамтиды.',
+          },
+          {
+            label: 'Қонақүй және пакеттік турдан бас тарту',
+            text: 'Жеткізушінің тегін бас тарту мерзімі ішінде толық қайтару жүргізіледі.',
+          },
+        ],
+        closing: `Бас тарту немесе өзгерту сұрауын «Билеттер» (PNR тексеру) бетінен немесе тәулік бойы жұмыс істейтін ${PHONE_DISPLAY} желісі арқылы жібере аласыз.`,
+      },
+      commercial: {
+        heading: '4. Коммерциялық электрондық хабарламаларға келісім',
+        paragraphs: [
+          'Тіркелу немесе брондау кезінде келісім берген жағдайда FlyToAspan жеңілдік купондарын (мыс. ASPAN350, SKYALA18), қонақүй акцияларын және баға хабарламаларын SMS, WhatsApp немесе E-mail арқылы жібере алады.',
+          'Жарнамалық хабарламалардан кез келген уақытта Жеке кабинет арқылы бас тарта аласыз. PNR және рейс туралы хабарламалар ақпараттық сипатта болады.',
+        ],
+      },
+      cookies: {
+        heading: '5. Cookie файлдары саясаты',
+        paragraphs: [
+          'FlyToAspan сайты қауіпсіз сессияны сақтау, тіл мен валюта таңдауыңызды (TR / EN / RU / KK және TRY / USD / EUR / KZT / RUB) есте сақтау және іздеу жылдамдығын арттыру үшін cookie файлдарын қолданады:',
+        ],
+        bullets: [
+          {
+            label: 'Міндетті қауіпсіздік cookie файлдары',
+            text: 'Аккаунтқа кіру, CSRF қорғанысы және 3D Secure төлем үдерісі үшін қажет.',
+          },
+          {
+            label: 'Функционалдық cookie файлдары',
+            text: 'Таңдалған тілді, валютаны және соңғы іздеу бағыттарын сақтайды.',
+          },
+        ],
+      },
+    },
   },
 };
 
@@ -89,6 +461,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({
   onBackHome,
 }) => {
   const lu = LEGAL_UI[lang];
+  const doc = lu.docs[activeDoc];
   const tabs: Array<{ key: LegalDocKey; title: string; icon: React.ReactNode }> = [
     { key: 'terms', title: lu.tabs.terms, icon: <FileText size={16} /> },
     { key: 'kvkk', title: lu.tabs.kvkk, icon: <Lock size={16} /> },
@@ -130,169 +503,26 @@ export const LegalPages: React.FC<LegalPagesProps> = ({
       <section className="results-workspace">
         <div className="container" style={{ maxWidth: 920 }}>
           <div className="panel-card" style={{ lineHeight: 1.75, fontSize: 14.5 }}>
-            {lu.langNotice && (
-              <div
-                style={{
-                  marginBottom: 16,
-                  padding: '10px 14px',
-                  borderRadius: 10,
-                  background: 'var(--aspan-teal-soft)',
-                  color: 'var(--aspan-teal-deep)',
-                  fontSize: 12.5,
-                  fontWeight: 600,
-                }}
-              >
-                {lu.langNotice}
-              </div>
+            <h2 style={{ marginTop: 0 }}>{doc.heading}</h2>
+            {doc.paragraphs.map((p, i) => (
+              <p key={i}>{p}</p>
+            ))}
+            {doc.subSections?.map((sub) => (
+              <React.Fragment key={sub.title}>
+                <h4>{sub.title}</h4>
+                <p>{sub.body}</p>
+              </React.Fragment>
+            ))}
+            {doc.bullets && (
+              <ul>
+                {doc.bullets.map((b) => (
+                  <li key={b.label}>
+                    <strong>{b.label}:</strong> {b.text}
+                  </li>
+                ))}
+              </ul>
             )}
-            {activeDoc === 'terms' && (
-              <>
-                <h2 style={{ marginTop: 0 }}>
-                  1. Kullanım Koşulları ve Mesafeli Hizmet / Bilet Satış Sözleşmesi
-                </h2>
-                <p>
-                  İşbu sözleşme, bir tarafta <strong>FlyToAspan by Infinitive Travel</strong>{' '}
-                  (Kazakistan ve uluslararası seyahat standartlarında faaliyet gösteren seyahat
-                  platformu, İletişim:{' '}
-                  <strong>{PHONE_DISPLAY}</strong>, E-posta: <strong>info@flytoaspan.com</strong>) ile
-                  diğer tarafta FlyToAspan web sitesi üzerinden uçak bileti, otel konaklaması veya
-                  paket tur satın alan <strong>Yolcu / Tüketici</strong> arasında elektronik ortamda
-                  akdedilmiştir.
-                </p>
-                <h4>1.1. Hizmetin Niteliği ve Biletleme</h4>
-                <p>
-                  FlyToAspan; ulusal ve uluslararası havayollarının (THY, Pegasus, AJet, SunExpress,
-                  Air Astana, FlyArystan, Lufthansa, Emirates vb.), konaklama tesislerinin ve paket
-                  tur operatörlerinin tarifeli/charter seferlerini GDS ve XML sistemleri üzerinden
-                  anlık olarak listeleyen ve biletleme aracılık hizmeti sunan dijital seyahat
-                  platformudur.
-                </p>
-                <h4>1.2. Fiyatlandırma ve 3D Secure Ödeme Güvenliği</h4>
-                <p>
-                  Ekranda görüntülenen toplam bilet, otel veya paket tur bedeline ilgili vergiler ve
-                  acente hizmet bedeli (Service Fee) dahildir. Tüm ödemeler 256-Bit SSL şifreleme ve
-                  banka <strong>3D Secure</strong> doğrulaması ile tahsil edilir; kredi kartı
-                  numarası ve CVV bilgileri hiçbir şekilde FlyToAspan sunucularında saklanmaz.
-                </p>
-              </>
-            )}
-
-            {activeDoc === 'kvkk' && (
-              <>
-                <h2 style={{ marginTop: 0 }}>
-                  2. 6698 Sayılı Kişisel Verilerin Korunması Kanunu (KVKK) ve GDPR Aydınlatma Metni
-                </h2>
-                <p>
-                  <strong>FlyToAspan by Infinitive Travel</strong> (&ldquo;Veri Sorumlusu&rdquo;)
-                  olarak, 6698 sayılı Kişisel Verilerin Korunması Kanunu (&ldquo;KVKK&rdquo;) ve
-                  Avrupa Birliği Genel Veri Koruma Tüzüğü (&ldquo;GDPR&rdquo;) kapsamında kişisel
-                  verilerinizin güvenliğine en üst düzeyde önem veriyoruz.
-                </p>
-                <h4>2.1. İşlenen Kişisel Veriler ve İşleme Amaçları</h4>
-                <ul>
-                  <li>
-                    <strong>Kimlik ve Seyahat Belgeleri:</strong> Ad, soyad, doğum tarihi, uyruk, T.C.
-                    Kimlik Numarası veya Pasaport numarası (yalnızca havayolu PNR/E-Bilet kesimi ve
-                    otel/paket tur rezervasyonunun resmi olarak oluşturulması amacıyla işlenir).
-                  </li>
-                  <li>
-                    <strong>İletişim Bilgileri:</strong> E-posta adresi ve cep telefonu numarası
-                    (PNR kodu, E-Bilet PDF belgesi, uçuş rötar/kapı bildirimleri ve tur operasyon
-                    bilgilerinin iletilmesi amacıyla).
-                  </li>
-                  <li>
-                    <strong>İşlem Güvenliği:</strong> IP adresi, oturum logları ve 5651 sayılı kanun
-                    gereği tutulan yasal erişim kayıtları.
-                  </li>
-                </ul>
-                <h4>2.2. Veri Güvenliği ve Haklarınız</h4>
-                <p>
-                  TCKN ve pasaport verileriniz veritabanında <strong>AES-256</strong> şifreleme
-                  standardıyla korunur. KVKK Madde 11 kapsamındaki veri erişim, düzeltme ve silme
-                  taleplerinizi Üye Panelinizdeki <em>&ldquo;Güvenlik &amp; KVKK&rdquo;</em>{' '}
-                  sekmesinden veya <strong>info@flytoaspan.com</strong> adresinden iletebilirsiniz.
-                </p>
-              </>
-            )}
-
-            {activeDoc === 'refund' && (
-              <>
-                <h2 style={{ marginTop: 0 }}>
-                  3. Bilet İptal, İade ve Değişiklik Koşulları
-                </h2>
-                <p>
-                  Uçak bileti iptal, iade ve tarih/saat değişikliği işlemleri, satın alınan biletin
-                  tarife sınıfına (<strong>Eco Fly, Extra Fly, Prime Fly, Business Class</strong>) ve
-                  ilgili havayolunun resmi kurallarına tabidir:
-                </p>
-                <ul>
-                  <li>
-                    <strong>Eco Fly (Promosyon / Ekonomik Paket):</strong> Havayolu kuralları gereği
-                    genellikle iade edilemez; uçuşa belirli bir süre kalana kadar ücret farkı ve
-                    ceza bedeli ödenerek değişiklik yapılabilir.
-                  </li>
-                  <li>
-                    <strong>Extra Fly &amp; Prime Fly:</strong> Esnek değişiklik ve kesintili/tam
-                    iade hakkı sunar. Paket seçimi sırasında her uçuş kartının altında iade ve
-                    değişiklik şartları şeffaf biçimde yazılıdır.
-                  </li>
-                  <li>
-                    <strong>Business Class:</strong> Kalkış öncesine kadar ücretsiz değişiklik ve
-                    kesintisiz iade ayrıcalığı sağlar.
-                  </li>
-                  <li>
-                    <strong>Paket Tur &amp; Otel İptali:</strong> İlgili otel veya tur operatörünün
-                    ücretsiz iptal süresi içinde yapılan iptallerde kesintisiz iade sağlanır.
-                  </li>
-                </ul>
-                <p>
-                  İptal veya değişiklik talebinizi üst menüdeki{' '}
-                  <strong>Bilet İşlemleri (PNR Sorgulama)</strong> ekranından veya 7/24{' '}
-                  <strong>{PHONE_DISPLAY}</strong> destek hattımızdan anında gerçekleştirebilirsiniz.
-                </p>
-              </>
-            )}
-
-            {activeDoc === 'commercial' && (
-              <>
-                <h2 style={{ marginTop: 0 }}>
-                  4. 6563 Sayılı Kanun Kapsamında Ticari Elektronik İleti Onayı
-                </h2>
-                <p>
-                  Üyelik veya bilet satın alma aşamasında açık rıza vermeniz halinde; FlyToAspan
-                  tarafından sunulan indirim kuponları (örn. <code>ASPAN350</code>,{' '}
-                  <code>SKYALA18</code>), erken rezervasyon otel fırsatları ve fiyat alarmı
-                  bildirimleri SMS, WhatsApp veya e-posta kanalıyla tarafınıza iletilebilir.
-                </p>
-                <p>
-                  Ticari ileti izninizi dilediğiniz zaman Üye Panelinizden veya gelen iletilerdeki
-                  ücretsiz ret bağlantısından tek tıkla iptal edebilirsiniz. (Bilet PNR ve uçuş
-                  bilgilendirme mesajları bilgilendirme amaçlı olup ticari ileti kapsamında değildir.)
-                </p>
-              </>
-            )}
-
-            {activeDoc === 'cookies' && (
-              <>
-                <h2 style={{ marginTop: 0 }}>5. Çerez (Cookie) Aydınlatma Metni</h2>
-                <p>
-                  FlyToAspan web sitesinde güvenli oturum yönetimi, dil ve para birimi tercihlerinizin
-                  (<code>TR / EN / RU / KK</code> ve <code>TRY / USD / EUR / KZT / RUB</code>)
-                  hatırlanması ve uçuş arama hızının optimize edilmesi amacıyla çerezler
-                  kullanılmaktadır:
-                </p>
-                <ul>
-                  <li>
-                    <strong>Zorunlu Oturum &amp; Güvenlik Çerezleri:</strong> 3D Secure ödeme akışı,
-                    bot/saldırı koruması (Cloudflare WAF) ve güvenli üye girişi için zorunludur.
-                  </li>
-                  <li>
-                    <strong>İşlevsel Tercih Çerezleri:</strong> Seçtiğiniz dil, para birimi ve son
-                    baktığınız rotaları tarayıcınızda hatırlar.
-                  </li>
-                </ul>
-              </>
-            )}
+            {doc.closing && <p>{doc.closing}</p>}
 
             <div
               style={{
@@ -311,12 +541,12 @@ export const LegalPages: React.FC<LegalPagesProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <ShieldCheck size={22} color="#00A8B5" />
                 <div>
-                  <strong>FlyToAspan by Infinitive Travel — Hukuk &amp; Müşteri İlişkileri</strong>
+                  <strong>{lu.contactTitle}</strong>
                   <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)' }}>
-                    Almatı, Kazakistan &amp; İstanbul, Türkiye · info@flytoaspan.com
+                    {lu.contactSub}
                   </div>
                   <div style={{ fontSize: 11.5, color: 'var(--aspan-text-muted)', marginTop: 4 }}>
-                    Resmi şirket ve Kazakistan tescil bilgileri güncellenecektir.
+                    {lu.contactNote}
                   </div>
                 </div>
               </div>
