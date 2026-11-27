@@ -473,8 +473,8 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
   return (
     <>
       {/* SUB-TABS NAVIGATION */}
-      <div className="panel-card" style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <div className="panel-card" style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <div className="adm-subtab-bar" role="tablist">
           {(
             [
               { id: 'finance', label: '1. Günlük Finans' },
@@ -491,24 +491,14 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
               <button
                 key={tab.id}
                 type="button"
+                role="tab"
+                aria-selected={active}
+                className={`adm-subtab ${active ? 'active' : ''}`}
                 onClick={() => setSubTab(tab.id)}
-                style={{
-                  padding: '8px 14px',
-                  borderRadius: 10,
-                  fontSize: 12.5,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  border: active ? 'none' : '1px solid var(--aspan-border)',
-                  background: active ? '#0B1E33' : 'var(--aspan-bg-soft)',
-                  color: active ? '#fff' : 'var(--aspan-text)',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
               >
                 {tab.label}
                 {tab.badge !== undefined && tab.badge > 0 && (
-                  <span style={{ background: '#10B981', color: '#fff', borderRadius: 999, padding: '1px 7px', fontSize: 11, fontWeight: 800 }}>
+                  <span style={{ background: '#10B981', color: '#fff', borderRadius: 999, padding: '2px 8px', fontSize: 11.5, fontWeight: 800 }}>
                     {tab.badge}
                   </span>
                 )}
@@ -599,7 +589,9 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
               {[
                 { label: '✈ Uçak Bileti', amount: productTotals.flight, pct: productTotals.flightPct, color: '#10B981' },
                 { label: '🏨 Otel Konaklama', amount: productTotals.hotel, pct: productTotals.hotelPct, color: '#F59E0B' },
-                { label: '🚐 VIP Transfer', amount: productTotals.transfer, pct: productTotals.transferPct, color: '#0284C7' },
+                ...(productTotals.transfer > 0
+                  ? [{ label: '🚐 VIP Transfer', amount: productTotals.transfer, pct: productTotals.transferPct, color: '#0284C7' }]
+                  : []),
                 { label: '🧭 Paket Tur', amount: productTotals.tour, pct: productTotals.tourPct, color: '#7C3AED' },
               ].map((row) => (
                 <div key={row.label}>
@@ -710,7 +702,7 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <input
                 className="modal-input"
-                style={{ width: 220, height: 36, fontSize: 12.5 }}
+                style={{ minWidth: 250, width: 270, height: 38, fontSize: 13 }}
                 placeholder="PNR, yolcu, uçuş, ekip ara..."
                 value={ledgerSearch}
                 onChange={(e) => setLedgerSearch(e.target.value)}

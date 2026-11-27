@@ -1443,10 +1443,11 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                           <button
                             key={st}
                             type="button"
+                            className="adm-kpi-btn"
                             onClick={() => openBookings(st)}
                             style={{
                               textAlign: 'left',
-                              padding: '12px 14px',
+                              padding: '13px 15px',
                               borderRadius: 14,
                               border: `1.5px solid ${vis.border}`,
                               borderLeft: `6px solid ${vis.border}`,
@@ -1894,14 +1895,16 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
 
                     {/* Pill Filters for Type & Status */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {(['ALL', 'Uçak', 'Otel', 'Transfer', 'Tur'] as const).map((t) => {
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {(['ALL', 'Uçak', 'Otel', 'Tur'] as const).map((t) => {
                           const typeLabels: Record<string, string> =
                             activePanelLang === 'EN'
-                              ? { ALL: 'All Services', Uçak: 'Flight', Otel: 'Hotel', Transfer: 'Transfer', Tur: 'Tour' }
+                              ? { ALL: 'All Services', Uçak: 'Flight', Otel: 'Hotel', Tur: 'Tour' }
                               : activePanelLang === 'RU'
-                                ? { ALL: 'Все услуги', Uçak: 'Авиа', Otel: 'Отель', Transfer: 'Трансфер', Tur: 'Тур' }
-                                : { ALL: 'Tüm Hizmetler', Uçak: 'Uçak', Otel: 'Otel', Transfer: 'Transfer', Tur: 'Tur' };
+                                ? { ALL: 'Все услуги', Uçak: 'Авиа', Otel: 'Отель', Tur: 'Тур' }
+                                : activePanelLang === 'KK'
+                                  ? { ALL: 'Барлық қызметтер', Uçak: 'Ұшақ', Otel: 'Қонақүй', Tur: 'Тур' }
+                                  : { ALL: 'Tüm Hizmetler', Uçak: 'Uçak', Otel: 'Otel', Tur: 'Tur' };
                           return (
                             <button
                               key={t}
@@ -1916,13 +1919,20 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                       </div>
 
                       {/* Color-Coded Status Filter Buttons */}
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         <button
                           type="button"
                           className={`sort-pill-btn ${statusFilter === 'ALL' ? 'active' : ''}`}
                           onClick={() => setStatusFilter('ALL')}
                         >
-                          {activePanelLang === 'EN' ? 'All Statuses' : activePanelLang === 'RU' ? 'Все статусы' : 'Tüm Durumlar'} ({bookings.length})
+                          {activePanelLang === 'EN'
+                            ? 'All Statuses'
+                            : activePanelLang === 'RU'
+                              ? 'Все статусы'
+                              : activePanelLang === 'KK'
+                                ? 'Барлық күйлер'
+                                : 'Tüm Durumlar'}{' '}
+                          ({bookings.length})
                         </button>
                         {(
                           [
@@ -1939,15 +1949,17 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                             <button
                               key={st}
                               type="button"
+                              className="adm-kpi-btn"
                               onClick={() => setStatusFilter(st)}
                               style={{
-                                padding: '6px 12px',
-                                borderRadius: 999,
+                                minHeight: 38,
+                                padding: '8px 14px',
+                                borderRadius: 11,
                                 border: `1.5px solid ${vis.border}`,
                                 background: isActive ? vis.border : vis.bg,
                                 color: isActive ? '#ffffff' : vis.badgeColor,
                                 fontWeight: 800,
-                                fontSize: 12,
+                                fontSize: 12.5,
                                 cursor: 'pointer',
                                 display: 'inline-flex',
                                 alignItems: 'center',
@@ -1972,7 +1984,13 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                             className="uf-quick-pill"
                             onClick={resetBookingFilters}
                           >
-                            {activePanelLang === 'EN' ? 'Clear Filters' : activePanelLang === 'RU' ? 'Сбросить фильтры' : 'Filtreleri Temizle'}
+                            {activePanelLang === 'EN'
+                              ? 'Clear Filters'
+                              : activePanelLang === 'RU'
+                                ? 'Сбросить фильтры'
+                                : activePanelLang === 'KK'
+                                  ? 'Сүзгілерді тазалау'
+                                  : 'Filtreleri Temizle'}
                           </button>
                         )}
                       </div>
@@ -1984,7 +2002,9 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                         ? `Showing: ${filteredBookings.length} / ${bookings.length} records`
                         : activePanelLang === 'RU'
                           ? `Показано: ${filteredBookings.length} / ${bookings.length} записей`
-                          : `Gösterilen: ${filteredBookings.length} / ${bookings.length} kayıt`}
+                          : activePanelLang === 'KK'
+                            ? `Көрсетілгені: ${filteredBookings.length} / ${bookings.length} жазба`
+                            : `Gösterilen: ${filteredBookings.length} / ${bookings.length} kayıt`}
                     </div>
 
                     {filteredBookings.length === 0 ? (
@@ -2168,10 +2188,10 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                   }}
                                 >
                                   <div style={{ fontWeight: 800, marginBottom: 6 }}>
-                                    🕒 {activePanelLang === 'EN' ? 'Booking Timeline & Audit History' : activePanelLang === 'RU' ? 'История изменений бронирования' : 'İşlem Geçmişi & Zaman Çizelgesi'}
+                                    🕒 {activePanelLang === 'EN' ? 'Booking Timeline & Audit History' : activePanelLang === 'RU' ? 'История изменений бронирования' : activePanelLang === 'KK' ? 'Брондау тарихы және уақыт шкаласы' : 'İşlem Geçmişi & Zaman Çizelgesi'}
                                   </div>
                                   <div style={{ fontSize: 11.5, color: 'var(--aspan-text-muted)', marginBottom: 4 }}>
-                                    • {formatTrDateTime(b.createdAt)} — {activePanelLang === 'EN' ? 'Created' : activePanelLang === 'RU' ? 'Создано' : 'Oluşturuldu'} ({b.sellerName || b.sellerEmail || 'Web Direkt'})
+                                    • {formatTrDateTime(b.createdAt)} — {activePanelLang === 'EN' ? 'Created' : activePanelLang === 'RU' ? 'Создано' : activePanelLang === 'KK' ? 'Құрылды' : 'Oluşturuldu'} ({b.sellerName || b.sellerEmail || 'Web Direkt'})
                                   </div>
                                   {bookingAuditLogs
                                     .filter((log) => log.target.includes(b.pnr) || log.target.includes(b.id))
@@ -2200,7 +2220,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                     flash(`${b.pnr} (${b.type}) yapıldı / tamamlandı olarak işaretlendi.`);
                                   })}
                                 >
-                                  ✓ {activePanelLang === 'EN' ? 'Done' : activePanelLang === 'RU' ? 'Выполнено' : 'Yapıldı'}
+                                  ✓ {activePanelLang === 'EN' ? 'Done' : activePanelLang === 'RU' ? 'Выполнено' : activePanelLang === 'KK' ? 'Орындалды' : 'Yapıldı'}
                                 </button>
                               )}
                               {!canManageBookings && canCancelRequest && b.status === 'Onaylandı' && (
@@ -2214,7 +2234,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                     flash(`${b.pnr} için merkeze iptal talebi iletildi.`);
                                   })}
                                 >
-                                  {activePanelLang === 'EN' ? 'Request Cancel' : activePanelLang === 'RU' ? 'Запрос отмены' : 'İptal Talebi Oluştur'}
+                                  {activePanelLang === 'EN' ? 'Request Cancel' : activePanelLang === 'RU' ? 'Запрос отмены' : activePanelLang === 'KK' ? 'Бас тарту сұрау' : 'İptal Talebi Oluştur'}
                                 </button>
                               )}
                               <button
@@ -2224,7 +2244,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                               >
                                 <Download size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
                                 {b.demo !== false
-                                  ? (activePanelLang === 'EN' ? 'Demo PDF' : activePanelLang === 'RU' ? 'Демо PDF' : 'Deneme Özeti (PDF)')
+                                  ? (activePanelLang === 'EN' ? 'Demo PDF' : activePanelLang === 'RU' ? 'Демо PDF' : activePanelLang === 'KK' ? 'Демо PDF' : 'Deneme Özeti (PDF)')
                                   : 'PDF E-Bilet'}
                               </button>
                               <button
@@ -2242,8 +2262,8 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                 }}
                               >
                                 {expandedBookingId === b.id
-                                  ? (activePanelLang === 'EN' ? 'Hide History' : activePanelLang === 'RU' ? 'Скрыть историю' : 'Geçmişi Kapat')
-                                  : (activePanelLang === 'EN' ? 'Timeline' : activePanelLang === 'RU' ? 'История' : 'İşlem Geçmişi')}
+                                  ? (activePanelLang === 'EN' ? 'Hide History' : activePanelLang === 'RU' ? 'Скрыть историю' : activePanelLang === 'KK' ? 'Тарихты жасыру' : 'Geçmişi Kapat')
+                                  : (activePanelLang === 'EN' ? 'Timeline' : activePanelLang === 'RU' ? 'История' : activePanelLang === 'KK' ? 'Тарих' : 'İşlem Geçmişi')}
                               </button>
                               {canManageBookings && b.status !== 'İptal Edildi' && (
                                 <button
@@ -2256,7 +2276,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                     flash(`${b.pnr} iptal edildi.`);
                                   })}
                                 >
-                                  ✕ {activePanelLang === 'EN' ? 'Cancel' : activePanelLang === 'RU' ? 'Отменить' : 'İptal'}
+                                  ✕ {activePanelLang === 'EN' ? 'Cancel' : activePanelLang === 'RU' ? 'Отменить' : activePanelLang === 'KK' ? 'Болдырмау' : 'İptal'}
                                 </button>
                               )}
                               {canManageBookings && b.status !== 'İade Edildi' && (
@@ -2271,7 +2291,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                     flash(`${b.pnr} kayıt durumu "İade Edildi" olarak işaretlendi.`);
                                   })}
                                 >
-                                  ↺ {activePanelLang === 'EN' ? 'Mark Refunded (Record)' : activePanelLang === 'RU' ? 'Возврат (запись)' : 'İade İşaretle (Kayıt)'}
+                                  ↺ {activePanelLang === 'EN' ? 'Mark Refunded (Record)' : activePanelLang === 'RU' ? 'Возврат (запись)' : activePanelLang === 'KK' ? 'Қайтарылды (жазба)' : 'İade İşaretle (Kayıt)'}
                                 </button>
                               )}
 
@@ -3611,6 +3631,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 14 }}>
                     <button
                       type="button"
+                      className="adm-kpi-btn"
                       onClick={() => setAgentsTab('users')}
                       style={{
                         textAlign: 'left',
@@ -3636,6 +3657,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
 
                     <button
                       type="button"
+                      className="adm-kpi-btn"
                       onClick={() => setAgentsTab('pending')}
                       style={{
                         textAlign: 'left',
@@ -3661,6 +3683,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
 
                     <button
                       type="button"
+                      className="adm-kpi-btn"
                       onClick={() => setAgentsTab('users')}
                       style={{
                         textAlign: 'left',
@@ -3773,61 +3796,37 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                   </div>
 
                   {/* SUB-TABS & SEARCH BAR */}
-                  <div className="panel-card" style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <div className="panel-card" style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                    <div className="adm-subtab-bar" role="tablist">
                       <button
                         type="button"
+                        role="tab"
+                        aria-selected={agentsTab === 'pending'}
+                        className={`adm-subtab ${agentsTab === 'pending' ? 'active' : ''}`}
                         onClick={() => setAgentsTab('pending')}
-                        style={{
-                          padding: '8px 14px',
-                          borderRadius: 10,
-                          fontSize: 12.5,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          border: agentsTab === 'pending' ? 'none' : '1px solid var(--aspan-border)',
-                          background: agentsTab === 'pending' ? '#0B1E33' : 'var(--aspan-bg-soft)',
-                          color: agentsTab === 'pending' ? '#fff' : 'var(--aspan-text)',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 7,
-                        }}
                       >
                         Onay Bekleyenler
                         {pendingUsers.length > 0 && (
-                          <span style={{ background: '#10B981', color: '#fff', borderRadius: 999, padding: '1px 7px', fontSize: 11, fontWeight: 800 }}>
+                          <span style={{ background: '#10B981', color: '#fff', borderRadius: 999, padding: '2px 8px', fontSize: 11.5, fontWeight: 800 }}>
                             {pendingUsers.length}
                           </span>
                         )}
                       </button>
                       <button
                         type="button"
+                        role="tab"
+                        aria-selected={agentsTab === 'users'}
+                        className={`adm-subtab ${agentsTab === 'users' ? 'active' : ''}`}
                         onClick={() => setAgentsTab('users')}
-                        style={{
-                          padding: '8px 14px',
-                          borderRadius: 10,
-                          fontSize: 12.5,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          border: agentsTab === 'users' ? 'none' : '1px solid var(--aspan-border)',
-                          background: agentsTab === 'users' ? '#0B1E33' : 'var(--aspan-bg-soft)',
-                          color: agentsTab === 'users' ? '#fff' : 'var(--aspan-text)',
-                        }}
                       >
                         Ekip &amp; Üyeler ({managedUsers.length})
                       </button>
                       <button
                         type="button"
+                        role="tab"
+                        aria-selected={agentsTab === 'orgs'}
+                        className={`adm-subtab ${agentsTab === 'orgs' ? 'active' : ''}`}
                         onClick={() => setAgentsTab('orgs')}
-                        style={{
-                          padding: '8px 14px',
-                          borderRadius: 10,
-                          fontSize: 12.5,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          border: agentsTab === 'orgs' ? 'none' : '1px solid var(--aspan-border)',
-                          background: agentsTab === 'orgs' ? '#0B1E33' : 'var(--aspan-bg-soft)',
-                          color: agentsTab === 'orgs' ? '#fff' : 'var(--aspan-text)',
-                        }}
                       >
                         Şirketler &amp; Acenteler ({organizations.length})
                       </button>
