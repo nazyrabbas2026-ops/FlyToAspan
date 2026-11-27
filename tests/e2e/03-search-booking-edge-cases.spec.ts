@@ -100,7 +100,7 @@ test.describe('3. Arama, Rezervasyon, Sınır Durumları ve Mükerrer Kayıt Kon
     await expect(page.locator('[role="alert"]')).toBeVisible();
   });
 
-  test('Hotel & Transfer demo bookings + API boundary date checks & idempotency dedup', async ({ page, request }) => {
+  test('Hotel & Package Tour demo bookings + API boundary date checks & idempotency dedup', async ({ page, request }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
 
     // 1. Hotel booking via UI
@@ -116,18 +116,13 @@ test.describe('3. Arama, Rezervasyon, Sınır Durumları ve Mükerrer Kayıt Kon
     const hotelPnr = (await page.locator('[role="dialog"] [role="status"] strong').first().textContent())?.trim() || '';
     expect(hotelPnr).toMatch(/^FT[A-Z0-9]{6}$/);
 
-    // 2. Transfer booking via UI
+    // 2. Package Tour navigation via UI (Transfer tab removed)
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await waitSplashGone(page);
     await page.locator('.u4-tab-btn').nth(2).click();
     await page.locator('.u4-submit-btn').first().click();
-    await expect(page.locator('.flight-card').first()).toBeVisible({ timeout: 10_000 });
-    await page.locator('.flight-card button').first().click();
-    await page.fill('input[name="firstName"]', 'Zeynep');
-    await page.fill('input[name="surname"]', 'Demir');
-    await page.locator('[role="dialog"] button[type="submit"]').click();
-    const trPnr = (await page.locator('[role="dialog"] [role="status"] strong').first().textContent())?.trim() || '';
-    expect(trPnr).toMatch(/^FT[A-Z0-9]{6}$/);
+    await expect(page).toHaveURL(/\/turlar/);
+    await expect(page.locator('h1').first()).toContainText(/Tur/i);
 
     // 3. Boundary checks on API: returnDate before date -> 400
     const badReturn = await request.post('/api/bookings', {

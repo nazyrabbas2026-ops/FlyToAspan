@@ -58,9 +58,9 @@ export interface AdminCatalog {
   rules: { id: string; carrier: string; route: string; rule: string }[];
   coupons: { id: string; code: string; title: string; category: string; validUntil: string; active: boolean }[];
   agencies: { id: string; name: string; type: string; contact: string; creditLimitTRY: number; miles: number; status: string }[];
-  hotels: { id: string; city: string; name: string; stars: number; boardType: string; nights: number; price: number; image?: string; active: boolean }[];
+  hotels: { id: string; country?: string; city: string; name: string; stars: number; boardType: string; nights: number; price: number; image?: string; provider?: string; active: boolean }[];
   transfers: { id: string; city: string; vehicle: string; route: string; capacity: string; baggage: string; price: number; image?: string; active: boolean }[];
-  tours: { id: string; city: string; title: string; duration: string; includes?: string; quota: number; price: number; image?: string; active: boolean }[];
+  tours: { id: string; country?: string; city: string; title: string; duration: string; includes?: string; quota: number; price: number; image?: string; provider?: string; active: boolean }[];
   deals: {
     id: string;
     fromCity: string;
@@ -172,6 +172,44 @@ export const api = {
   adminAuditLogs: (signal?: AbortSignal) => request<{ logs: AuditLogEntry[] }>('/admin/audit', 'GET', undefined, signal),
   adminServerInfo: (signal?: AbortSignal) => request<{ outboundIp: string; host: string; protocol: string }>('/admin/server-info', 'GET', undefined, signal),
   testProviderConnection: (url: string) => request<{ ok: boolean; status: number; latencyMs: number; message: string }>('/admin/providers/test', 'POST', { url }),
+  xmlShowcaseStatus: (signal?: AbortSignal) =>
+    request<{
+      status: {
+        lastSyncAt: string;
+        nextSyncAt: string;
+        lastSyncMs: number;
+        trigger: string;
+        autoEnabled: boolean;
+        intervalHours: number;
+        mode: string;
+        hotelsCount: number;
+        toursCount: number;
+        hotelCountries: string[];
+        tourCountries: string[];
+        providerLogs: Array<{ provider: string; ok: boolean; hotelsFound: number; toursFound: number; note?: string }>;
+      };
+      hotels: AdminCatalog['hotels'];
+      tours: AdminCatalog['tours'];
+    }>('/admin/xml-showcase/status', 'GET', undefined, signal),
+  syncXmlShowcase: () =>
+    request<{
+      status: {
+        lastSyncAt: string;
+        nextSyncAt: string;
+        lastSyncMs: number;
+        trigger: string;
+        autoEnabled: boolean;
+        intervalHours: number;
+        mode: string;
+        hotelsCount: number;
+        toursCount: number;
+        hotelCountries: string[];
+        tourCountries: string[];
+        providerLogs: Array<{ provider: string; ok: boolean; hotelsFound: number; toursFound: number; note?: string }>;
+      };
+      hotels: AdminCatalog['hotels'];
+      tours: AdminCatalog['tours'];
+    }>('/admin/xml-showcase/sync', 'POST', {}),
 };
 
 export type BookingDraft = Pick<BookingRecord, 'type' | 'title' | 'subtitle' | 'date' | 'returnDate' | 'passenger' | 'passengersDetail' | 'legs' | 'contactEmail' | 'contactPhone' | 'providerSource' | 'netCostTRY' | 'profitTRY' | 'price' | 'departTime' | 'arriveTime' | 'flightNumber' | 'airline' | 'baggage' | 'cabin' | 'duration'> & {

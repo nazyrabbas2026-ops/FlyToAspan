@@ -4,10 +4,12 @@ import { createServer } from 'node:http';
 import { extname, resolve } from 'node:path';
 import { createApi, normalizeEmail, checkPassword } from './api.mjs';
 import { createAccount, openDatabase } from './store.mjs';
+import { startDailyXmlShowcaseScheduler } from './xml-showcase.mjs';
 
 const buildDirectory = resolve(process.env.FLYTOASPAN_DIST || 'dist');
 const db = openDatabase();
 const api = createApi({ db });
+startDailyXmlShowcaseScheduler(db);
 
 // Optional zero-shell initial admin bootstrap for Docker / Render Free Tier
 if (process.env.FLYTOASPAN_ADMIN_EMAIL && process.env.FLYTOASPAN_ADMIN_PASSWORD) {
@@ -69,6 +71,8 @@ const server = createServer({ requestTimeout: 20_000, headersTimeout: 10_000 }, 
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src 'self' https://open.er-api.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
       'Cache-Control': path.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
     });
     if (req.method === 'HEAD') res.end();

@@ -170,7 +170,7 @@ const FLIGHT_RESULTS_I18N: Record<
     fullNamePh: 'Ad Soyad',
     emailLbl: 'E-Posta Adresi *',
     phoneLbl: 'Telefon Numarası *',
-    demoNote: 'Bilgileriniz 256-Bit SSL, 3D Secure ve IATA/TÜRSAB acente güvencesiyle korunmaktadır.',
+    demoNote: 'Deneme rezervasyon modu: 256-Bit SSL altyapısı hazırdır; bu aşamada kart tahsilatı yapılmaz ve gerçek bilet kesilmez.',
     completeBtn: 'Deneme rezervasyonunu kaydet',
   },
   EN: {
@@ -230,7 +230,7 @@ const FLIGHT_RESULTS_I18N: Record<
     fullNamePh: 'First & Last Name',
     emailLbl: 'E-Mail Address *',
     phoneLbl: 'Phone Number *',
-    demoNote: 'Protected by 256-Bit SSL, 3D Secure and IATA/TURSAB accredited agency guarantee.',
+    demoNote: 'Demo booking mode: 256-Bit SSL infrastructure is active; no card is charged and no live airline ticket is issued yet.',
     completeBtn: 'Save demo booking',
   },
   RU: {
@@ -1582,7 +1582,15 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                     {bookingError && <p className="form-action-error" role="alert">{bookingError}</p>}
                     <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: 'var(--aspan-text-muted)', marginBottom: 12, cursor: 'pointer' }}>
                       <input type="checkbox" required defaultChecked style={{ marginTop: 2 }} />
-                      <span>Kullanım Koşulları, Havayolu Taşıma Kuralları ve KVKK Aydınlatma Metni’ni onaylıyorum.</span>
+                      <span>
+                        {lang === 'EN'
+                          ? 'I agree to the Terms of Use, Airline Carriage Rules, and Privacy Policy.'
+                          : lang === 'RU'
+                            ? 'Я принимаю Условия использования, правила авиаперевозки и Политику конфиденциальности.'
+                            : lang === 'KK'
+                              ? 'Пайдалану шарттары, әуе тасымалы ережелері және Құпиялылық саясатымен келісемін.'
+                              : 'Kullanım Koşulları, Havayolu Taşıma Kuralları ve KVKK Aydınlatma Metni’ni onaylıyorum.'}
+                      </span>
                     </label>
                     <button type="submit" className="uf-cc-pay-btn" disabled={bookingPending}>
                       <Check size={18} />

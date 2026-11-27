@@ -31,16 +31,14 @@ test.describe('2. Butonlar, Formlar, Gezinme, Çerezler, Dil/Kur ve Erişilebili
     await page.goForward();
     await expect(page).toHaveURL(/\/online-check-in/);
 
-    // Home tabs (Uçak / Otel / Transfer / Turlar)
+    // Home tabs (Uçak / Otel / Paket Turlar)
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await waitSplashGone(page);
+    await expect(page.locator('.u4-tab-btn')).toHaveCount(3);
     await page.locator('.u4-tab-btn').nth(1).click();
     await expect(page.locator('.u4-submit-btn').first()).toBeVisible();
 
     await page.locator('.u4-tab-btn').nth(2).click();
-    await expect(page.locator('.u4-submit-btn').first()).toBeVisible();
-
-    await page.locator('.u4-tab-btn').nth(3).click();
     await expect(page.locator('.u4-submit-btn').first()).toBeVisible();
 
     // Mobile drawer open & close at 390px

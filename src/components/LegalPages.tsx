@@ -151,27 +151,27 @@ export const LegalPages: React.FC<LegalPagesProps> = ({
                   1. Kullanım Koşulları ve Mesafeli Hizmet / Bilet Satış Sözleşmesi
                 </h2>
                 <p>
-                  İşbu sözleşme, bir tarafta <strong>FlyToAspan by Infinitive Travel</strong> (TÜRSAB
-                  ve IATA standartlarında faaliyet gösteren yetkili seyahat acentesi, İletişim:{' '}
+                  İşbu sözleşme, bir tarafta <strong>FlyToAspan by Infinitive Travel</strong>{' '}
+                  (Kazakistan ve uluslararası seyahat standartlarında faaliyet gösteren seyahat
+                  platformu, İletişim:{' '}
                   <strong>{PHONE_DISPLAY}</strong>, E-posta: <strong>info@flytoaspan.com</strong>) ile
                   diğer tarafta FlyToAspan web sitesi üzerinden uçak bileti, otel konaklaması veya
-                  VIP havalimanı transferi satın alan <strong>Yolcu / Tüketici</strong> arasında
-                  6502 sayılı Tüketicinin Korunması Hakkında Kanun ve Mesafeli Sözleşmeler
-                  Yönetmeliği uyarınca elektronik ortamda akdedilmiştir.
+                  paket tur satın alan <strong>Yolcu / Tüketici</strong> arasında elektronik ortamda
+                  akdedilmiştir.
                 </p>
                 <h4>1.1. Hizmetin Niteliği ve Biletleme</h4>
                 <p>
                   FlyToAspan; ulusal ve uluslararası havayollarının (THY, Pegasus, AJet, SunExpress,
-                  Air Astana, FlyArystan, Lufthansa, Emirates vb.), konaklama tesislerinin ve VIP
-                  transfer sağlayıcılarının tarifeli/charter seferlerini GDS ve B2B sistemleri
-                  üzerinden anlık olarak listeleyen ve biletleme aracılık hizmeti sunan dijital
-                  seyahat platformudur.
+                  Air Astana, FlyArystan, Lufthansa, Emirates vb.), konaklama tesislerinin ve paket
+                  tur operatörlerinin tarifeli/charter seferlerini GDS ve XML sistemleri üzerinden
+                  anlık olarak listeleyen ve biletleme aracılık hizmeti sunan dijital seyahat
+                  platformudur.
                 </p>
                 <h4>1.2. Fiyatlandırma ve 3D Secure Ödeme Güvenliği</h4>
                 <p>
-                  Ekranda görüntülenen toplam bilet, otel veya transfer bedeline ilgili vergiler ve
+                  Ekranda görüntülenen toplam bilet, otel veya paket tur bedeline ilgili vergiler ve
                   acente hizmet bedeli (Service Fee) dahildir. Tüm ödemeler 256-Bit SSL şifreleme ve
-                  banka <strong>3D Secure</strong> SMS doğrulaması ile tahsil edilir; kredi kartı
+                  banka <strong>3D Secure</strong> doğrulaması ile tahsil edilir; kredi kartı
                   numarası ve CVV bilgileri hiçbir şekilde FlyToAspan sunucularında saklanmaz.
                 </p>
               </>
@@ -193,12 +193,12 @@ export const LegalPages: React.FC<LegalPagesProps> = ({
                   <li>
                     <strong>Kimlik ve Seyahat Belgeleri:</strong> Ad, soyad, doğum tarihi, uyruk, T.C.
                     Kimlik Numarası veya Pasaport numarası (yalnızca havayolu PNR/E-Bilet kesimi ve
-                    otel/transfer rezervasyonunun resmi olarak oluşturulması amacıyla işlenir).
+                    otel/paket tur rezervasyonunun resmi olarak oluşturulması amacıyla işlenir).
                   </li>
                   <li>
                     <strong>İletişim Bilgileri:</strong> E-posta adresi ve cep telefonu numarası
-                    (PNR kodu, E-Bilet PDF belgesi, uçuş rötar/kapı bildirimleri ve VIP transfer
-                    şoför karşılama bilgilerinin iletilmesi amacıyla).
+                    (PNR kodu, E-Bilet PDF belgesi, uçuş rötar/kapı bildirimleri ve tur operasyon
+                    bilgilerinin iletilmesi amacıyla).
                   </li>
                   <li>
                     <strong>İşlem Güvenliği:</strong> IP adresi, oturum logları ve 5651 sayılı kanun
@@ -241,8 +241,8 @@ export const LegalPages: React.FC<LegalPagesProps> = ({
                     kesintisiz iade ayrıcalığı sağlar.
                   </li>
                   <li>
-                    <strong>VIP Transfer &amp; Otel İptali:</strong> Transfer saatine 24 saat
-                    kalana kadar yapılan iptallerde %100 kesintisiz iade yapılır.
+                    <strong>Paket Tur &amp; Otel İptali:</strong> İlgili otel veya tur operatörünün
+                    ücretsiz iptal süresi içinde yapılan iptallerde kesintisiz iade sağlanır.
                   </li>
                 </ul>
                 <p>
@@ -313,10 +313,10 @@ export const LegalPages: React.FC<LegalPagesProps> = ({
                 <div>
                   <strong>FlyToAspan by Infinitive Travel — Hukuk &amp; Müşteri İlişkileri</strong>
                   <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)' }}>
-                    İstanbul, Türkiye &amp; Almatı, Kazakistan · info@flytoaspan.com
+                    Almatı, Kazakistan &amp; İstanbul, Türkiye · info@flytoaspan.com
                   </div>
                   <div style={{ fontSize: 11.5, color: 'var(--aspan-text-muted)', marginTop: 4 }}>
-                    TÜRSAB Belge No: Bilgi bekleniyor · MERSİS / Vergi No: Bilgi bekleniyor · Açık Adres: Bilgi bekleniyor
+                    Resmi şirket ve Kazakistan tescil bilgileri güncellenecektir.
                   </div>
                 </div>
               </div>

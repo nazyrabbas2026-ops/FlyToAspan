@@ -34,6 +34,7 @@ import {
   formatPrice,
 } from '../data/mockData';
 import { resolveCityImage, resolveRegionColor } from '../utils/cityImages';
+import { localizeXmlText } from '../utils/localizeXmlText';
 import { PHONE_DISPLAY, PHONE_HREF, PHONE_SHORT, TRANSLATIONS, WA_HREF } from '../i18n/translations';
 import { AdminMarkupConfig, CurrencyCode, LangCode, PageView } from '../types';
 import type { AdminCatalog } from '../data/api';
@@ -82,7 +83,7 @@ const CONTENT_I18N: Record<
   }
 > = {
   TR: {
-    license: 'FLYTOASPAN BY INFINITIVE TRAVEL • TÜRSAB & IATA YETKİLİ ACENTE',
+    license: 'FLYTOASPAN BY INFINITIVE TRAVEL • GLOBAL SEYAHAT PLATFORMU',
     codeLbl: 'KOD',
     bestPricePill: 'EN UYGUN FİYAT',
     nightsLbl: 'gece',
@@ -117,32 +118,11 @@ const CONTENT_I18N: Record<
         subtitle: CAMPAIGNS[3].subtitle,
       },
     },
-    transfers: {
-      'trf-ist': {
-        city: 'İSTANBUL',
-        route: 'IST Havalimanı → Taksim / Şişli',
-        specs: '1–4 Yolcu · 4 Bavul · Özel VIP · Sabit Fiyat',
-      },
-      'trf-ayt': {
-        city: 'ANTALYA',
-        route: 'AYT Havalimanı → Belek / Lara',
-        specs: '1–4 Yolcu · 4 Bavul · Özel VIP · İkramlı · Wi-Fi',
-      },
-      'trf-bjv': {
-        city: 'BODRUM',
-        route: 'BJV Havalimanı → Yalıkavak / Merkez',
-        specs: '1–3 Yolcu · 3 Bavul · Executive Sedan · Şoförlü',
-      },
-      'trf-ala': {
-        city: 'ALMATI',
-        route: 'ALA Havalimanı → Şehir Merkezi',
-        specs: '1–6 Yolcu · 6 Bavul · Aile & İş · İsimle Karşılama',
-      },
-    },
+    transfers: {},
     whyCols: [
       {
         title: 'Güvenli Alışveriş',
-        desc: 'Uçak bileti, otel rezervasyonu ve havalimanı transfer işlemleriniz uluslararası güvenlik standartlarıyla koruma altında.',
+        desc: 'Uçak bileti, otel rezervasyonu ve paket tur işlemleriniz uluslararası güvenlik standartlarıyla koruma altında.',
         link: '3D Secure ile korunur',
       },
       {
@@ -151,9 +131,9 @@ const CONTENT_I18N: Record<
         link: 'Fırsatları gör',
       },
       {
-        title: 'Taksit İmkânı',
-        desc: 'Tüm uçuş, konaklama ve transfer harcamalarınızda anlaşmalı kredi kartlarına 9 aya varan taksit seçeneklerinden yararlanın.',
-        link: 'Tüm kartlara taksit',
+        title: 'Esnek Ödeme Seçenekleri',
+        desc: 'Tüm uçuş, konaklama ve paket tur harcamalarınızda uluslararası kartlar ve Kazakistan bankalarıyla güvenli ödeme yapın.',
+        link: 'Fırsatları incele',
       },
       {
         title: '7/24 Çağrı Merkezi',
@@ -164,7 +144,7 @@ const CONTENT_I18N: Record<
     aboutFeatures: [
       {
         title: 'Bireysel Seyahatlerde Acente Güvencesi',
-        desc: 'TÜRSAB ve IATA yetkili acente ayrıcalığıyla Türkiye, Orta Asya ve Avrupa başta olmak üzere dünya genelinde kesintisiz 7/24 seyahat danışmanlığı sunuyoruz.',
+        desc: 'Infinitive Travel güvencesiyle Kazakistan, Türkiye, Orta Asya ve Avrupa başta olmak üzere dünya genelinde kesintisiz 7/24 seyahat danışmanlığı sunuyoruz.',
       },
       {
         title: 'Kurumsal Seyahat Portalı',
@@ -186,7 +166,7 @@ const CONTENT_I18N: Record<
     faqs: FAQ_ITEMS,
   },
   EN: {
-    license: 'FLYTOASPAN BY INFINITIVE TRAVEL • IATA & TURSAB ACCREDITED AGENCY',
+    license: 'FLYTOASPAN BY INFINITIVE TRAVEL • GLOBAL TRAVEL PLATFORM',
     codeLbl: 'CODE',
     bestPricePill: 'BEST PRICE',
     nightsLbl: 'nights',
@@ -231,40 +211,19 @@ const CONTENT_I18N: Record<
       'cmp-3': {
         badge: 'EARLY BOOKING',
         title: 'Up to 30% Off Selected 5-Star Hotels',
-        subtitle: 'Free cancellation and flexible installments at top resorts in Antalya, Bodrum, and Dubai.',
+        subtitle: 'Free cancellation and flexible options at top resorts in Antalya, Bodrum, and Dubai.',
       },
       'cmp-4': {
-        badge: 'VIP MEET & GREET',
-        title: '25% Off VIP Airport Transfers with Flight Tickets',
-        subtitle: 'Fixed fares, live flight tracking, and door-to-door comfort in luxury Mercedes VIP vehicles.',
+        badge: 'PACKAGE TOUR DEAL',
+        title: '20% Off Flight + Hotel Package Tours in 4 Countries',
+        subtitle: 'Daily XML-updated package tours across Turkey, Kazakhstan, Egypt, and Dubai.',
       },
     },
-    transfers: {
-      'trf-ist': {
-        city: 'ISTANBUL',
-        route: 'IST Airport → Taksim / Sisli',
-        specs: '1–4 Pax · 4 Bags · Private VIP · Fixed Price',
-      },
-      'trf-ayt': {
-        city: 'ANTALYA',
-        route: 'AYT Airport → Belek / Lara',
-        specs: '1–4 Pax · 4 Bags · Private VIP · Wi-Fi',
-      },
-      'trf-bjv': {
-        city: 'BODRUM',
-        route: 'BJV Airport → Yalikavak / Center',
-        specs: '1–3 Pax · 3 Bags · Executive Sedan · Chauffeur',
-      },
-      'trf-ala': {
-        city: 'ALMATY',
-        route: 'ALA Airport → City Center',
-        specs: '1–6 Pax · 6 Bags · Family & Business · Meet & Greet',
-      },
-    },
+    transfers: {},
     whyCols: [
       {
         title: 'Secure Booking',
-        desc: 'All flight tickets, hotel reservations, and airport transfers are protected by 256-bit SSL and 3D Secure standards.',
+        desc: 'All flight tickets, hotel reservations, and package tours are protected by 256-bit SSL and 3D Secure standards.',
         link: 'Protected by 3D Secure',
       },
       {
@@ -273,9 +232,9 @@ const CONTENT_I18N: Record<
         link: 'Explore deals',
       },
       {
-        title: 'Flexible Installments',
-        desc: 'Enjoy up to 9 monthly installment options on major credit cards across flights, hotels, and VIP transfers.',
-        link: 'Installment options',
+        title: 'Flexible Payments',
+        desc: 'Pay seamlessly with global cards and leading Kazakhstan banks across flights, hotels, and package tours.',
+        link: 'View offers',
       },
       {
         title: '24/7 Call Center',
@@ -285,8 +244,8 @@ const CONTENT_I18N: Record<
     ],
     aboutFeatures: [
       {
-        title: 'Accredited Agency Protection for Travelers',
-        desc: 'With TURSAB & IATA accreditation, we provide 24/7 travel assistance across Turkey, Central Asia, Europe, and worldwide.',
+        title: 'Trusted Agency Support for Travelers',
+        desc: 'Backed by Infinitive Travel, we provide 24/7 travel assistance across Kazakhstan, Turkey, Central Asia, Europe, and worldwide.',
       },
       {
         title: 'Corporate Travel Management Portal',
@@ -319,17 +278,17 @@ const CONTENT_I18N: Record<
         a: 'Visit the "Manage Booking" page in the top navigation and enter your PNR code and surname. You can request changes or cancellations online according to your fare rules or contact our 24/7 call center for instant assistance.',
       },
       {
-        q: 'How does VIP airport transfer booking work?',
-        a: 'Simply choose your airport and hotel/address, date, and pickup time in the Transfer tab. Your flight number is tracked live—even if your flight is delayed, your chauffeur will greet you at the terminal exit with a name sign at a fixed price.',
+        q: 'What is included in Package Tours and how are prices updated?',
+        a: 'Our package tours combine flights and handpicked hotel stays in one bundle. Our system scans XML tour operators daily and automatically showcases the best-value packages from 4 different countries.',
       },
       {
         q: 'When does online check-in open?',
-        a: 'For most airlines, online check-in opens 24 to 48 hours before departure and closes 60–90 minutes prior to takeoff. Use our "Online Check-In" page to jump directly to your airline’s official check-in portal.',
+        a: 'For scheduled (regular) flights, online check-in opens 24–48 hours before departure. For charter flights (e.g., Turkish Airlines charter), online check-in may not be available and check-in is completed at the airport counter. See our Online Check-In page for full rules.',
       },
     ],
   },
   RU: {
-    license: 'FLYTOASPAN BY INFINITIVE TRAVEL • АККРЕДИТОВАННОЕ АГЕНТСТВО IATA & TURSAB',
+    license: 'FLYTOASPAN BY INFINITIVE TRAVEL • МЕЖДУНАРОДНАЯ ПЛАТФОРМА ПУТЕШЕСТВИЙ',
     codeLbl: 'КОД',
     bestPricePill: 'ЛУЧШАЯ ЦЕНА',
     nightsLbl: 'ночи',
@@ -385,40 +344,19 @@ const CONTENT_I18N: Record<
       'cmp-3': {
         badge: 'РАННЕЕ БРОНИРОВАНИЕ',
         title: 'Скидки до 30% на избранные отели 5★',
-        subtitle: 'Бесплатная отмена и рассрочка в лучших отелях Антальи, Бодрума и Дубая.',
+        subtitle: 'Бесплатная отмена и выгодные условия в лучших отелях Антальи, Бодрума и Дубая.',
       },
       'cmp-4': {
-        badge: 'VIP ВСТРЕЧА',
-        title: 'Скидка 25% на VIP-трансфер при покупке авиабилета',
-        subtitle: 'Фиксированная цена, отслеживание рейса и комфорт на автомобилях Mercedes VIP.',
+        badge: 'ПАКЕТНЫЕ ТУРЫ',
+        title: 'Выгода 20% на пакетные туры в 4 странах',
+        subtitle: 'Перелёт + отель с ежедневным автоматическим обновлением цен из XML.',
       },
     },
-    transfers: {
-      'trf-ist': {
-        city: 'СТАМБУЛ',
-        route: 'Аэропорт IST → Таксим / Шишли',
-        specs: '1–4 пасс. · 4 чемодана · VIP · Фикс. цена',
-      },
-      'trf-ayt': {
-        city: 'АНТАЛЬЯ',
-        route: 'Аэропорт AYT → Белек / Лара',
-        specs: '1–4 пасс. · 4 чемодана · VIP SUV · Wi-Fi',
-      },
-      'trf-bjv': {
-        city: 'БОДРУМ',
-        route: 'Аэропорт BJV → Ялыкавак / Центр',
-        specs: '1–3 пасс. · 3 чемодана · Бизнес-седан',
-      },
-      'trf-ala': {
-        city: 'АЛМАТЫ',
-        route: 'Аэропорт ALA → Центр города',
-        specs: '1–6 пасс. · 6 чемоданов · Встреча с табличкой',
-      },
-    },
+    transfers: {},
     whyCols: [
       {
         title: 'Безопасная покупка',
-        desc: 'Авиабилеты, бронирование отелей и трансферы защищены международными стандартами безопасности 3D Secure.',
+        desc: 'Авиабилеты, бронирование отелей и пакетные туры защищены международными стандартами безопасности 3D Secure.',
         link: 'Защита 3D Secure',
       },
       {
@@ -428,7 +366,7 @@ const CONTENT_I18N: Record<
       },
       {
         title: 'Удобная оплата',
-        desc: 'Оплачивайте перелеты, отели и VIP-трансферы банковскими картами с выгодными условиями.',
+        desc: 'Оплачивайте перелеты, отели и пакетные туры картами международных систем и банков Казахстана (Kaspi, Halyk, Freedom, BCC).',
         link: 'Все акции',
       },
       {
@@ -439,8 +377,8 @@ const CONTENT_I18N: Record<
     ],
     aboutFeatures: [
       {
-        title: 'Надежность аккредитованного агентства',
-        desc: 'Гарантия IATA и TURSAB: круглосуточная поддержка путешественников по Турции, Центральной Азии, Европе и всему миру.',
+        title: 'Надежность и поддержка 24/7',
+        desc: 'С поддержкой Infinitive Travel обеспечиваем круглосуточное сопровождение путешественников в Казахстане, Турции, Центральной Азии и Европе.',
       },
       {
         title: 'Корпоративный портал для бизнеса',
@@ -473,17 +411,17 @@ const CONTENT_I18N: Record<
         a: 'Перейдите в раздел «Мои билеты» в верхнем меню и введите код бронирования (PNR) и фамилию пассажира. Вы можете отправить запрос онлайн или обратиться в нашу службу поддержки 24/7.',
       },
       {
-        q: 'Как проходит VIP-трансфер из аэропорта?',
-        a: 'Выберите аэропорт, адрес отеля, дату и время во вкладке «Трансфер». Мы отслеживаем ваш рейс: даже при задержке водитель встретит вас у выхода из терминала с именной табличкой по фиксированной цене.',
+        q: 'Что входит в пакетные туры и как обновляются цены?',
+        a: 'Пакетные туры включают перелёт и проживание в проверенных отелях. Система ежедневно проверяет XML-цены и автоматически выводит на витрину лучшие туры по 4 странам.',
       },
       {
         q: 'Когда открывается онлайн-регистрация на рейс?',
-        a: 'У большинства авиакомпаний онлайн-регистрация открывается за 24–48 часов и закрывается за 60–90 минут до вылета. На странице «Онлайн-регистрация» вы можете сразу перейти на сайт нужного перевозчика.',
+        a: 'На регулярных рейсах онлайн-регистрация открывается за 24–48 часов до вылета. На чартерных рейсах (например, чартеры Turkish Airlines) онлайн-регистрация может быть недоступна, а выбор места оплачивается отдельно. Подробности на странице «Онлайн-регистрация».',
       },
     ],
   },
   KK: {
-    license: 'FLYTOASPAN BY INFINITIVE TRAVEL • IATA ЖӘНЕ TURSAB РЕСМИ АГЕНТТІГІ',
+    license: 'FLYTOASPAN BY INFINITIVE TRAVEL • ХАЛЫҚАРАЛЫҚ САЯХАТ ПЛАТФОРМАСЫ',
     codeLbl: 'КОД',
     bestPricePill: 'ЕҢ ТИІМДІ БАҒА',
     nightsLbl: 'түн',
@@ -542,37 +480,16 @@ const CONTENT_I18N: Record<
         subtitle: 'Анталия, Бодрум және Дубайдың үздік қонақүйлерінде тегін бас тарту мүмкіндігі.',
       },
       'cmp-4': {
-        badge: 'VIP ҚАРСЫ АЛУ',
-        title: 'Ұшақ билетін алғандарға әуежай VIP трансферінде 25% жеңілдік',
-        subtitle: 'Mercedes VIP көліктерімен тұрақты баға, рейсті бақылау және жайлы сапар.',
+        badge: 'ПАКЕТТІК ТУРЛАР',
+        title: '4 елдегі ұшақ + қонақүй пакеттік турларында 20% тиімділік',
+        subtitle: 'XML арқылы күн сайын жаңаратын Түркия, Қазақстан, Мысыр және Дубай турлары.',
       },
     },
-    transfers: {
-      'trf-ist': {
-        city: 'ЫСТАМБҰЛ',
-        route: 'IST Әуежайы → Таксим / Шишли',
-        specs: '1–4 жолаушы · 4 жүк · Жеке VIP · Тұрақты баға',
-      },
-      'trf-ayt': {
-        city: 'АНТАЛИЯ',
-        route: 'AYT Әуежайы → Белек / Лара',
-        specs: '1–4 жолаушы · 4 жүк · VIP SUV · Wi-Fi',
-      },
-      'trf-bjv': {
-        city: 'БОДРУМ',
-        route: 'BJV Әуежайы → Ялыкавак / Орталық',
-        specs: '1–3 жолаушы · 3 жүк · Бизнес седан',
-      },
-      'trf-ala': {
-        city: 'АЛМАТЫ',
-        route: 'ALA Әуежайы → Қала орталығы',
-        specs: '1–6 жолаушы · 6 жүк · Атымен қарсы алу',
-      },
-    },
+    transfers: {},
     whyCols: [
       {
         title: 'Қауіпсіз сатып алу',
-        desc: 'Әуе билеті, қонақүй және әуежай трансфері халықаралық 3D Secure қауіпсіздік стандарттарымен қорғалған.',
+        desc: 'Әуе билеті, қонақүй және пакеттік турлар халықаралық 3D Secure қауіпсіздік стандарттарымен қорғалған.',
         link: '3D Secure қорғанысы',
       },
       {
@@ -581,8 +498,8 @@ const CONTENT_I18N: Record<
         link: 'Науқандарды көру',
       },
       {
-        title: 'Бөліп төлеу мүмкіндігі',
-        desc: 'Барлық ұшу, қонақүй және VIP трансфер төлемдерінде ыңғайлы төлем тәсілдерін пайдаланыңыз.',
+        title: 'Ыңғайлы төлем тәсілдері',
+        desc: 'Ұшу, қонақүй және пакеттік турларды халықаралық карталар мен Қазақстан банктері арқылы қауіпсіз төлеңіз.',
         link: 'Барлық науқандар',
       },
       {
@@ -593,8 +510,8 @@ const CONTENT_I18N: Record<
     ],
     aboutFeatures: [
       {
-        title: 'Жеке саяхатта ресми агенттік кепілдігі',
-        desc: 'TÜRSAB және IATA ресми агенттігі ретінде Түркия, Орталық Азия және Еуропа бойынша 24/7 үздіксіз қолдау көрсетеміз.',
+        title: 'Жеке саяхатта сенімді қолдау',
+        desc: 'Infinitive Travel кепілдігімен Қазақстан, Түркия, Орталық Азия және Еуропа бойынша 24/7 үздіксіз қолдау көрсетеміз.',
       },
       {
         title: 'Корпоративтік саяхат порталы',
@@ -627,12 +544,12 @@ const CONTENT_I18N: Record<
         a: 'Жоғарғы мәзірдегі «Билеттер» бетінен PNR кодыңыз бен тегіңізді енгізіп, брондауды тексеріңіз. Тариф ережелеріне сай онлайн өтінім бере аласыз немесе 24/7 қолдау желісіне хабарласа аласыз.',
       },
       {
-        q: 'Әуежай VIP трансфері қалай жұмыс істейді?',
-        a: 'Трансфер бөлімінен әуежай мен қонақүй мекенжайын, күні мен уақытын таңдасаңыз жеткілікті. Рейсіңіз тікелей бақыланады: ұшақ кешіксе де жүргізуші сізді терминал шығысында атыңыз жазылған тақтайшамен тұрақты бағамен қарсы алады.',
+        q: 'Пакеттік турларға не кіреді және бағалар қалай жаңарады?',
+        a: 'Пакеттік турларға әуе билеті және таңдаулы қонақүй кіреді. Жүйе күн сайын XML бағаларын тексеріп, 4 түрлі елдің ең тиімді турларын витринаға автоматты түрде шығарады.',
       },
       {
         q: 'Онлайн тіркелуді (check-in) қашан жасай аламын?',
-        a: 'Көптеген әуе компанияларында онлайн тіркелу ұшуға 24–48 сағат қалғанда ашылып, 60–90 минут қалғанда жабылады. «Онлайн тіркелу» бетімізден өз әуе компанияңызды таңдап, ресми тіркелу экранына өте аласыз.',
+        a: 'Тұрақты (regular) рейстерде онлайн тіркелу ұшуға 24–48 сағат қалғанда ашылады. Чартерлік рейстерде (мысалы, THY charter) онлайн тіркелу болмауы мүмкін. Толық ережелер «Онлайн тіркелу» бетінде берілген.',
       },
     ],
   },
@@ -705,8 +622,7 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
   const midDeals = flightDeals.filter((d) => d.id !== featuredDeal?.id).slice(0, 6);
 
   const hotelMult = 1 + (markup.hotelPercent - DEFAULT_MARKUP.hotelPercent) / 100;
-  const transferDiff = markup.transferAddTRY - DEFAULT_MARKUP.transferAddTRY;
-  const activeHotelsList = liveCatalog?.hotels
+  const activeHotelsList = (liveCatalog?.hotels && liveCatalog.hotels.length > 0
     ? liveCatalog.hotels
         .filter((h) => h.active)
         .map((h, idx) => {
@@ -714,6 +630,7 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
           return {
             ...base,
             id: h.id,
+            country: h.country,
             city: h.city,
             name: h.name,
             stars: h.stars,
@@ -723,29 +640,23 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
             price: Math.max(500, Math.round(h.price * hotelMult)),
           };
         })
-    : HOTEL_DEALS.map((h) => ({ ...h, price: Math.max(990, Math.round(h.price * hotelMult)) }));
+    : HOTEL_DEALS.map((h) => ({ ...h, country: undefined as string | undefined, price: Math.max(990, Math.round(h.price * hotelMult)) }))
+  ).slice(0, 5);
 
   const featuredHotel = activeHotelsList[0];
-  const otherHotels = activeHotelsList.slice(1);
+  const otherHotels = activeHotelsList.slice(1, 5);
 
-  const activeTransfersList = liveCatalog?.transfers
-    ? liveCatalog.transfers
-        .filter((tr) => tr.active)
-        .map((tr, idx) => {
-          const base = TRANSFER_DEALS.find((m) => m.id === tr.id) ?? TRANSFER_DEALS[idx % TRANSFER_DEALS.length];
-          return {
-            ...base,
-            id: tr.id,
-            city: tr.city,
-            vehicle: tr.vehicle,
-            route: tr.route,
-            capacity: tr.capacity,
-            baggage: tr.baggage,
-            image: tr.image ? resolveCityImage(tr.city, tr.image) : base.image,
-            price: tr.price,
-          };
-        })
-    : TRANSFER_DEALS;
+  const DEFAULT_SHOWCASE_TOURS = [
+    { id: 'xml-tour-tr-1', country: 'Türkiye', city: 'TÜRKİYE · ANTALYA', title: 'Antalya Ultra Her Şey Dahil Deniz & Aile Paketi', duration: '5 Gece · 6 Gün', includes: 'Gidiş-Dönüş Uçak · 5★ Resort · Her Şey Dahil', quota: 16, price: 16900, image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=900&q=85', active: true },
+    { id: 'xml-tour-eg-1', country: 'Mısır', city: 'MISIR · ŞARM EL-ŞEYH', title: 'Şarm El-Şeyh Kızıldeniz & Mercan Koyu Tatil Paketi', duration: '6 Gece · 7 Gün', includes: 'Charter Uçak · 5★ Resort · Her Şey Dahil', quota: 18, price: 19200, image: 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=900&q=85', active: true },
+    { id: 'xml-tour-kz-1', country: 'Kazakistan', city: 'KAZAKİSTAN · ALMATI', title: 'Almatı, Big Almaty Gölü & Shymbulak Kültür Turu', duration: '4 Gece · 5 Gün', includes: 'Gidiş-Dönüş Uçak · 5★ Otel · Rehberli Tur', quota: 14, price: 21400, image: '/images/almaty.jpg', active: true },
+    { id: 'xml-tour-ae-1', country: 'BAE', city: 'BAE · DUBAİ', title: 'Dubai Şehir Keşfi, Çöl Safarisi & Marina Paketi', duration: '4 Gece · 5 Gün', includes: 'Gidiş-Dönüş Uçak · 5★ Şehir Oteli · Kahvaltı', quota: 12, price: 22900, image: 'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?auto=format&fit=crop&w=900&q=85', active: true },
+  ];
+
+  const activeToursList = (liveCatalog?.tours && liveCatalog.tours.length > 0
+    ? liveCatalog.tours.filter((tr) => tr.active)
+    : DEFAULT_SHOWCASE_TOURS
+  ).slice(0, 4);
 
   const trCity = (name: string) => loc.cities[name] || name;
   const trBoard = (bt: string) => loc.boardTypes[bt] || bt;
@@ -1101,7 +1012,7 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
         </div>
       </section>
 
-      {/* 5. VIP TRANSFERS */}
+      {/* 5. PACKAGE TOURS SHOWCASE (4 COUNTRIES · DAILY XML SYNC) */}
       <section className="transfers-section">
         <div className="container">
           <div className="section-head-row">
@@ -1113,32 +1024,29 @@ export const HomeSections: React.FC<HomeSectionsProps> = ({
           </div>
 
           <div className="transfers-grid">
-            {activeTransfersList.map((tr) => {
-              const trLoc = loc.transfers[tr.id];
-              return (
-                <div
-                  key={tr.id}
-                  className="transfer-item"
-                  onClick={() => onSelectTransferCity(tr.city)}
-                >
-                  <div className="transfer-tile">
-                    <span className="transfer-city-pill">{trLoc ? trLoc.city : tr.city}</span>
-                    <img src={tr.image} alt={tr.vehicle} />
-                  </div>
-                  <div className="transfer-vehicle">{tr.vehicle}</div>
-                  <div className="transfer-route">{trLoc ? trLoc.route : tr.route}</div>
-                  <div className="transfer-specs">
-                    {trLoc ? trLoc.specs : `${tr.capacity} · ${tr.baggage} · ${tr.category}`}
-                  </div>
-                  <div className="transfer-price-line">
-                    <span className="transfer-price">
-                      {formatPrice(Math.max(490, tr.price + transferDiff), currency)}
-                    </span>
-                    <span className="transfer-total">{t.fixedPrice}</span>
-                  </div>
+            {activeToursList.map((tour) => (
+              <div
+                key={tour.id}
+                className="transfer-item"
+                onClick={() => onNavigate('tour-results')}
+              >
+                <div className="transfer-tile">
+                  <span className="transfer-city-pill">{localizeXmlText(tour.country ? tour.country.toUpperCase() : tour.city, lang)}</span>
+                  <img src={resolveCityImage(tour.city, tour.image)} alt={localizeXmlText(tour.title, lang)} />
                 </div>
-              );
-            })}
+                <div className="transfer-vehicle">{localizeXmlText(tour.title, lang)}</div>
+                <div className="transfer-route">{localizeXmlText(tour.city, lang)} · {localizeXmlText(tour.duration, lang)}</div>
+                <div className="transfer-specs">
+                  {localizeXmlText(tour.includes || 'Uçak + Seçkin Otel Dahil', lang)}
+                </div>
+                <div className="transfer-price-line">
+                  <span className="transfer-price">
+                    {formatPrice(tour.price, currency)}
+                  </span>
+                  <span className="transfer-total">{t.fixedPrice}</span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>

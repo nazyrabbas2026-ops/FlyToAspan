@@ -5,7 +5,118 @@ import { addCalendarDays, toCalendarDate } from '../data/calendarDates';
 import { apiMessage, type AdminCatalog, type BookingDraft } from '../data/api';
 import { openBrandedEticketPdf } from '../utils/eticketPdf';
 import { resolveCityImage } from '../utils/cityImages';
+import { localizeXmlText } from '../utils/localizeXmlText';
 import type { BookingRecord, CurrencyCode, LangCode } from '../types';
+
+const TOUR_PAGE_I18N: Record<
+  LangCode,
+  {
+    backHome: string;
+    eyebrow: string;
+    title: string;
+    subtitle: string;
+    confirmedBadge: string;
+    passengerLbl: string;
+    amountLbl: string;
+    downloadPdf: string;
+    bookingFormTitle: string;
+    cancel: string;
+    firstNamePh: string;
+    lastNamePh: string;
+    paxLabel: (n: number) => string;
+    saving: string;
+    submitBtn: string;
+    quotaLeft: string;
+    perPersonFrom: string;
+    selectBtn: string;
+    defaultIncludes: string;
+  }
+> = {
+  TR: {
+    backHome: 'Ana Sayfaya Dön',
+    eyebrow: 'FLYTOASPAN · KÜLTÜR & TATİL TURLARI',
+    title: 'Seçkin Tur Paketleri',
+    subtitle: 'Türkiye, Kazakistan, Mısır, Dubai ve Avrupa rotalarında her gün XML ile güncellenen uçak + otel dahil hazır paket turlar.',
+    confirmedBadge: 'Tur Rezervasyonu Onaylandı',
+    passengerLbl: 'Yolcu',
+    amountLbl: 'Tutar',
+    downloadPdf: 'PDF Tur Voucher İndir',
+    bookingFormTitle: 'Tur Rezervasyonu',
+    cancel: 'Vazgeç',
+    firstNamePh: 'Adınız *',
+    lastNamePh: 'Soyadınız *',
+    paxLabel: (n) => `${n} Kişi`,
+    saving: 'Kaydediliyor...',
+    submitBtn: 'Tur Rezervasyonunu Tamamla',
+    quotaLeft: 'Kalan Kontenjan',
+    perPersonFrom: 'Kişi Başı Başlayan',
+    selectBtn: 'Turu Seç',
+    defaultIncludes: 'Uçak + Otel + Rehberlik Dahil',
+  },
+  EN: {
+    backHome: 'Back to Homepage',
+    eyebrow: 'FLYTOASPAN · PACKAGE TOURS · DAILY XML',
+    title: 'Curated Package Tours',
+    subtitle: 'Flight + handpicked hotel holiday packages across Turkey, Kazakhstan, Egypt, Dubai, and Europe — updated daily via XML.',
+    confirmedBadge: 'Tour Booking Confirmed',
+    passengerLbl: 'Guest',
+    amountLbl: 'Total',
+    downloadPdf: 'Download Tour Voucher (PDF)',
+    bookingFormTitle: 'Tour Reservation',
+    cancel: 'Cancel',
+    firstNamePh: 'First Name *',
+    lastNamePh: 'Last Name *',
+    paxLabel: (n) => `${n} ${n === 1 ? 'Guest' : 'Guests'}`,
+    saving: 'Saving...',
+    submitBtn: 'Complete Tour Booking',
+    quotaLeft: 'Seats Left',
+    perPersonFrom: 'Per Person From',
+    selectBtn: 'Select Tour',
+    defaultIncludes: 'Flight + Hotel + Guide Included',
+  },
+  RU: {
+    backHome: 'На главную',
+    eyebrow: 'FLYTOASPAN · ПАКЕТНЫЕ ТУРЫ · XML',
+    title: 'Выгодные пакетные туры',
+    subtitle: 'Готовые туры (перелёт + отель) по Турции, Казахстану, Египту, ОАЭ и Европе с ежедневным обновлением из XML.',
+    confirmedBadge: 'Бронирование тура подтверждено',
+    passengerLbl: 'Турист',
+    amountLbl: 'Сумма',
+    downloadPdf: 'Скачать ваучер тура (PDF)',
+    bookingFormTitle: 'Бронирование тура',
+    cancel: 'Отмена',
+    firstNamePh: 'Имя *',
+    lastNamePh: 'Фамилия *',
+    paxLabel: (n) => `${n} чел.`,
+    saving: 'Сохранение...',
+    submitBtn: 'Оформить бронирование тура',
+    quotaLeft: 'Осталось мест',
+    perPersonFrom: 'От за человека',
+    selectBtn: 'Выбрать тур',
+    defaultIncludes: 'Перелёт + Отель + Гид',
+  },
+  KK: {
+    backHome: 'Басты бетке оралу',
+    eyebrow: 'FLYTOASPAN · ПАКЕТТІК ТУРЛАР · XML',
+    title: 'Таңдаулы пакеттік турлар',
+    subtitle: 'Түркия, Қазақстан, Мысыр, Дубай және Еуропа бағыттарында XML арқылы күн сайын жаңаратын ұшақ + қонақүй турлары.',
+    confirmedBadge: 'Тур брондауы расталды',
+    passengerLbl: 'Жолаушы',
+    amountLbl: 'Сома',
+    downloadPdf: 'PDF тур ваучерін жүктеу',
+    bookingFormTitle: 'Тур брондау',
+    cancel: 'Бас тарту',
+    firstNamePh: 'Атыңыз *',
+    lastNamePh: 'Тегіңіз *',
+    paxLabel: (n) => `${n} адам`,
+    saving: 'Сақталуда...',
+    submitBtn: 'Тур брондауын аяқтау',
+    quotaLeft: 'Қалған орын',
+    perPersonFrom: 'Бір адамға бастап',
+    selectBtn: 'Турды таңдау',
+    defaultIncludes: 'Ұшақ + Қонақүй + Гид',
+  },
+};
 
 export interface TourPackage {
   id: string;
@@ -20,44 +131,44 @@ export interface TourPackage {
 
 export const DEFAULT_TOUR_PACKAGES: TourPackage[] = [
   {
-    id: 'tour-ala-1',
-    city: 'ALMATI & KAZAKİSTAN',
-    title: 'Almatı, Big Almaty Gölü & Shymbulak Kültür Turu',
-    duration: '4 Gece · 5 Gün',
-    includes: 'Uçak Dahil · 5★ Otel · Türkçe Rehber · VIP Transfer',
-    quota: 14,
-    priceTRY: 24900,
-    image: '/images/almaty.jpg',
-  },
-  {
-    id: 'tour-cap-2',
-    city: 'KAPADOKYA',
-    title: 'Kapadokya Mağara Otel & Gün Doğumu Balon Turu',
-    duration: '2 Gece · 3 Gün',
-    includes: 'Butik Taş Otel · Kahvaltı · Bölge Gezileri · Transfer',
-    quota: 10,
-    priceTRY: 9850,
-    image: 'https://images.unsplash.com/photo-1641128324972-af3212f0f6bd?auto=format&fit=crop&w=900&q=85',
-  },
-  {
-    id: 'tour-ayt-3',
-    city: 'ANTALYA · BELEK',
-    title: 'Antalya Ultra Her Şey Dahil Aile & Deniz Paketi',
+    id: 'xml-tour-tr-1',
+    city: 'TÜRKİYE · ANTALYA',
+    title: 'Antalya Ultra Her Şey Dahil Deniz & Aile Paketi',
     duration: '5 Gece · 6 Gün',
-    includes: '5★ Resort · Uçak + Havalimanı VIP Transfer Dahil',
-    quota: 18,
-    priceTRY: 18400,
+    includes: 'Gidiş-Dönüş Uçak · 5★ Resort · Her Şey Dahil',
+    quota: 16,
+    priceTRY: 16900,
     image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=900&q=85',
   },
   {
-    id: 'tour-bal-4',
-    city: 'BALKANLAR',
-    title: 'Vizesiz Balkanlar: Saraybosna, Mostar & Belgrad',
+    id: 'xml-tour-eg-1',
+    city: 'MISIR · ŞARM EL-ŞEYH',
+    title: 'Şarm El-Şeyh Kızıldeniz & Mercan Koyu Tatil Paketi',
     duration: '6 Gece · 7 Gün',
-    includes: 'Gidiş-Dönüş Uçak · 4★ Oteller · Panoramik Şehir Turları',
+    includes: 'Charter Uçak · 5★ Resort · Her Şey Dahil',
+    quota: 18,
+    priceTRY: 19200,
+    image: 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=900&q=85',
+  },
+  {
+    id: 'xml-tour-kz-1',
+    city: 'KAZAKİSTAN · ALMATI',
+    title: 'Almatı, Big Almaty Gölü & Shymbulak Kültür Turu',
+    duration: '4 Gece · 5 Gün',
+    includes: 'Gidiş-Dönüş Uçak · 5★ Otel · Rehberli Şehir & Doğa Turu',
+    quota: 14,
+    priceTRY: 21400,
+    image: '/images/almaty.jpg',
+  },
+  {
+    id: 'xml-tour-ae-1',
+    city: 'BAE · DUBAİ',
+    title: 'Dubai Şehir Keşfi, Çöl Safarisi & Marina Paketi',
+    duration: '4 Gece · 5 Gün',
+    includes: 'Gidiş-Dönüş Uçak · 5★ Şehir Oteli · Kahvaltı',
     quota: 12,
-    priceTRY: 21500,
-    image: 'https://images.unsplash.com/photo-1519677100203-a0e668c92439?auto=format&fit=crop&w=900&q=85',
+    priceTRY: 22900,
+    image: 'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?auto=format&fit=crop&w=900&q=85',
   },
 ];
 
@@ -76,20 +187,27 @@ export const TourResultsPage: React.FC<TourResultsPageProps> = ({
   onAddBooking,
   onBackHome,
 }) => {
+  const ui = TOUR_PAGE_I18N[lang];
   const displayedTours: TourPackage[] = liveTours !== undefined
     ? liveTours
         .filter((t) => t.active)
         .map((t) => ({
           id: t.id,
-          city: t.city,
-          title: t.title,
-          duration: t.duration,
-          includes: t.includes || 'Uçak + Otel + Rehberlik + VIP Transfer',
+          city: localizeXmlText(t.city, lang),
+          title: localizeXmlText(t.title, lang),
+          duration: localizeXmlText(t.duration, lang),
+          includes: localizeXmlText(t.includes || ui.defaultIncludes, lang),
           quota: t.quota,
           priceTRY: t.price,
           image: resolveCityImage(t.city, t.image),
         }))
-    : DEFAULT_TOUR_PACKAGES;
+    : DEFAULT_TOUR_PACKAGES.map((t) => ({
+        ...t,
+        city: localizeXmlText(t.city, lang),
+        title: localizeXmlText(t.title, lang),
+        duration: localizeXmlText(t.duration, lang),
+        includes: localizeXmlText(t.includes, lang),
+      }));
   const [selectedTour, setSelectedTour] = useState<TourPackage | null>(null);
   const [guestFirst, setGuestFirst] = useState('');
   const [guestLast, setGuestLast] = useState('');
@@ -133,12 +251,12 @@ export const TourResultsPage: React.FC<TourResultsPageProps> = ({
         <div className="container">
           <button type="button" className="inner-back-btn" onClick={onBackHome}>
             <ArrowLeft size={15} />
-            Ana Sayfaya Dön
+            {ui.backHome}
           </button>
-          <div className="section-eyebrow on-dark">FLYTOASPAN · KÜLTÜR &amp; TATİL TURLARI</div>
-          <h1 className="inner-h1">Seçkin Tur Paketleri</h1>
+          <div className="section-eyebrow on-dark">{ui.eyebrow}</div>
+          <h1 className="inner-h1">{ui.title}</h1>
           <p style={{ color: 'rgba(255,255,255,0.78)', maxWidth: 640, marginTop: 6 }}>
-            Türkiye, Kazakistan ve vizesiz Balkan rotalarında uçak, otel, rehber ve VIP transfer dahil hazır tur paketleri.
+            {ui.subtitle}
           </p>
         </div>
       </div>
@@ -149,14 +267,14 @@ export const TourResultsPage: React.FC<TourResultsPageProps> = ({
             <div className="panel-card" style={{ border: '1.5px solid #10B981', background: 'rgba(16,185,129,0.06)', marginBottom: 20 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                 <div>
-                  <span className="status-badge ok"><CheckCircle2 size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Tur Rezervasyonu Onaylandı</span>
+                  <span className="status-badge ok"><CheckCircle2 size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} /> {ui.confirmedBadge}</span>
                   <h2 style={{ margin: '8px 0 4px', fontSize: 19 }}>{confirmed.title}</h2>
                   <div style={{ fontSize: 13.5, color: 'var(--aspan-text-muted)' }}>
-                    PNR: <strong style={{ color: 'var(--aspan-text)', letterSpacing: 1.5 }}>{confirmed.pnr}</strong> · Yolcu: {confirmed.passenger} · Tutar: <strong>{formatPrice(confirmed.price, currency)}</strong>
+                    PNR: <strong style={{ color: 'var(--aspan-text)', letterSpacing: 1.5 }}>{confirmed.pnr}</strong> · {ui.passengerLbl}: {confirmed.passenger} · {ui.amountLbl}: <strong>{formatPrice(confirmed.price, currency)}</strong>
                   </div>
                 </div>
                 <button type="button" className="btn-gold-nav" onClick={() => openBrandedEticketPdf(confirmed, { currency, lang })}>
-                  <Download size={15} /> PDF Tur Voucher İndir
+                  <Download size={15} /> {ui.downloadPdf}
                 </button>
               </div>
             </div>
@@ -165,21 +283,21 @@ export const TourResultsPage: React.FC<TourResultsPageProps> = ({
           {selectedTour && (
             <form className="panel-card" onSubmit={handleBookTour} style={{ border: '1.5px solid #00A8B5', marginBottom: 22 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <strong style={{ fontSize: 17 }}>Tur Rezervasyonu: {selectedTour.title}</strong>
-                <button type="button" className="uf-quick-pill" onClick={() => setSelectedTour(null)}>Vazgeç</button>
+                <strong style={{ fontSize: 17 }}>{ui.bookingFormTitle}: {selectedTour.title}</strong>
+                <button type="button" className="uf-quick-pill" onClick={() => setSelectedTour(null)}>{ui.cancel}</button>
               </div>
               {error && <p className="form-action-error" role="alert">{error}</p>}
               <div className="panel-form-grid">
-                <input required className="modal-input" placeholder="Adınız *" value={guestFirst} onChange={(e) => setGuestFirst(e.target.value)} />
-                <input required className="modal-input" placeholder="Soyadınız *" value={guestLast} onChange={(e) => setGuestLast(e.target.value)} />
+                <input required className="modal-input" placeholder={ui.firstNamePh} value={guestFirst} onChange={(e) => setGuestFirst(e.target.value)} />
+                <input required className="modal-input" placeholder={ui.lastNamePh} value={guestLast} onChange={(e) => setGuestLast(e.target.value)} />
                 <input required type="date" className="modal-input" value={tourDate} onChange={(e) => setTourDate(e.target.value)} />
                 <select className="modal-input" value={paxCount} onChange={(e) => setPaxCount(Number(e.target.value))}>
                   {[1, 2, 3, 4, 5, 6].map((n) => (
-                    <option key={n} value={n}>{n} Kişi ({formatPrice(selectedTour.priceTRY * n, currency)})</option>
+                    <option key={n} value={n}>{ui.paxLabel(n)} ({formatPrice(selectedTour.priceTRY * n, currency)})</option>
                   ))}
                 </select>
                 <button type="submit" className="btn-gold-nav" style={{ borderRadius: 12 }} disabled={busy}>
-                  {busy ? 'Kaydediliyor...' : 'Tur Rezervasyonunu Tamamla'}
+                  {busy ? ui.saving : ui.submitBtn}
                 </button>
               </div>
             </form>
@@ -194,7 +312,7 @@ export const TourResultsPage: React.FC<TourResultsPageProps> = ({
                     <MapPin size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />{tour.city}
                   </span>
                   <span style={{ position: 'absolute', bottom: 12, right: 12, padding: '4px 10px', borderRadius: 999, background: '#10B981', color: '#fff', fontSize: 11, fontWeight: 800 }}>
-                    Kalan Kontenjan: {tour.quota}
+                    {ui.quotaLeft}: {tour.quota}
                   </span>
                 </div>
                 <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
@@ -205,7 +323,7 @@ export const TourResultsPage: React.FC<TourResultsPageProps> = ({
                   <p style={{ margin: 0, fontSize: 12.5, color: 'var(--aspan-text-muted)', lineHeight: 1.5 }}>{tour.includes}</p>
                   <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid var(--aspan-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <div style={{ fontSize: 11, color: 'var(--aspan-text-muted)' }}>Kişi Başı Başlayan</div>
+                      <div style={{ fontSize: 11, color: 'var(--aspan-text-muted)' }}>{ui.perPersonFrom}</div>
                       <strong style={{ fontSize: 20, color: 'var(--aspan-text)' }}>{formatPrice(tour.priceTRY, currency)}</strong>
                     </div>
                     <button
@@ -216,7 +334,7 @@ export const TourResultsPage: React.FC<TourResultsPageProps> = ({
                         window.scrollTo({ top: 180, behavior: 'smooth' });
                       }}
                     >
-                      <Compass size={14} /> Turu Seç
+                      <Compass size={14} /> {ui.selectBtn}
                     </button>
                   </div>
                 </div>

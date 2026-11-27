@@ -14,6 +14,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { CAMPAIGNS, CHECKIN_AIRLINES, FAQ_ITEMS, formatDisplayDate, formatPrice } from '../data/mockData';
+import { CHECKIN_RULES_BY_LANG } from '../data/checkinRules';
 import { PHONE_DISPLAY, PHONE_HREF, WA_HREF } from '../i18n/translations';
 import { CurrencyCode, LangCode, SearchTab } from '../types';
 import { api, ApiError, apiMessage, type BookingLookup } from '../data/api';
@@ -24,7 +25,7 @@ const SUBPAGES_I18N: Record<
   {
     campEye: string;
     campTitle: string;
-    catLabels: Record<'Tümü' | 'Uçak' | 'Otel' | 'Transfer', string>;
+    catLabels: Record<'Tümü' | 'Uçak' | 'Otel' | 'Tur', string>;
     codeLbl: string;
     useNow: string;
     ciEye: string;
@@ -60,7 +61,7 @@ const SUBPAGES_I18N: Record<
   TR: {
     campEye: 'FLYTOASPAN FIRSATLARI',
     campTitle: 'Güncel Kampanyalar',
-    catLabels: { Tümü: 'Tümü', Uçak: 'Uçak', Otel: 'Otel', Transfer: 'Transfer' },
+    catLabels: { Tümü: 'Tümü', Uçak: 'Uçak', Otel: 'Otel', Tur: 'Paket Tur' },
     codeLbl: 'KOD',
     useNow: 'Hemen Kullan',
     ciEye: 'HIZLI CHECK-IN',
@@ -78,7 +79,7 @@ const SUBPAGES_I18N: Record<
     ciNote: 'Check-in genellikle kalkıştan 24–48 saat önce açılır.',
     helpEye: '7/24 DESTEK MERKEZİ',
     helpTitle: 'Size nasıl yardımcı olabiliriz?',
-    helpSearchPh: 'Soru veya konu arayın (iptal, bagaj, transfer, check-in)...',
+    helpSearchPh: 'Soru veya konu arayın (iptal, bagaj, paket tur, check-in)...',
     callCenter: '7/24 Çağrı Merkezi',
     waSupport: 'WhatsApp Destek',
     emailSupport: 'E-Posta Destek',
@@ -99,7 +100,7 @@ const SUBPAGES_I18N: Record<
   EN: {
     campEye: 'FLYTOASPAN OFFERS',
     campTitle: 'Active Campaigns',
-    catLabels: { Tümü: 'All', Uçak: 'Flight', Otel: 'Hotel', Transfer: 'Transfer' },
+    catLabels: { Tümü: 'All', Uçak: 'Flight', Otel: 'Hotel', Tur: 'Package Tour' },
     codeLbl: 'CODE',
     useNow: 'Use Offer',
     ciEye: 'FAST CHECK-IN',
@@ -138,7 +139,7 @@ const SUBPAGES_I18N: Record<
   RU: {
     campEye: 'СПЕЦПРЕДЛОЖЕНИЯ FLYTOASPAN',
     campTitle: 'Актуальные Акции',
-    catLabels: { Tümü: 'Все', Uçak: 'Авиа', Otel: 'Отели', Transfer: 'Трансфер' },
+    catLabels: { Tümü: 'Все', Uçak: 'Авиа', Otel: 'Отели', Tur: 'Туры' },
     codeLbl: 'КОД',
     useNow: 'Применить',
     ciEye: 'БЫСТРАЯ РЕГИСТРАЦИЯ',
@@ -177,7 +178,7 @@ const SUBPAGES_I18N: Record<
   KK: {
     campEye: 'FLYTOASPAN НАУҚАНДАРЫ',
     campTitle: 'Белсенді Науқандар',
-    catLabels: { Tümü: 'Барлығы', Uçak: 'Ұшақ', Otel: 'Қонақ үй', Transfer: 'Трансфер' },
+    catLabels: { Tümü: 'Барлығы', Uçak: 'Ұшақ', Otel: 'Қонақ үй', Tur: 'Турлар' },
     codeLbl: 'КОД',
     useNow: 'Қазір қолдану',
     ciEye: 'ЖЕДЕЛ ТІРКЕЛУ',
@@ -220,13 +221,13 @@ export const CampaignsPage: React.FC<{
   liveCoupons?: Array<{ id: string; code: string; title: string; category: string; validUntil: string; active: boolean }>;
   onUseCampaign: (tab: SearchTab) => void;
 }> = ({ lang = 'TR', liveCoupons, onUseCampaign }) => {
-  const [cat, setCat] = useState<'Tümü' | 'Uçak' | 'Otel' | 'Transfer'>('Tümü');
+  const [cat, setCat] = useState<'Tümü' | 'Uçak' | 'Otel' | 'Tur'>('Tümü');
   const [copied, setCopied] = useState<string | null>(null);
   const ui = SUBPAGES_I18N[lang];
 
   const sourceList = liveCoupons !== undefined
     ? liveCoupons
-        .filter((c) => c.active)
+        .filter((c) => c.active && c.category !== 'Transfer')
         .map((c, idx) => {
           const base = CAMPAIGNS.find((m) => m.id === c.id || m.code === c.code) ?? CAMPAIGNS[idx % CAMPAIGNS.length];
           return {
@@ -234,11 +235,11 @@ export const CampaignsPage: React.FC<{
             id: c.id,
             code: c.code,
             title: c.title,
-            category: (c.category === 'Otel' || c.category === 'Transfer' ? c.category : 'Uçak') as 'Uçak' | 'Otel' | 'Transfer',
+            category: (c.category === 'Otel' || c.category === 'Tur' ? c.category : 'Uçak') as 'Uçak' | 'Otel' | 'Tur',
             validUntil: c.validUntil,
           };
         })
-    : CAMPAIGNS;
+    : CAMPAIGNS.filter((c) => c.category !== 'Transfer');
 
   const list = cat === 'Tümü' ? sourceList : sourceList.filter((c) => c.category === cat);
 
@@ -249,7 +250,7 @@ export const CampaignsPage: React.FC<{
           <div className="section-eyebrow on-dark">{ui.campEye}</div>
           <h1 className="inner-h1">{ui.campTitle}</h1>
           <div className="route-pills" style={{ marginTop: 16 }}>
-            {(['Tümü', 'Uçak', 'Otel', 'Transfer'] as const).map((c) => (
+            {(['Tümü', 'Uçak', 'Otel', 'Tur'] as const).map((c) => (
               <button
                 key={c}
                 type="button"
@@ -298,7 +299,7 @@ export const CampaignsPage: React.FC<{
                     style={{ padding: '10px 18px', fontSize: 13 }}
                     onClick={() =>
                       onUseCampaign(
-                        c.category === 'Otel' ? 'hotel' : c.category === 'Transfer' ? 'transfer' : 'flight'
+                        c.category === 'Otel' ? 'hotel' : c.category === 'Tur' ? 'tour' : 'flight'
                       )
                     }
                   >
@@ -318,6 +319,7 @@ export const OnlineCheckInPage: React.FC<{ lang?: LangCode }> = ({ lang = 'TR' }
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'popular' | 'tr'>('all');
   const ui = SUBPAGES_I18N[lang];
+  const rules = CHECKIN_RULES_BY_LANG[lang];
 
   const airlines = useMemo(() => {
     return CHECKIN_AIRLINES.filter((a) => {
@@ -437,18 +439,280 @@ export const OnlineCheckInPage: React.FC<{ lang?: LangCode }> = ({ lang = 'TR' }
               </a>
             ))}
           </div>
+
+          {/* Charter & Regular Online Check-In Rules Section */}
+          <div id="checkin-kurallari" style={{ marginTop: 42 }}>
+            <div style={{ marginBottom: 20 }}>
+              <div className="section-eyebrow" style={{ marginBottom: 6 }}>{rules.eyebrow}</div>
+              <h2 className="section-h2" style={{ margin: '0 0 8px' }}>{rules.title}</h2>
+              <p style={{ margin: 0, fontSize: 14, color: 'var(--aspan-text-body)', maxWidth: 760 }}>
+                {rules.subtitle}
+              </p>
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))',
+                gap: 18,
+                marginBottom: 24,
+              }}
+            >
+              {/* Charter Rules Card */}
+              <div
+                className="panel-card"
+                style={{
+                  border: '1.5px solid rgba(217, 119, 6, 0.38)',
+                  background: 'linear-gradient(180deg, rgba(254, 243, 199, 0.35) 0%, #ffffff 32%)',
+                  marginBottom: 0,
+                }}
+              >
+                <span
+                  className="pkg-pill"
+                  style={{
+                    background: 'rgba(217, 119, 6, 0.14)',
+                    color: '#B45309',
+                    fontWeight: 800,
+                    marginBottom: 10,
+                    display: 'inline-block',
+                  }}
+                >
+                  {rules.charterBadge}
+                </span>
+                <h3 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 800, color: 'var(--aspan-text)' }}>
+                  {rules.charterTitle}
+                </h3>
+                <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--aspan-text-muted)', lineHeight: 1.55 }}>
+                  {rules.charterLead}
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {rules.charterPoints.map((pt) => (
+                    <div
+                      key={pt.heading}
+                      style={{
+                        padding: '11px 14px',
+                        borderRadius: 12,
+                        background: '#ffffff',
+                        border: '1px solid rgba(217, 119, 6, 0.2)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontWeight: 800, fontSize: 13.5, color: '#92400E', marginBottom: 4 }}>
+                        <AlertCircle size={15} />
+                        <span>{pt.heading}</span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 12.8, color: 'var(--aspan-text-body)', lineHeight: 1.55 }}>
+                        {pt.detail}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Regular Rules Card */}
+              <div
+                className="panel-card"
+                style={{
+                  border: '1.5px solid rgba(0, 168, 181, 0.35)',
+                  background: 'linear-gradient(180deg, rgba(224, 247, 250, 0.38) 0%, #ffffff 32%)',
+                  marginBottom: 0,
+                }}
+              >
+                <span
+                  className="pkg-pill"
+                  style={{
+                    background: 'rgba(0, 168, 181, 0.14)',
+                    color: '#0F766E',
+                    fontWeight: 800,
+                    marginBottom: 10,
+                    display: 'inline-block',
+                  }}
+                >
+                  {rules.regularBadge}
+                </span>
+                <h3 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 800, color: 'var(--aspan-text)' }}>
+                  {rules.regularTitle}
+                </h3>
+                <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--aspan-text-muted)', lineHeight: 1.55 }}>
+                  {rules.regularLead}
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {rules.regularPoints.map((pt) => (
+                    <div
+                      key={pt.heading}
+                      style={{
+                        padding: '11px 14px',
+                        borderRadius: 12,
+                        background: '#ffffff',
+                        border: '1px solid rgba(0, 168, 181, 0.2)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontWeight: 800, fontSize: 13.5, color: '#0B5563', marginBottom: 4 }}>
+                        <CheckCircle2 size={15} color="#00A8B5" />
+                        <span>{pt.heading}</span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 12.8, color: 'var(--aspan-text-body)', lineHeight: 1.55 }}>
+                        {pt.detail}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Airline-by-Airline Quick Reference Table */}
+            <div className="panel-card" style={{ marginBottom: 16 }}>
+              <strong style={{ fontSize: 16.5, display: 'block', marginBottom: 4 }}>{rules.tableTitle}</strong>
+              <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)', marginBottom: 14 }}>
+                {rules.tableSub}
+              </div>
+              <div className="adm-table-wrap">
+                <table className="adm-table">
+                  <thead>
+                    <tr>
+                      {rules.cols.map((col) => (
+                        <th key={col}>{col}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rules.rows.map((r) => (
+                      <tr key={r.code}>
+                        <td data-label={rules.cols[0]}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                            <span className="uf-airport-code">{r.code}</span>
+                            <strong>{r.airline}</strong>
+                          </div>
+                        </td>
+                        <td data-label={rules.cols[1]}>
+                          <span className="status-badge warn">{r.charterOnlineCheckIn}</span>
+                        </td>
+                        <td data-label={rules.cols[2]} style={{ fontSize: 12.5, fontWeight: 700, color: '#92400E' }}>
+                          {r.charterSeatRule}
+                        </td>
+                        <td data-label={rules.cols[3]}>
+                          <span className="status-badge ok">{r.regularOnlineCheckIn}</span>
+                        </td>
+                        <td data-label={rules.cols[4]} style={{ fontSize: 12.5, color: 'var(--aspan-text-body)' }}>
+                          {r.notes}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: '14px 18px',
+                borderRadius: 14,
+                background: 'var(--aspan-bg-soft)',
+                border: '1px solid var(--aspan-border)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 12,
+                fontSize: 13,
+                color: 'var(--aspan-text-body)',
+              }}
+            >
+              <span style={{ flex: '1 1 320px' }}>{rules.updateBanner}</span>
+              <a
+                href={WA_HREF}
+                target="_blank"
+                rel="noreferrer"
+                className="btn-wa-pill"
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                <MessageCircle size={15} />
+                WhatsApp · {PHONE_DISPLAY}
+              </a>
+            </div>
+          </div>
         </div>
       </section>
     </>
   );
 };
 
+const HELP_FAQS_I18N: Record<LangCode, Array<{ q: string; a: string }>> = {
+  TR: FAQ_ITEMS,
+  EN: [
+    {
+      q: 'How can I book a flight ticket on FlyToAspan?',
+      a: 'Select your departure and arrival cities, travel dates, and passenger count in the search box and click "Search Flights". Compare baggage & refund rules under "Packages" and complete your reservation securely.',
+    },
+    {
+      q: 'What should I look for when choosing a hotel?',
+      a: 'Check board basis (Bed & Breakfast, All Inclusive, etc.), free cancellation rules, location, and guest ratings. FlyToAspan displays transparent total prices with no hidden fees.',
+    },
+    {
+      q: 'How can I cancel or change my flight ticket?',
+      a: 'Open "Manage Booking" in the top menu and enter your PNR code and passenger surname to request a cancellation or date change online, or contact our 24/7 support desk.',
+    },
+    {
+      q: 'What is included in Package Tours and how are prices updated?',
+      a: 'Package tours bundle round-trip flights and handpicked hotels. Our system scans XML tour operators daily and showcases the best-value packages from 4 different countries.',
+    },
+    {
+      q: 'When does online check-in open for scheduled vs. charter flights?',
+      a: 'For regular scheduled flights, online check-in typically opens 24–48 hours before departure. For charter flights (such as Turkish Airlines charter), online check-in may not be available and check-in is handled at the airport counter.',
+    },
+  ],
+  RU: [
+    {
+      q: 'Как купить авиабилет на FlyToAspan?',
+      a: 'Выберите город вылета и прилёта, даты и количество пассажиров в форме поиска и нажмите «Найти билеты». Сравните нормы багажа во вкладке «Тарифы» и оформите бронирование.',
+    },
+    {
+      q: 'На что обратить внимание при выборе отеля?',
+      a: 'Проверьте тип питания (завтрак, всё включено), условия бесплатной отмены, расположение и рейтинг гостей. На FlyToAspan всегда указана полная итоговая стоимость.',
+    },
+    {
+      q: 'Как отменить или обменять авиабилет?',
+      a: 'Перейдите в раздел «Мои билеты», введите PNR-код и фамилию пассажира для оформления запроса онлайн или свяжитесь со службой поддержки 24/7.',
+    },
+    {
+      q: 'Что входит в пакетные туры и как обновляются цены?',
+      a: 'Пакетные туры включают перелёт и проживание в проверенных отелях. Система ежедневно проверяет XML-фиды и автоматически выводит лучшие туры по 4 странам.',
+    },
+    {
+      q: 'Когда открывается онлайн-регистрация на регулярные и чартерные рейсы?',
+      a: 'На регулярных рейсах онлайн-регистрация открывается за 24–48 часов до вылета. На чартерных рейсах (например, чартеры THY) регистрация обычно проходит только на стойке в аэропорту.',
+    },
+  ],
+  KK: [
+    {
+      q: 'FlyToAspan арқылы ұшақ билетін қалай сатып аламын?',
+      a: 'Іздеу жолағынан ұшу және қону қалаларын, күнін және жолаушы санын таңдап, «Рейс іздеу» батырмасын басыңыз. «Пакеттер» бөлімінен шарттарды салыстырып, брондауды рәсімдеңіз.',
+    },
+    {
+      q: 'Қонақүй таңдағанда неге мән беру керек?',
+      a: 'Тамақтану түрін (таңғы ас, бәрі қосылған), тегін бас тарту шарттарын және орналасуын тексеріңіз. FlyToAspan жасырын төлемсіз толық бағаны көрсетеді.',
+    },
+    {
+      q: 'Билетімді қалай қайтаруға немесе өзгертуге болады?',
+      a: '«Билеттер» бетінен PNR кодыңыз бен тегіңізді енгізіп, онлайн өтінім жіберіңіз немесе 24/7 қолдау желісіне хабарласыңыз.',
+    },
+    {
+      q: 'Пакеттік турларға не кіреді және бағалар қалай жаңарады?',
+      a: 'Пакеттік турларға ұшақ билеті мен таңдаулы қонақүй кіреді. Жүйе күн сайын XML бағаларын тексеріп, 4 елдің ең тиімді турларын витринаға шығарады.',
+    },
+    {
+      q: 'Тұрақты және чартерлік рейстерде онлайн тіркелу қашан ашылады?',
+      a: 'Тұрақты рейстерде онлайн тіркелу ұшуға 24–48 сағат қалғанда ашылады. Чартерлік рейстерде (мысалы, THY charter) тіркелу әуежай тірегінде жүргізіледі.',
+    },
+  ],
+};
+
 export const HelpPage: React.FC<{ lang?: LangCode }> = ({ lang = 'TR' }) => {
   const [q, setQ] = useState('');
   const [openIdx, setOpenIdx] = useState(0);
   const ui = SUBPAGES_I18N[lang];
+  const localizedFaqs = HELP_FAQS_I18N[lang] || FAQ_ITEMS;
 
-  const items = FAQ_ITEMS.filter(
+  const items = localizedFaqs.filter(
     (f) => !q.trim() || f.q.toLowerCase().includes(q.toLowerCase()) || f.a.toLowerCase().includes(q.toLowerCase())
   );
 

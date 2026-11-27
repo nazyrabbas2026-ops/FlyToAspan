@@ -1019,5 +1019,20 @@ test('FlyToAspan API & Security Suite', async (t) => {
     assert.equal((await call(env.origin, `/api/admin/users/${staff.id}/role`, {
       method: 'PATCH', cookie: sCookie, body: { role: 'admin' },
     })).status, 403);
+
+    // 16: Automated Daily XML Showcase Sync (5 cheapest hotels 1-per-country & 4 tours from 4 countries)
+    const xmlSync = await call(env.origin, '/api/admin/xml-showcase/sync', {
+      method: 'POST', cookie: adminCookie, body: {},
+    });
+    assert.equal(xmlSync.status, 200);
+    assert.equal(xmlSync.json.hotels.length, 5);
+    assert.equal(xmlSync.json.tours.length, 4);
+    assert.equal(new Set(xmlSync.json.hotels.map((h) => h.country)).size, 5);
+    assert.equal(new Set(xmlSync.json.tours.map((t) => t.country)).size, 4);
+    const xmlStatus = await call(env.origin, '/api/admin/xml-showcase/status', { cookie: adminCookie });
+    assert.equal(xmlStatus.status, 200);
+    assert.equal(xmlStatus.json.status.intervalHours, 24);
+    assert.equal(xmlStatus.json.hotels.length, 5);
+    assert.equal(xmlStatus.json.tours.length, 4);
   });
 });

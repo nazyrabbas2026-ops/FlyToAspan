@@ -155,7 +155,7 @@ export interface TransferDeal {
 
 export interface Campaign {
   id: string;
-  category: 'Uçak' | 'Otel' | 'Transfer';
+  category: 'Uçak' | 'Otel' | 'Tur' | 'Transfer';
   badge: string;
   title: string;
   subtitle: string;
@@ -315,15 +315,15 @@ export const CAMPAIGNS: Campaign[] = [
   },
   {
     id: 'cmp-4',
-    category: 'Transfer',
-    badge: 'VIP KARŞILAMA',
-    title: 'Uçak Bileti Alanlara Havalimanı VIP Transferde %25 İndirim',
-    subtitle: 'Mercedes VIP araçlarla sabit fiyat, uçuş takibi ve kapıdan kapıya konfor.',
-    code: 'VIP25',
+    category: 'Tur',
+    badge: 'PAKET TUR FIRSATI',
+    title: '4 Ülkede Uçak + Otel Dahil Paket Turlarda %20 Avantaj',
+    subtitle: 'Türkiye, Kazakistan, Mısır ve Dubai turlarında her gün XML ile güncellenen en uygun paket fiyatlar.',
+    code: 'TUR20',
     validUntil: '31 Ocak 2027',
     gradient: 'linear-gradient(135deg, #0B1F2A 0%, #174656 100%)',
     accent: '#16C7D4',
-    image: 'https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?auto=format&fit=crop&w=900&q=80',
+    image: '/images/almaty.jpg',
   },
 ];
 
@@ -643,13 +643,13 @@ export const SOLUTION_PARTNERS = [
   'Sabre',
   'Turkish Airlines',
   'Air Astana',
-  'BookingAgora',
-  'TBO Holidays',
+  'FUN&SUN',
+  'Kompas Tour',
+  'Selfie Travel',
   'Hotelbeds',
   'Expedia TAAP',
   'SunExpress',
   'FlyArystan',
-  'Blacklane VIP',
 ];
 
 export const FAQ_ITEMS = [
@@ -666,12 +666,12 @@ export const FAQ_ITEMS = [
     a: 'Üst menüdeki "Bilet İşlemleri" sayfasından PNR kodunuz ve yolcu soyadınızla rezervasyonunuzu sorgulayabilirsiniz. Seçtiğiniz paket kurallarına göre değişiklik veya iptal talebinizi çevrimiçi iletebilir ya da 7/24 çağrı merkezimizden anında destek alabilirsiniz.',
   },
   {
-    q: 'Havalimanı VIP transfer rezervasyonu nasıl işler?',
-    a: 'Transfer sekmesinden havalimanı ve otel/adres bilginizi, tarih ve saati seçmeniz yeterlidir. Uçuş kodunuz canlı olarak takip edilir; uçağınız rötar yapsa bile şoförünüz sizi terminal çıkışında isminizin yazılı olduğu tabela ile sabit fiyat garantisiyle karşılar.',
+    q: 'Paket turlar neleri kapsar ve fiyatlar nasıl güncellenir?',
+    a: 'Paket turlarımız uçak bileti ve seçkin otel konaklamasını tek pakette sunar. Sistemimiz her gün XML tedarikçilerinden güncel fiyatları kontrol ederek farklı ülkelerden en uygun paket turları otomatik olarak vitrine taşır.',
   },
   {
     q: 'Online check-in işlemlerini ne zaman yapabilirim?',
-    a: 'Çoğu havayolunda online check-in uçuşa 24 ila 48 saat kala açılır ve kalkışa 60–90 dakika kala kapanır. Üst menüdeki "Online Check-In" sayfamızdan ilgili havayolunu seçerek doğrudan resmi check-in ekranına yönlendirilebilirsiniz.',
+    a: 'Tarifeli (regular) uçuşlarda online check-in genellikle uçuşa 24 ila 48 saat kala açılır. Charter uçuşlarda ise (örneğin THY charter seferleri) online check-in bulunmayabilir ve işlemler havalimanı kontuarında yapılır. Detaylar için "Online Check-In" sayfamızdaki kurallar bölümünü inceleyebilirsiniz.',
   },
 ];
 

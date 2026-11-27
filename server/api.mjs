@@ -20,6 +20,7 @@ import {
   sendCorporateApprovedEmail,
   sendPasswordResetEmail,
 } from './mailer.mjs';
+import { readXmlShowcaseStatus, runXmlShowcaseSync } from './xml-showcase.mjs';
 
 const VALID_PERMISSIONS = new Set([
   'flights.sell',
@@ -73,9 +74,9 @@ const catalogFields = {
   rules: { carrier: 100, route: 120, rule: 120 },
   coupons: { code: 30, title: 160, category: 24, validUntil: 48, active: 'boolean' },
   agencies: { name: 120, type: 48, contact: 120, creditLimitTRY: 'integer', miles: 'integer', status: 24 },
-  hotels: { city: 60, name: 120, stars: 'integer', boardType: 60, nights: 'integer', price: 'integer', image: 'optional:280', active: 'boolean' },
+  hotels: { country: 'optional:60', city: 60, name: 120, stars: 'integer', boardType: 60, nights: 'integer', price: 'integer', image: 'optional:280', provider: 'optional:80', active: 'boolean' },
   transfers: { city: 60, vehicle: 120, route: 140, capacity: 48, baggage: 48, price: 'integer', image: 'optional:280', active: 'boolean' },
-  tours: { city: 60, title: 140, duration: 48, includes: 'optional:240', quota: 'integer', price: 'integer', image: 'optional:280', active: 'boolean' },
+  tours: { country: 'optional:60', city: 60, title: 140, duration: 48, includes: 'optional:240', quota: 'integer', price: 'integer', image: 'optional:280', provider: 'optional:80', active: 'boolean' },
   deals: {
     fromCity: 60, fromCode: 8, toCity: 60, toCode: 8,
     region: 24, date: 16, price: 'integer',
@@ -210,7 +211,7 @@ function newDemoBooking(db, body, owner) {
   const date = isoDate(body.date);
   const returnDate = body.returnDate ? isoDate(body.returnDate) : undefined;
   if (returnDate && returnDate < date) fail(400, 'Dönüş tarihi başlangıç tarihinden önce olamaz.');
-  if (!Number.isFinite(body.price) || body.price < 0 || body.price > 10_000_000) fail(400, 'Tutar geçersiz.');
+  if (!Number.isFinite(body.price) || body.price <= 0 || body.price > 10_000_000) fail(400, 'Tutar geçersiz.');
   const salePrice = Math.round(body.price * 100) / 100;
   const rawNetCost = Number(body.netCostTRY);
   const netCostTRY = Number.isFinite(rawNetCost) && rawNetCost >= 0 && rawNetCost <= 10_000_000
@@ -449,6 +450,9 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const staffPricingRoute = path === '/api/admin/pricing' && hasPerm(user, 'pricing.edit');
         const staffFxRoute = path === '/api/admin/fx' && hasPerm(user, 'fx.manage');
         const staffApiRoute = (path === '/api/admin/server-info' || path === '/api/admin/providers/test') && hasPerm(user, 'apis.manage');
+        const staffXmlShowcaseRoute =
+          (path === '/api/admin/xml-showcase/status' || path === '/api/admin/xml-showcase/sync') &&
+          (hasPerm(user, 'inventory.manage') || hasPerm(user, 'apis.manage'));
         const staffTeamRoute =
           hasPerm(user, 'team.manage') &&
           (path === '/api/admin/users' ||
@@ -457,7 +461,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
             /^\/api\/admin\/organizations\/[a-f0-9]{24}(\/(ledger|payment))?$/.test(path));
         let allowedStaff = false;
         if (canAccessPanel(user)) {
-          if (staffBookingRoute || staffCatalogRead || staffPricingRoute || staffFxRoute || staffApiRoute || staffTeamRoute) allowedStaff = true;
+          if (staffBookingRoute || staffCatalogRead || staffPricingRoute || staffFxRoute || staffApiRoute || staffXmlShowcaseRoute || staffTeamRoute) allowedStaff = true;
           if (staffCatalogWrite) {
             const sec = path.split('/')[4];
             if ((sec === 'hotels' || sec === 'transfers' || sec === 'tours') && hasPerm(user, 'inventory.manage')) allowedStaff = true;
@@ -1217,6 +1221,21 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
               : 'Bağlantı kurulamadı — URL veya IP Whitelist ayarını kontrol edin.',
           });
         }
+      } else if (method === 'GET' && path === '/api/admin/xml-showcase/status') {
+        let status = readXmlShowcaseStatus(db);
+        if (!status) {
+          const synced = await runXmlShowcaseSync(db, { trigger: 'initial-boot', fetchLive: false });
+          status = synced.status;
+        }
+        const hotelsRow = db.prepare("SELECT value FROM settings WHERE key = 'catalog:hotels'").get();
+        const toursRow = db.prepare("SELECT value FROM settings WHERE key = 'catalog:tours'").get();
+        const hotels = hotelsRow ? JSON.parse(hotelsRow.value).items : [];
+        const tours = toursRow ? JSON.parse(toursRow.value).items : [];
+        send(res, 200, { status, hotels, tours });
+      } else if (method === 'POST' && path === '/api/admin/xml-showcase/sync') {
+        const result = await runXmlShowcaseSync(db, { trigger: 'manual-admin', fetchLive: process.env.NODE_ENV !== 'test' });
+        writeAuditLog(db, { actorEmail: user.email, action: 'admin:xml_showcase_sync', target: `hotels:${result.hotels.length},tours:${result.tours.length}`, ip });
+        send(res, 200, result);
       } else if (method === 'GET' && path === '/api/admin/audit') {
         const rows = db.prepare('SELECT id, actor_email, action, target, ip, created_at FROM audit_logs ORDER BY created_at DESC LIMIT 150').all();
         send(res, 200, { logs: rows });

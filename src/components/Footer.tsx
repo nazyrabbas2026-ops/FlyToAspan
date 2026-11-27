@@ -29,17 +29,16 @@ const FOOTER_LINKS_I18N: Record<
     corpLinks: [string, string, string, string];
     srvLinks: [string, string, string, string];
     privLinks: [string, string, string, string];
-    tursabBadge: string;
     sslNote: string;
   }
 > = {
   TR: {
-    locations: 'Infinitive Travel · İstanbul, Türkiye & Almatı, Kazakistan',
+    locations: 'Infinitive Travel · Almatı, Kazakistan & İstanbul, Türkiye',
     corpLinks: ['Hakkımızda', 'Kampanyalar', 'Online Check-In', 'Yardım & SSS'],
     srvLinks: [
       'Yurt İçi & Yurt Dışı Uçak Bileti',
       'Otel Konaklama Hizmetleri',
-      'Havalimanı & VIP Transfer',
+      'Paket Turlar & Kültür Turları',
       'Bilet İşlemleri & İptal',
     ],
     privLinks: [
@@ -48,16 +47,15 @@ const FOOTER_LINKS_I18N: Record<
       'Ticari Elektronik İleti Onayı',
       'Çerez Aydınlatma Metni',
     ],
-    tursabBadge: 'TÜRSAB A Grubu Acente',
     sslNote: 'FlyToAspan by Infinitive Travel — 3D Secure 256-Bit SSL Koruma',
   },
   EN: {
-    locations: 'Infinitive Travel · Istanbul, Turkey & Almaty, Kazakhstan',
+    locations: 'Infinitive Travel · Almaty, Kazakhstan & Istanbul, Turkey',
     corpLinks: ['About Us', 'Deals & Offers', 'Online Check-In', 'Help & FAQ'],
     srvLinks: [
       'Domestic & International Flights',
       'Hotel Accommodation Services',
-      'Airport & VIP Transfer',
+      'Package Tours & Holiday Deals',
       'Manage Booking & Cancellations',
     ],
     privLinks: [
@@ -66,16 +64,15 @@ const FOOTER_LINKS_I18N: Record<
       'Commercial Electronic Message Consent',
       'Cookie Policy',
     ],
-    tursabBadge: 'TURSAB Class A Agency',
     sslNote: 'FlyToAspan by Infinitive Travel — 3D Secure 256-Bit SSL Protection',
   },
   RU: {
-    locations: 'Infinitive Travel · Стамбул, Турция и Алматы, Казахстан',
+    locations: 'Infinitive Travel · Алматы, Казахстан и Стамбул, Турция',
     corpLinks: ['О компании', 'Акции и скидки', 'Онлайн-регистрация', 'Помощь и FAQ'],
     srvLinks: [
       'Внутренние и международные авиабилеты',
       'Бронирование отелей',
-      'VIP-трансфер из аэропорта',
+      'Пакетные туры и отдых',
       'Управление билетами и возврат',
     ],
     privLinks: [
@@ -84,16 +81,15 @@ const FOOTER_LINKS_I18N: Record<
       'Согласие на рассылку',
       'Политика файлов Cookie',
     ],
-    tursabBadge: 'Агентство TURSAB класса A',
     sslNote: 'FlyToAspan by Infinitive Travel — Защита 3D Secure 256-Bit SSL',
   },
   KK: {
-    locations: 'Infinitive Travel · Ыстамбұл, Түркия және Алматы, Қазақстан',
+    locations: 'Infinitive Travel · Алматы, Қазақстан және Ыстамбұл, Түркия',
     corpLinks: ['Біз туралы', 'Науқандар', 'Онлайн тіркелу', 'Көмек және Сұрақтар'],
     srvLinks: [
       'Ішкі және халықаралық әуе билеттері',
       'Қонақүй брондау қызметі',
-      'Әуежай және VIP трансфер',
+      'Пакеттік турлар мен демалыс',
       'Билет рәсімдері және қайтару',
     ],
     privLinks: [
@@ -102,7 +98,6 @@ const FOOTER_LINKS_I18N: Record<
       'Хабарлама келісімі',
       'Cookie саясаты',
     ],
-    tursabBadge: 'TÜRSAB A тобындағы агенттік',
     sslNote: 'FlyToAspan by Infinitive Travel — 3D Secure 256-Bit SSL қорғанысы',
   },
 };
@@ -125,11 +120,11 @@ const PREFOOTER_I18N: Record<
     waCta: 'WhatsApp Hızlı Destek',
     pillars: [
       ['256-Bit SSL & Güvenli Altyapı', 'Uluslararası güvenlik standartlarında şifreli oturum ve veri koruması'],
-      ['IATA & TÜRSAB Acente Standartları', '500+ tarifeli ve charter havayolu ile şeffaf rezervasyon akışı'],
+      ['Uluslararası Seyahat Standartları', '500+ tarifeli ve charter havayolu ile şeffaf rezervasyon akışı'],
       ['Çoklu Döviz & Şeffaf Fiyat', 'TRY ₺, USD $, EUR €, KZT ₸ ve RUB ₽ ile şeffaf, gizli ücretsiz fiyatlar'],
       ['Anında İptal, İade & Değişiklik', '7/24 kesintisiz çağrı merkezi ve online PNR sorgulama desteği'],
     ],
-    registryLine: 'Ticari Ünvan: Infinitive Travel (Resmi künye & TÜRSAB Belge No: Bilgi bekleniyor · MERSİS / Vergi No: Bilgi bekleniyor)',
+    registryLine: 'Ticari Ünvan: Infinitive Travel · Kazakistan & Türkiye Seyahat Hizmetleri',
   },
   EN: {
     eyebrow: 'INFINITIVE TRAVEL · GLOBAL AVIATION & HOSPITALITY NETWORK',
@@ -138,11 +133,11 @@ const PREFOOTER_I18N: Record<
     waCta: 'WhatsApp Quick Support',
     pillars: [
       ['256-Bit SSL & Secure Platform', 'Encrypted sessions and personal data protection at international standards'],
-      ['IATA & TURSAB Agency Standards', 'Transparent booking flow across 500+ scheduled and charter airlines'],
+      ['Global Travel Standards', 'Transparent booking flow across 500+ scheduled and charter airlines'],
       ['Multi-Currency & Transparent Fares', 'Clear fares in TRY ₺, USD $, EUR €, KZT ₸ and RUB ₽ with no hidden fees'],
       ['Instant Cancellation & Changes', '24/7 travel desk support and online PNR booking lookup'],
     ],
-    registryLine: 'Legal Entity: Infinitive Travel (Official TURSAB License No: Pending · Tax / Registry ID: Pending)',
+    registryLine: 'Legal Entity: Infinitive Travel · Kazakhstan & Turkey Travel Services',
   },
   RU: {
     eyebrow: 'INFINITIVE TRAVEL · МЕЖДУНАРОДНАЯ СЕТЬ АВИАЦИИ И ОТЕЛЕЙ',
@@ -151,11 +146,11 @@ const PREFOOTER_I18N: Record<
     waCta: 'Быстрая помощь WhatsApp',
     pillars: [
       ['256-Bit SSL и защита данных', 'Защищённые сессии и сохранность персональных данных по мировым стандартам'],
-      ['Стандарты агентств IATA и TURSAB', 'Прозрачный подбор более 500 регулярных и чартерных авиакомпаний'],
+      ['Международные стандарты туризма', 'Прозрачный подбор более 500 регулярных и чартерных авиакомпаний'],
       ['Мультивалютность и честные цены', 'Прозрачные тарифы в TRY ₺, USD $, EUR €, KZT ₸ и RUB ₽ без скрытых сборов'],
       ['Быстрый обмен и возврат', 'Круглосуточная поддержка 24/7 и онлайн-проверка брони по PNR'],
     ],
-    registryLine: 'Юр. лицо: Infinitive Travel (Лицензия TURSAB: ожидается · Рег. номер / ИНН: ожидается)',
+    registryLine: 'Юр. лицо: Infinitive Travel · Туристические услуги Казахстан и Турция',
   },
   KK: {
     eyebrow: 'INFINITIVE TRAVEL · ХАЛЫҚАРАЛЫҚ ӘУЕ ЖӘНЕ ҚОНАҚҮЙ ЖЕЛІСІ',
@@ -164,11 +159,11 @@ const PREFOOTER_I18N: Record<
     waCta: 'WhatsApp жедел қолдау',
     pillars: [
       ['256-Bit SSL және деректер қорғау', 'Халықаралық қауіпсіздік стандарттарына сай шифрланған жүйе'],
-      ['IATA және TÜRSAB стандарттары', '500+ тұрақты және чартерлік әуе компаниялары бойынша ашық іздеу'],
+      ['Халықаралық саяхат стандарттары', '500+ тұрақты және чартерлік әуе компаниялары бойынша ашық іздеу'],
       ['Көп валюта және ашық баға', 'TRY ₺, USD $, EUR €, KZT ₸ және RUB ₽ бойынша жасырын төлемсіз бағалар'],
       ['Жылдам өзгерту және қайтару', '24/7 үздіксіз байланыс орталығы және онлайн PNR тексеру'],
     ],
-    registryLine: 'Заңды тұлға: Infinitive Travel (TÜRSAB куәлік №: ақпарат күтілуде · БСН / Салық №: ақпарат күтілуде)',
+    registryLine: 'Заңды тұлға: Infinitive Travel · Қазақстан және Түркия саяхат қызметтері',
   },
 };
 
@@ -385,7 +380,7 @@ export const Footer: React.FC<FooterProps> = ({ lang, canManage, onNavigate, onJ
                   </button>
                 </li>
                 <li>
-                  <button type="button" onClick={() => onJumpToTab('transfer')}>
+                  <button type="button" onClick={() => onNavigate('tour-results')}>
                     {fl.srvLinks[2]}
                   </button>
                 </li>
@@ -450,19 +445,32 @@ export const Footer: React.FC<FooterProps> = ({ lang, canManage, onNavigate, onJ
 
           <div className="uff-trust-row">
             <div className="uff-badges-group">
-              <span className="uff-cert-pill">{fl.tursabBadge}</span>
               <span className="uff-cert-pill" style={{ color: '#007D89' }}>
-                IATA Accredited
+                256-Bit SSL
               </span>
               <span style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.75)' }}>
                 {fl.sslNote}
               </span>
             </div>
 
-            <div className="uff-badges-group">
-              {['VISA', 'Mastercard', 'troy', 'AMEX', 'Maestro'].map((card) => (
-                <span key={card} className="uff-pay-pill">
-                  {card}
+            <div className="uff-badges-group" style={{ flexWrap: 'wrap' }}>
+              {[
+                { name: 'VISA', accent: undefined },
+                { name: 'Mastercard', accent: undefined },
+                { name: 'troy', accent: undefined },
+                { name: 'AMEX', accent: undefined },
+                { name: 'Maestro', accent: undefined },
+                { name: 'Kaspi', accent: '#E52520' },
+                { name: 'Halyk Bank', accent: '#007A3D' },
+                { name: 'Freedom Bank', accent: '#16A34A' },
+                { name: 'Bank CenterCredit', accent: '#0F6B3A' },
+              ].map((card) => (
+                <span
+                  key={card.name}
+                  className="uff-pay-pill"
+                  style={card.accent ? { color: card.accent, fontWeight: 800 } : undefined}
+                >
+                  {card.name}
                 </span>
               ))}
             </div>

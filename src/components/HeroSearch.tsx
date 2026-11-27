@@ -548,7 +548,7 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
       <div className="container" ref={widgetRef}>
         <div className="u4-card">
           <div className="u4-left">
-            {/* TOP TABS: ONLY Uçak, Otel, Transfer */}
+            {/* TOP TABS: Uçak, Otel, Turlar */}
             <div className="u4-tabs-bar" role="tablist">
               <button
                 type="button"
@@ -579,19 +579,6 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
               <button
                 type="button"
                 role="tab"
-                aria-selected={activeTab === 'transfer'}
-                className={`u4-tab-btn ${activeTab === 'transfer' ? 'active' : ''}`}
-                onClick={() => {
-                  onTabChange('transfer');
-                  setOpenPop(null);
-                }}
-              >
-                <CarTaxiFront size={17} />
-                <span>{t.tabTransfer}</span>
-              </button>
-              <button
-                type="button"
-                role="tab"
                 aria-selected={activeTab === 'tour'}
                 className={`u4-tab-btn ${activeTab === 'tour' ? 'active' : ''}`}
                 onClick={() => {
@@ -600,7 +587,7 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
                 }}
               >
                 <Compass size={17} />
-                <span>{lang === 'EN' ? 'Tours' : lang === 'RU' ? 'Туры' : lang === 'KK' ? 'Турлар' : 'Turlar'}</span>
+                <span>{lang === 'EN' ? 'Package Tours' : lang === 'RU' ? 'Пакетные туры' : lang === 'KK' ? 'Тур пакеттері' : 'Paket Turlar'}</span>
               </button>
             </div>
 
@@ -608,12 +595,34 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
               <div className="u4-form-stack" style={{ padding: '8px 0' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
                   <div className="u4-field" style={{ cursor: 'default' }}>
-                    <span className="u4-label"><MapPin size={13} /> Bölge / Rota</span>
-                    <div className="u4-val">Almatı · Kapadokya · Antalya · Balkanlar</div>
+                    <span className="u4-label">
+                      <MapPin size={13} />{' '}
+                      {lang === 'EN' ? 'Countries / Routes' : lang === 'RU' ? 'Страны / Направления' : lang === 'KK' ? 'Елдер / Бағыттар' : 'Bölge / Ülkeler'}
+                    </span>
+                    <div className="u4-val">
+                      {lang === 'EN'
+                        ? 'Turkey · Kazakhstan · Egypt · Dubai'
+                        : lang === 'RU'
+                          ? 'Турция · Казахстан · Египет · Дубай'
+                          : lang === 'KK'
+                            ? 'Түркия · Қазақстан · Мысыр · Дубай'
+                            : 'Türkiye · Kazakistan · Mısır · Dubai'}
+                    </div>
                   </div>
                   <div className="u4-field" style={{ cursor: 'default' }}>
-                    <span className="u4-label"><Sparkles size={13} /> Paket İçeriği</span>
-                    <div className="u4-val">Uçak + Otel + Rehber + VIP Transfer</div>
+                    <span className="u4-label">
+                      <Sparkles size={13} />{' '}
+                      {lang === 'EN' ? 'Package Includes' : lang === 'RU' ? 'Включено в пакет' : lang === 'KK' ? 'Пакет мазмұны' : 'Paket İçeriği'}
+                    </span>
+                    <div className="u4-val">
+                      {lang === 'EN'
+                        ? 'Flight + Handpicked Hotel + Guided Stays'
+                        : lang === 'RU'
+                          ? 'Перелёт + Отель 5★ + Проживание и гид'
+                          : lang === 'KK'
+                            ? 'Ұшақ + Таңдаулы қонақүй + Гид қызметі'
+                            : 'Uçak + Seçkin Otel + Konaklama & Rehberlik'}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -680,7 +689,9 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
                     }}
                   >
                     <div>
-                      <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--aspan-teal-deep)', marginBottom: 3 }}>2. Etap Kalkış</div>
+                      <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--aspan-teal-deep)', marginBottom: 3 }}>
+                        {lang === 'EN' ? 'Leg 2 Origin' : lang === 'RU' ? '2-й сегмент: Вылет' : lang === 'KK' ? '2-кезең: Ұшу' : '2. Etap Kalkış'}
+                      </div>
                       <select
                         className="modal-input"
                         style={{ height: 34, fontSize: 12 }}
@@ -691,7 +702,9 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
                       </select>
                     </div>
                     <div>
-                      <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--aspan-teal-deep)', marginBottom: 3 }}>2. Etap Varış</div>
+                      <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--aspan-teal-deep)', marginBottom: 3 }}>
+                        {lang === 'EN' ? 'Leg 2 Destination' : lang === 'RU' ? '2-й сегмент: Прилёт' : lang === 'KK' ? '2-кезең: Қону' : '2. Etap Varış'}
+                      </div>
                       <select
                         className="modal-input"
                         style={{ height: 34, fontSize: 12 }}
@@ -702,7 +715,9 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
                       </select>
                     </div>
                     <div>
-                      <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--aspan-teal-deep)', marginBottom: 3 }}>2. Etap Tarihi</div>
+                      <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--aspan-teal-deep)', marginBottom: 3 }}>
+                        {lang === 'EN' ? 'Leg 2 Date' : lang === 'RU' ? '2-й сегмент: Дата' : lang === 'KK' ? '2-кезең: Күні' : '2. Etap Tarihi'}
+                      </div>
                       <input
                         type="date"
                         className="modal-input"

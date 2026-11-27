@@ -548,7 +548,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
               <div>{t.supportLine}</div>
               <div style={{ marginTop: 8, fontSize: 11 }}>
-                INFINITIVE TRAVEL · TÜRSAB &amp; IATA Yetkili Acente
+                INFINITIVE TRAVEL · Global Seyahat Platformu
               </div>
             </div>
           </div>

@@ -175,7 +175,7 @@ export const AuthModals: React.FC<AuthModalsProps> = ({
   const [companyName, setCompanyName] = useState('');
   const [applicantType, setApplicantType] = useState<'agency' | 'corporate' | 'sales'>('agency');
   const [taxId, setTaxId] = useState('');
-  const [requestedModules, setRequestedModules] = useState<string[]>(['flights', 'hotels', 'transfers']);
+  const [requestedModules, setRequestedModules] = useState<string[]>(['flights', 'hotels', 'tours']);
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -453,7 +453,7 @@ export const AuthModals: React.FC<AuthModalsProps> = ({
                       id="auth-reg-taxid"
                       name="taxId"
                       className="modal-input"
-                      placeholder="TÜRSAB / Vergi No"
+                      placeholder="BIN / Vergi No"
                       value={taxId}
                       onChange={(e) => setTaxId(e.target.value)}
                     />
@@ -514,8 +514,7 @@ export const AuthModals: React.FC<AuthModalsProps> = ({
                         [
                           { id: 'flights', label: 'Uçak Bileti' },
                           { id: 'hotels', label: 'Otel' },
-                          { id: 'transfers', label: 'VIP Transfer' },
-                          { id: 'tours', label: 'Tur Paketleri' },
+                          { id: 'tours', label: 'Paket Turlar' },
                         ] as const
                       ).map((mod) => {
                         const selected = requestedModules.includes(mod.id);

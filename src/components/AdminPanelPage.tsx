@@ -158,7 +158,7 @@ const ADMIN_SECTIONS = [
   { id: 'finance', label: 'Finans & CRM', description: 'Günlük gelir-gider grafikleri, 360° satış/uçuş defteri, ekip liderliği ve CRM takip listesi.', icon: <BarChart3 size={18} /> },
   { id: 'pricing', label: 'Fiyatlandırma', description: 'Hizmet bedellerini ve komisyonları ayarlayıp örnek fiyatları karşılaştırın.', icon: <Sliders size={18} /> },
   { id: 'deals', label: 'Fırsat Uçuşlar', description: 'Ana sayfa Günün Fırsatı ve 6 vitrin uçuşunu, rotaları ve şehir görsellerini yönetin.', icon: <Zap size={18} /> },
-  { id: 'inventory', label: 'Envanter & Manuel Uçuş', description: 'Manuel uçuş, otel, VIP transfer ve paket turları yönetin.', icon: <CarTaxiFront size={18} /> },
+  { id: 'inventory', label: 'Envanter & Manuel Uçuş', description: 'Manuel uçuş envanteri ve günlük otomatik XML otel/tur vitrin takibi.', icon: <Plane size={18} /> },
   { id: 'coupons', label: 'Kampanya ve kuponlar', description: 'Deneme kuponlarını ve paneldeki durumlarını yönetin.', icon: <Tag size={18} /> },
   { id: 'agents', label: 'Bayiler ve üyeler', description: 'Örnek kurumsal hesapları, limitleri ve mil bakiyelerini inceleyin.', icon: <Users size={18} /> },
   { id: 'apis', label: 'Sağlayıcı bağlantıları', description: 'Uçuş, otel ve ödeme bağlantılarının durumunu takip edin.', icon: <Plug size={18} /> },
@@ -476,7 +476,7 @@ const ADMIN_I18N: Record<'TR' | 'EN' | 'RU', {
       finance: { label: 'Finans & CRM', description: 'Gelir-gider defteri, CRM teklifleri ve ekip liderliği.' },
       pricing: { label: 'Fiyatlandırma & XML', description: 'Operatör XML kâr kurallarını ve komisyonları yönetin.' },
       deals: { label: 'Fırsat Uçuşlar', description: 'Ana sayfa Günün Fırsatı ve 6 vitrin uçuşunu, rotaları ve şehir görsellerini yönetin.' },
-      inventory: { label: 'Envanter & Manuel Uçuş', description: 'Manuel blok koltuk uçuşları, otel, VIP transfer ve turları yönetin.' },
+      inventory: { label: 'Envanter & Manuel Uçuş', description: 'Manuel blok koltuk uçuşları ve günlük otomatik XML otel/paket tur vitrini.' },
       coupons: { label: 'Kampanya ve kuponlar', description: 'Canlı indirim kuponlarını ekleyin, kapatın veya silin.' },
       agents: { label: 'Bayiler ve üyeler', description: 'Alt acente onayları, cari kredi limitleri ve yetki matrisi.' },
       apis: { label: 'Sağlayıcı bağlantıları', description: 'Buranus, Amadeus, otel ve ödeme API durumları.' },
@@ -517,7 +517,7 @@ const ADMIN_I18N: Record<'TR' | 'EN' | 'RU', {
       finance: { label: 'Finance & CRM', description: 'Income/expense ledger, CRM quotes and sales analytics.' },
       pricing: { label: 'Pricing & XML', description: 'Manage operator XML markup rules (FUN&SUN, Kompas, Selfie) and margins.' },
       deals: { label: 'Featured Flight Deals', description: 'Manage homepage Deal of the Day + 6 featured flight cards and city photos.' },
-      inventory: { label: 'Inventory & Flights', description: 'Manage manual charter block-seat flights, hotels, VIP transfers and tours.' },
+      inventory: { label: 'Inventory & Flights', description: 'Manage manual charter flights and monitor daily automated XML hotel & tour showcase.' },
       coupons: { label: 'Campaigns & Coupons', description: 'Create, toggle or delete live promo codes synced to checkout.' },
       agents: { label: 'Agencies & Team', description: 'B2B agency approvals, credit limits and granular RBAC permissions.' },
       apis: { label: 'Supplier APIs', description: 'Monitor Buranus, Amadeus, hotel and payment gateway connections.' },
@@ -558,7 +558,7 @@ const ADMIN_I18N: Record<'TR' | 'EN' | 'RU', {
       finance: { label: 'Финансы и CRM', description: 'Учет доходов/расходов, CRM предложения и аналитика.' },
       pricing: { label: 'Ценообразование XML', description: 'Наценки операторов XML (FUN&SUN, Kompas, Selfie) и комиссии.' },
       deals: { label: 'Выгодные рейсы', description: 'Управление блоком «Предложение дня» и 6 витринными рейсами на главной.' },
-      inventory: { label: 'Инвентарь и Рейсы', description: 'Ручные чартерные рейсы, отели, VIP трансферы и туры.' },
+      inventory: { label: 'Инвентарь и Рейсы', description: 'Ручные чартерные рейсы и ежедневная автосинхронизация витрины отелей и туров по XML.' },
       coupons: { label: 'Акции и купоны', description: 'Управление активными промокодами в реальном времени.' },
       agents: { label: 'Агентства и команда', description: 'Заявки B2B агентств, кредитные лимиты и права доступа.' },
       apis: { label: 'API поставщиков', description: 'Статус подключений Buranus, Amadeus, отелей и оплаты.' },
@@ -813,6 +813,21 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   const [newCouponCode, setNewCouponCode] = useState('');
   const [newCouponTitle, setNewCouponTitle] = useState('');
 
+  // Automated Daily XML Showcase (Hotels & Package Tours)
+  const [xmlShowcaseStatus, setXmlShowcaseStatus] = useState<{
+    lastSyncAt: string;
+    nextSyncAt: string;
+    trigger: string;
+    autoEnabled: boolean;
+    intervalHours: number;
+    mode: string;
+    hotelsCount: number;
+    toursCount: number;
+    hotelCountries: string[];
+    tourCountries: string[];
+  } | null>(null);
+  const [xmlSyncBusy, setXmlSyncBusy] = useState(false);
+
   // Module 6: B2B Agencies & Members Management
 
   useEffect(() => {
@@ -820,6 +835,11 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
     api.adminCatalog(controller.signal)
       .then(({ catalog }) => { if (!controller.signal.aborted) setCatalog(catalog); })
       .catch(() => { /* staff without catalog access */ });
+    if (canManageInventory || canManageApis) {
+      api.xmlShowcaseStatus(controller.signal)
+        .then((res) => { if (!controller.signal.aborted) setXmlShowcaseStatus(res.status); })
+        .catch(() => { /* ignore */ });
+    }
     if (canManageApis) {
       api.adminServerInfo(controller.signal)
         .then((info) => {
@@ -3194,385 +3214,151 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                   )}
 
                   {canManageHotelTransfer && (
-                  <>
-                  <div className="panel-card">
-                    <strong style={{ fontSize: 18, display: 'block', marginBottom: 10 }}>
-                      VIP Havalimanı Transfer Filosu (Canlı Vitrin Yönetimi)
-                    </strong>
-                    <div className="adm-table-wrap">
-                      <table className="adm-table">
-                        <thead>
-                          <tr>
-                            <th>Şehir</th>
-                            <th>Araç &amp; Güzergâh</th>
-                            <th>Kapasite</th>
-                            <th>Satış Fiyatı</th>
-                            <th>Durum</th>
-                            <th>İşlemler</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {managedTransfers.length === 0 ? (
-                            <tr>
-                              <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--aspan-text-muted)' }}>
-                                Kayıtlı transfer bulunmuyor. Aşağıdan yeni VIP transfer ekleyebilirsiniz.
-                              </td>
-                            </tr>
-                          ) : (
-                            managedTransfers.map((tr) => {
-                              const isConfirming = pendingCatalogDelete?.section === 'transfers' && pendingCatalogDelete.id === tr.id;
-                              return (
-                                <tr key={tr.id} className={!tr.active ? 'is-inactive' : ''}>
-                                  <td data-label="Şehir"><span className="pkg-pill">{tr.city}</span></td>
-                                  <td data-label="Araç & Güzergâh">
-                                    <div>
-                                      <strong>{tr.vehicle}</strong>
-                                      <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>{tr.route}</div>
-                                    </div>
-                                  </td>
-                                  <td data-label="Kapasite" style={{ fontSize: 12.5 }}>{tr.capacity} · {tr.baggage}</td>
-                                  <td data-label="Satış Fiyatı">
-                                    <strong style={{ fontSize: 15, color: 'var(--aspan-teal-deep)', whiteSpace: 'nowrap' }}>
-                                      {formatPrice(tr.price + (draft.transferAddTRY - DEFAULT_MARKUP.transferAddTRY), currency)}
-                                    </strong>
-                                  </td>
-                                  <td data-label="Durum">
-                                    <span className={`status-badge ${tr.active ? 'ok' : 'warn'}`}>
-                                      {tr.active ? '● Aktif' : '○ Pasif'}
-                                    </span>
-                                  </td>
-                                  <td data-label="İşlemler">
-                                    <div className="adm-actions">
-                                      <button
-                                        type="button"
-                                        className="adm-btn adm-btn-blue"
-                                        disabled={!catalogWritable}
-                                        onClick={() => saveCatalog(
-                                          'transfers',
-                                          managedTransfers.map((row) => row.id === tr.id ? { ...row, price: row.price + 100 } : row),
-                                          `${tr.vehicle} fiyatı +100 ₺ artırıldı.`
-                                        )}
-                                      >
-                                        +100 ₺
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="adm-btn adm-btn-ghost"
-                                        disabled={!catalogWritable || tr.price <= 400}
-                                        onClick={() => saveCatalog(
-                                          'transfers',
-                                          managedTransfers.map((row) => row.id === tr.id ? { ...row, price: Math.max(300, row.price - 100) } : row),
-                                          `${tr.vehicle} fiyatı -100 ₺ düşürüldü.`
-                                        )}
-                                      >
-                                        -100 ₺
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className={`adm-btn ${tr.active ? 'adm-btn-amber' : 'adm-btn-green-soft'}`}
-                                        disabled={!catalogWritable}
-                                        onClick={() => saveCatalog(
-                                          'transfers',
-                                          managedTransfers.map((row) => row.id === tr.id ? { ...row, active: !row.active } : row),
-                                          `${tr.vehicle} ${tr.active ? 'pasifleştirildi' : 'aktifleştirildi'}.`
-                                        )}
-                                      >
-                                        {tr.active ? 'Pasifleştir' : 'Aktifleştir'}
-                                      </button>
-                                      {isConfirming ? (
-                                        <span className="adm-confirm-inline">
-                                          Silinsin mi?
-                                          <button
-                                            type="button"
-                                            className="adm-btn adm-btn-red-solid"
-                                            style={{ height: 26, padding: '0 8px' }}
-                                            disabled={!catalogWritable}
-                                            onClick={() => saveCatalog(
-                                              'transfers',
-                                              managedTransfers.filter((row) => row.id !== tr.id),
-                                              `✓ ${tr.vehicle} silindi ve canlı siteden kaldırıldı.`
-                                            )}
-                                          >
-                                            Evet, Sil
-                                          </button>
-                                          <button
-                                            type="button"
-                                            className="adm-btn adm-btn-ghost"
-                                            style={{ height: 26, padding: '0 8px' }}
-                                            onClick={() => setPendingCatalogDelete(null)}
-                                          >
-                                            Vazgeç
-                                          </button>
-                                        </span>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          className="adm-btn adm-btn-red"
-                                          disabled={!catalogWritable}
-                                          aria-label={`${tr.vehicle} sil`}
-                                          onClick={() => setPendingCatalogDelete({ section: 'transfers', id: tr.id, label: tr.vehicle })}
-                                        >
-                                          <Trash2 size={13} /> Sil
-                                        </button>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className="adm-form-box">
-                      <div className="adm-form-title">
-                        <Plus size={16} color="#059669" /> Yeni VIP Transfer Ekle
+                  <div className="panel-card" style={{ border: '1.5px solid rgba(0, 168, 181, 0.35)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
+                      <div>
+                        <strong style={{ fontSize: 18, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                          <RefreshCw size={18} color="#00A8B5" /> Otomatik Günlük XML Vitrin Senkronizasyonu (Otel &amp; Paket Turlar)
+                        </strong>
+                        <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)', marginTop: 4, maxWidth: 760 }}>
+                          Otel konaklama ve paket turlar manuel girilmez; sistem <strong>her 24 saatte bir</strong> XML fiyatlarını otomatik tarar.
+                          Her ülkeden 1 uygun otel olacak şekilde <strong>en ucuz 5 otel</strong> ve <strong>4 farklı ülkeden en uygun 4 paket tur</strong> canlı vitrine otomatik aktarılır.
+                          (Transfer bölümü ve transfer vitrin yönetimi kaldırılmıştır.)
+                        </div>
                       </div>
-                      <form
-                        className="panel-form-grid"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          if (!newTrCity.trim() || !newTrVehicle.trim() || !newTrRoute.trim()) return;
-                          saveCatalog(
-                            'transfers',
-                            [
-                              ...managedTransfers,
-                              {
-                                id: crypto.randomUUID(),
-                                city: newTrCity.trim().toUpperCase(),
-                                vehicle: newTrVehicle.trim(),
-                                route: newTrRoute.trim(),
-                                capacity: '1–4 Yolcu',
-                                baggage: '4 Bavul',
-                                price: Math.max(300, Math.round(Number(newTrPrice) || 1500)),
-                                active: true,
-                              },
-                            ],
-                            `✓ ${newTrVehicle.trim()} canlı siteye eklendi.`,
-                            () => {
-                              setNewTrCity('');
-                              setNewTrVehicle('');
-                              setNewTrRoute('');
-                            }
-                          );
+                      <button
+                        type="button"
+                        className="adm-btn adm-btn-green"
+                        style={{ height: 40, padding: '0 16px', fontSize: 13 }}
+                        disabled={xmlSyncBusy}
+                        onClick={async () => {
+                          setXmlSyncBusy(true);
+                          setActionError('');
+                          try {
+                            const res = await api.syncXmlShowcase();
+                            setXmlShowcaseStatus(res.status);
+                            const fresh = await api.adminCatalog();
+                            setCatalog(fresh.catalog);
+                            onCatalogUpdated?.();
+                            setSavedToast(`✓ XML vitrini güncellendi: ${res.hotels.length} otel (${res.status.hotelCountries.join(', ')}) · ${res.tours.length} paket tur (${res.status.tourCountries.join(', ')})`);
+                            window.setTimeout(() => setSavedToast(null), 4500);
+                          } catch (err) {
+                            setActionError(apiMessage(err));
+                          } finally {
+                            setXmlSyncBusy(false);
+                          }
                         }}
                       >
-                        <div>
-                          <label className="adm-field-lbl">Şehir</label>
-                          <input className="modal-input" required placeholder="Örn: ASTANA" value={newTrCity} onChange={(e) => setNewTrCity(e.target.value)} />
-                        </div>
-                        <div>
-                          <label className="adm-field-lbl">Araç Modeli</label>
-                          <input className="modal-input" required placeholder="Örn: Mercedes V-Class VIP" value={newTrVehicle} onChange={(e) => setNewTrVehicle(e.target.value)} />
-                        </div>
-                        <div>
-                          <label className="adm-field-lbl">Güzergâh</label>
-                          <input className="modal-input" required placeholder="Örn: NQZ → Merkez" value={newTrRoute} onChange={(e) => setNewTrRoute(e.target.value)} />
-                        </div>
-                        <div>
-                          <label className="adm-field-lbl">Fiyat (₺)</label>
-                          <input className="modal-input" type="number" min={300} placeholder="1750" value={newTrPrice} onChange={(e) => setNewTrPrice(e.target.value)} />
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                          <button type="submit" className="adm-btn adm-btn-green" style={{ height: 42, width: '100%', fontSize: 13 }} disabled={!catalogWritable}>
-                            <Plus size={15} /> Transfer Ekle
-                          </button>
-                        </div>
-                      </form>
-                    </div>
-                  </div>
-
-                  <div className="panel-card">
-                    <strong style={{ fontSize: 18, display: 'block', marginBottom: 10 }}>
-                      Vitrin Otelleri &amp; Konaklama (Canlı Vitrin Yönetimi)
-                    </strong>
-                    <div className="adm-table-wrap">
-                      <table className="adm-table">
-                        <thead>
-                          <tr>
-                            <th>Şehir</th>
-                            <th>Otel Adı &amp; Yıldız</th>
-                            <th>Pansiyon / Gece</th>
-                            <th>Satış Fiyatı</th>
-                            <th>Durum</th>
-                            <th>İşlemler</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {managedHotels.length === 0 ? (
-                            <tr>
-                              <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--aspan-text-muted)' }}>
-                                Kayıtlı otel bulunmuyor. Aşağıdan yeni vitrin oteli ekleyebilirsiniz.
-                              </td>
-                            </tr>
-                          ) : (
-                            managedHotels.map((h) => {
-                              const isConfirming = pendingCatalogDelete?.section === 'hotels' && pendingCatalogDelete.id === h.id;
-                              return (
-                                <tr key={h.id} className={!h.active ? 'is-inactive' : ''}>
-                                  <td data-label="Şehir"><span className="pkg-pill">{h.city}</span></td>
-                                  <td data-label="Otel Adı">
-                                    <div>
-                                      <strong>{h.name}</strong>
-                                      <div style={{ fontSize: 12, color: '#d97706' }}>{'★'.repeat(Math.min(5, Math.max(1, h.stars)))}</div>
-                                    </div>
-                                  </td>
-                                  <td data-label="Pansiyon / Gece" style={{ fontSize: 12.5 }}>{h.boardType} · {h.nights} Gece</td>
-                                  <td data-label="Satış Fiyatı">
-                                    <strong style={{ fontSize: 15, color: 'var(--aspan-teal-deep)', whiteSpace: 'nowrap' }}>
-                                      {formatPrice(Math.round(h.price * (1 + (draft.hotelPercent - DEFAULT_MARKUP.hotelPercent) / 100)), currency)}
-                                    </strong>
-                                  </td>
-                                  <td data-label="Durum">
-                                    <span className={`status-badge ${h.active ? 'ok' : 'warn'}`}>
-                                      {h.active ? '● Aktif' : '○ Pasif'}
-                                    </span>
-                                  </td>
-                                  <td data-label="İşlemler">
-                                    <div className="adm-actions">
-                                      <button
-                                        type="button"
-                                        className="adm-btn adm-btn-blue"
-                                        disabled={!catalogWritable}
-                                        onClick={() => saveCatalog(
-                                          'hotels',
-                                          managedHotels.map((row) => row.id === h.id ? { ...row, price: row.price + 250 } : row),
-                                          `${h.name} fiyatı +250 ₺ artırıldı.`
-                                        )}
-                                      >
-                                        +250 ₺
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="adm-btn adm-btn-ghost"
-                                        disabled={!catalogWritable || h.price <= 750}
-                                        onClick={() => saveCatalog(
-                                          'hotels',
-                                          managedHotels.map((row) => row.id === h.id ? { ...row, price: Math.max(500, row.price - 250) } : row),
-                                          `${h.name} fiyatı -250 ₺ düşürüldü.`
-                                        )}
-                                      >
-                                        -250 ₺
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className={`adm-btn ${h.active ? 'adm-btn-amber' : 'adm-btn-green-soft'}`}
-                                        disabled={!catalogWritable}
-                                        onClick={() => saveCatalog(
-                                          'hotels',
-                                          managedHotels.map((row) => row.id === h.id ? { ...row, active: !row.active } : row),
-                                          `${h.name} ${h.active ? 'pasifleştirildi' : 'aktifleştirildi'}.`
-                                        )}
-                                      >
-                                        {h.active ? 'Pasifleştir' : 'Aktifleştir'}
-                                      </button>
-                                      {isConfirming ? (
-                                        <span className="adm-confirm-inline">
-                                          Silinsin mi?
-                                          <button
-                                            type="button"
-                                            className="adm-btn adm-btn-red-solid"
-                                            style={{ height: 26, padding: '0 8px' }}
-                                            disabled={!catalogWritable}
-                                            onClick={() => saveCatalog(
-                                              'hotels',
-                                              managedHotels.filter((row) => row.id !== h.id),
-                                              `✓ ${h.name} silindi ve canlı siteden kaldırıldı.`
-                                            )}
-                                          >
-                                            Evet, Sil
-                                          </button>
-                                          <button
-                                            type="button"
-                                            className="adm-btn adm-btn-ghost"
-                                            style={{ height: 26, padding: '0 8px' }}
-                                            onClick={() => setPendingCatalogDelete(null)}
-                                          >
-                                            Vazgeç
-                                          </button>
-                                        </span>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          className="adm-btn adm-btn-red"
-                                          disabled={!catalogWritable}
-                                          aria-label={`${h.name} sil`}
-                                          onClick={() => setPendingCatalogDelete({ section: 'hotels', id: h.id, label: h.name })}
-                                        >
-                                          <Trash2 size={13} /> Sil
-                                        </button>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          )}
-                        </tbody>
-                      </table>
+                        <RefreshCw size={14} /> {xmlSyncBusy ? 'XML Taranıyor...' : 'Şimdi XML Kontrol Et & Güncelle'}
+                      </button>
                     </div>
 
-                    <div className="adm-form-box">
-                      <div className="adm-form-title">
-                        <Plus size={16} color="#059669" /> Yeni Vitrin Oteli Ekle
+                    <div className="adm-banner adm-banner-ok" style={{ marginBottom: 16 }}>
+                      <CheckCircle2 size={17} style={{ flexShrink: 0, marginTop: 2 }} />
+                      <div style={{ fontSize: 12.5 }}>
+                        <strong>Günlük Otomasyon Aktif (Her 24 Saatte Bir):</strong>{' '}
+                        {xmlShowcaseStatus ? (
+                          <>
+                            Son kontrol: <strong>{formatTrDateTime(xmlShowcaseStatus.lastSyncAt)}</strong> ·
+                            Sonraki otomatik kontrol: <strong>{formatTrDateTime(xmlShowcaseStatus.nextSyncAt)}</strong> ·
+                            Kaynak: <strong>{xmlShowcaseStatus.mode === 'live-xml' ? 'Canlı XML Beslemesi' : 'XML Otomasyon Havuzu (Canlı XML akışı bekleniyor)'}</strong>
+                          </>
+                        ) : (
+                          'Günlük otomatik XML taraması sunucu üzerinde aktiftir.'
+                        )}
                       </div>
-                      <form
-                        className="panel-form-grid"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          if (!newHotelCity.trim() || !newHotelName.trim()) return;
-                          saveCatalog(
-                            'hotels',
-                            [
-                              ...managedHotels,
-                              {
-                                id: crypto.randomUUID(),
-                                city: newHotelCity.trim().toUpperCase(),
-                                name: newHotelName.trim(),
-                                stars: 5,
-                                boardType: 'Kahvaltı Dahil',
-                                nights: 2,
-                                price: Math.max(500, Math.round(Number(newHotelPrice) || 3200)),
-                                active: true,
-                              },
-                            ],
-                            `✓ ${newHotelName.trim()} canlı siteye eklendi.`,
-                            () => {
-                              setNewHotelCity('');
-                              setNewHotelName('');
-                            }
-                          );
-                        }}
-                      >
-                        <div>
-                          <label className="adm-field-lbl">Şehir</label>
-                          <input className="modal-input" required placeholder="Örn: ANTALYA" value={newHotelCity} onChange={(e) => setNewHotelCity(e.target.value)} />
-                        </div>
-                        <div>
-                          <label className="adm-field-lbl">Otel Adı</label>
-                          <input className="modal-input" required placeholder="Örn: Rixos Premium Belek" value={newHotelName} onChange={(e) => setNewHotelName(e.target.value)} />
-                        </div>
-                        <div>
-                          <label className="adm-field-lbl">Fiyat (₺)</label>
-                          <input className="modal-input" type="number" min={500} placeholder="3200" value={newHotelPrice} onChange={(e) => setNewHotelPrice(e.target.value)} />
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                          <button type="submit" className="adm-btn adm-btn-green" style={{ height: 42, width: '100%', fontSize: 13 }} disabled={!catalogWritable}>
-                            <Plus size={15} /> Otel Ekle
-                          </button>
-                        </div>
-                      </form>
+                    </div>
+
+                    {/* Auto-Synced 5 Cheapest Hotels (1 per country) */}
+                    <div style={{ marginBottom: 20 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+                        <strong style={{ fontSize: 15, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <Building2 size={16} color="#00A8B5" /> Otomatik Vitrin Otelleri (5 Otel · Her Ülkeden 1 En Uygun)
+                        </strong>
+                        <span className="pkg-pill" style={{ background: 'rgba(16,185,129,0.14)', color: '#047857', fontWeight: 800 }}>
+                          XML Otomatik · {Math.min(5, managedHotels.filter((h) => h.active).length)} / 5 Aktif
+                        </span>
+                      </div>
+                      <div className="adm-table-wrap">
+                        <table className="adm-table">
+                          <thead>
+                            <tr>
+                              <th>Ülke / Şehir</th>
+                              <th>Otel Adı &amp; Yıldız</th>
+                              <th>Pansiyon / Gece</th>
+                              <th>Kaynak</th>
+                              <th>Vitrin Fiyatı</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {managedHotels.filter((h) => h.active).slice(0, 5).map((h) => (
+                              <tr key={h.id}>
+                                <td data-label="Ülke / Şehir">
+                                  <span className="pkg-pill">{h.country ? `${h.country} · ${h.city}` : h.city}</span>
+                                </td>
+                                <td data-label="Otel Adı">
+                                  <strong>{h.name}</strong>
+                                  <div style={{ fontSize: 11.5, color: '#d97706' }}>{'★'.repeat(Math.min(5, Math.max(1, h.stars)))}</div>
+                                </td>
+                                <td data-label="Pansiyon" style={{ fontSize: 12.5 }}>{h.boardType} · {h.nights} Gece</td>
+                                <td data-label="Kaynak"><span className="pkg-pill">{h.provider || 'XML Otomatik'}</span></td>
+                                <td data-label="Fiyat">
+                                  <strong style={{ fontSize: 15, color: 'var(--aspan-teal-deep)' }}>
+                                    {formatPrice(Math.round(h.price * (1 + (draft.hotelPercent - DEFAULT_MARKUP.hotelPercent) / 100)), currency)}
+                                  </strong>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Auto-Synced 4 Package Tours from 4 Countries */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+                        <strong style={{ fontSize: 15, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <Globe size={16} color="#d97706" /> Otomatik Vitrin Paket Turları (4 Farklı Ülke)
+                        </strong>
+                        <span className="pkg-pill" style={{ background: 'rgba(217,119,6,0.14)', color: '#b45309', fontWeight: 800 }}>
+                          XML Otomatik · {Math.min(4, managedTours.filter((t) => t.active).length)} / 4 Ülke
+                        </span>
+                      </div>
+                      <div className="adm-table-wrap">
+                        <table className="adm-table">
+                          <thead>
+                            <tr>
+                              <th>Ülke / Bölge</th>
+                              <th>Paket Tur Başlığı</th>
+                              <th>Süre / Kontenjan</th>
+                              <th>Kaynak</th>
+                              <th>Vitrin Fiyatı</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {managedTours.filter((t) => t.active).slice(0, 4).map((t) => (
+                              <tr key={t.id}>
+                                <td data-label="Ülke / Bölge">
+                                  <span className="pkg-pill">{t.country ? t.country.toUpperCase() : t.city}</span>
+                                </td>
+                                <td data-label="Tur Başlığı">
+                                  <strong>{t.title}</strong>
+                                  {t.includes && <div style={{ fontSize: 11.5, color: 'var(--aspan-text-muted)' }}>{t.includes}</div>}
+                                </td>
+                                <td data-label="Süre" style={{ fontSize: 12.5 }}>{t.duration} · {t.quota} kişi</td>
+                                <td data-label="Kaynak"><span className="pkg-pill">{t.provider || 'XML Otomatik'}</span></td>
+                                <td data-label="Fiyat">
+                                  <strong style={{ fontSize: 15, color: 'var(--aspan-teal-deep)' }}>
+                                    {formatPrice(t.price, currency)}
+                                  </strong>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
-
-                  <AdminToursCard
-                    currency={currency}
-                    tours={managedTours}
-                    catalogWritable={catalogWritable}
-                    onSaveTours={(items, msg, after) => saveCatalog('tours', items, msg, after)}
-                  />
-                  </>
                   )}
                 </>
               )}
