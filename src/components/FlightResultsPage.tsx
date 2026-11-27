@@ -37,6 +37,7 @@ import { addCalendarDays, toCalendarDate } from '../data/calendarDates';
 import { api, apiMessage, type AdminCatalog, type BookingDraft } from '../data/api';
 import type { SavedPassengerRecord } from '../types';
 import { openBrandedEticketPdf } from '../utils/eticketPdf';
+import { WA_HREF } from '../i18n/translations';
 import {
   AdminMarkupConfig,
   BookingRecord,
@@ -1290,6 +1291,25 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                       📄 {lang === 'EN' ? 'Download Demo Summary (PDF)' : lang === 'RU' ? 'Скачать демо-резюме (PDF)' : lang === 'KK' ? 'Демо түйіндеме (PDF)' : 'Deneme Rezervasyon Özeti (PDF)'}
                     </button>
                   )}
+                  {isCharterBooking && (
+                    <a
+                      href={`${WA_HREF}?text=${encodeURIComponent(
+                        `Merhaba FlyToAspan, Charter uçuşum için Check-In & Koltuk Atama (+₺250) desteği almak istiyorum.\nPNR: ${bookingConfirmedPnr}\nRota: ${bookingTitle}\nTarih: ${query.departDate}`
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-gold-nav"
+                      style={{ background: '#059669', color: '#FFFFFF', textDecoration: 'none' }}
+                    >
+                      💬 {lang === 'EN'
+                        ? 'Connect to WhatsApp for Charter Check-In'
+                        : lang === 'RU'
+                          ? 'Связаться в WhatsApp для чартерного Check-In'
+                          : lang === 'KK'
+                            ? 'Чартерлік Check-In үшін WhatsApp-қа қосылу'
+                            : 'Charter Check-In İçin WhatsApp Destek Hattına Bağlan'}
+                    </a>
+                  )}
                   <button type="button" className="uf-quick-pill" onClick={onBackHome}>{co.backHome}</button>
                 </div>
               </div>
@@ -1688,14 +1708,87 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                           />
                           <div className="uf-co-addon-body">
                             <div className="uf-co-addon-top">
-                              <strong>{co.autoCheckinTitle}</strong>
+                              <strong>
+                                {isCharterBooking
+                                  ? (lang === 'EN'
+                                      ? 'Charter Check-In & Seat Assignment (via WhatsApp Support)'
+                                      : lang === 'RU'
+                                        ? 'Чартерный Check-In и выбор места (через WhatsApp)'
+                                        : lang === 'KK'
+                                          ? 'Чартерлік Check-In және орын таңдау (WhatsApp арқылы)'
+                                          : 'Charter Check-In & Koltuk Atama (WhatsApp Destekli)')
+                                  : co.autoCheckinTitle}
+                              </strong>
                               <span className="uf-co-addon-price">
                                 +{formatPrice(250 * totalPax, currency)}
                               </span>
                             </div>
-                            <p>{co.autoCheckinSub}</p>
+                            <p>
+                              {isCharterBooking
+                                ? (lang === 'EN'
+                                    ? 'Charter flights require operator check-in coordination. Add this +250 TL service and connect with our WhatsApp support desk for seat & boarding pass handling.'
+                                    : lang === 'RU'
+                                      ? 'На чартерных рейсах регистрация оформляется через оператора. Добавьте эту услугу (+250 TL) и свяжитесь с поддержкой WhatsApp для выбора места и посадочного.'
+                                      : lang === 'KK'
+                                        ? 'Чартерлік рейстерде тіркелу оператор арқылы жүргізіледі. Осы +250 TL қызметін қосып, WhatsApp қолдау желісіне байланысыңыз.'
+                                        : 'Charter seferlerde check-in işlemi operatör üzerinden yürütülür. Bu +₺250 ek hizmeti seçin ve koltuk/biniş kartı koordinasyonu için WhatsApp destek hattımıza bağlanın.')
+                                : co.autoCheckinSub}
+                            </p>
                           </div>
                         </label>
+                        {isCharterBooking && (
+                          <div
+                            style={{
+                              padding: '12px 14px',
+                              borderRadius: 12,
+                              background: '#ECFDF5',
+                              border: '1.5px solid #6EE7B7',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              flexWrap: 'wrap',
+                              gap: 10,
+                            }}
+                          >
+                            <div style={{ fontSize: 12.5, color: '#065F46', fontWeight: 700 }}>
+                              {lang === 'EN'
+                                ? '✈ Charter Flight Check-In: Connect directly to our WhatsApp Support Desk (service fee: 250 TL / pax).'
+                                : lang === 'RU'
+                                  ? '✈ Чартерный Check-In: свяжитесь с нашей поддержкой в WhatsApp (услуга: 250 TL / пасс.).'
+                                  : lang === 'KK'
+                                    ? '✈ Чартерлік Check-In: WhatsApp қолдау желісіне тікелей қосылыңыз (қызмет ақысы: 250 TL / жолаушы).'
+                                    : '✈ Charter Sefer Check-In: İşlem ve koltuk talebiniz için WhatsApp destek hattımıza doğrudan bağlanın (hizmet bedeli: ₺250 / yolcu).'}
+                            </div>
+                            <a
+                              href={`${WA_HREF}?text=${encodeURIComponent(
+                                `Merhaba FlyToAspan, Charter sefer check-in & koltuk atama (+₺250) hizmeti için bilgi/destek almak istiyorum.\nRota: ${bookingTitle}\nUçuş: ${bookingLegs.map((l) => l.flight.flightNumber).join(' / ')}\nTarih: ${query.departDate}\nYolcu: ${totalPax}`
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                padding: '8px 14px',
+                                borderRadius: 10,
+                                background: '#059669',
+                                color: '#FFFFFF',
+                                fontWeight: 800,
+                                fontSize: 12.5,
+                                textDecoration: 'none',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              💬 {lang === 'EN'
+                                ? 'Connect on WhatsApp'
+                                : lang === 'RU'
+                                  ? 'Написать в WhatsApp'
+                                  : lang === 'KK'
+                                    ? 'WhatsApp-қа қосылу'
+                                    : 'WhatsApp Destek Hattına Bağlan'}
+                            </a>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

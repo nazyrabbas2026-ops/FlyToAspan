@@ -904,6 +904,15 @@ export function buildBoardingPassHtml(
 
       <div class="note">
         <strong>ℹ ${escapeHtml(t.noteTitle)}:</strong> ${escapeHtml(bp?.baggageDropNote || t.defaultNote)}
+        ${!hasOfficialQr ? `<div style="margin-top:6px;font-weight:700;">${escapeHtml(
+          lang === 'EN'
+            ? 'Note: This document is a Check-In Information Summary. For airport security and gate passage, please present the official airline boarding pass (attachment/mobile app) or obtain it at the airline counter.'
+            : lang === 'RU'
+              ? 'Примечание: данный документ является информационной сводкой регистрации. Для прохода в аэропорту используйте официальный посадочный талон авиакомпании (вложение/приложение) или стойку регистрации.'
+              : lang === 'KK'
+                ? 'Ескерту: бұл құжат тіркелу туралы ақпараттық түйіндеме болып табылады. Әуежай өткелі үшін әуекомпанияның ресми отырғызу талонын немесе тіркеу тағанын пайдаланыңыз.'
+                : 'Bilgilendirme: Bu belge Check-In Bilgilendirme Özetidir. Havalimanı güvenlik ve biniş kapısı geçişlerinde havayolunun resmi biniş kartını (mail eki / havayolu uygulaması) veya havalimanı kontuar çıktısını kullanınız.'
+        )}</div>` : ''}
       </div>
     </div>
   </div>

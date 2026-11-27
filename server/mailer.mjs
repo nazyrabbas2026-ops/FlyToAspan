@@ -504,6 +504,15 @@ function buildBoardingPassEmailHtml({
     <div style="background:#FFFBEB;border:1px solid #FCD34D;border-radius:12px;padding:14px 16px;margin:16px 0;font-size:12.5px;color:#92400E;">
       <div style="font-weight:800;margin-bottom:4px;">ℹ ${escapeHtml(c.noteTitle)}</div>
       <div>${escapeHtml(baggageDropNote || c.defaultNote)}</div>
+      ${!hasOfficialQr && !officialPassFileName ? `<div style="margin-top:6px;font-weight:700;">${escapeHtml(
+        lang === 'EN'
+          ? 'Note: This email is a Check-In Information Summary. Present the airline official boarding pass (app/email attachment) or airport counter printout at security and boarding gates.'
+          : lang === 'RU'
+            ? 'Примечание: это письмо является информационной сводкой регистрации. Для прохода на посадку используйте официальный посадочный талон авиакомпании или стойку в аэропорту.'
+            : lang === 'KK'
+              ? 'Ескерту: бұл хат тіркелу туралы ақпараттық түйіндеме. Отырғызу кезінде әуекомпанияның ресми талонын немесе әуежай тағанын пайдаланыңыз.'
+              : 'Bilgilendirme: Bu e-posta Check-In Bilgilendirme Özetidir. Havalimanı güvenlik ve kapı geçişlerinde havayolunun resmi biniş kartını (uygulama/ek) veya kontuar çıktısını kullanınız.'
+      )}</div>` : ''}
     </div>
 
     <p style="font-size:12.5px;color:#64748B;">${escapeHtml(c.manageHint)}</p>

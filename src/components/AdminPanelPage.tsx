@@ -39,6 +39,7 @@ import {
   DEFAULT_MARKUP,
   HOTEL_DEALS,
   TRANSFER_DEALS,
+  detectCharterFlight,
   formatDisplayDate,
   formatPrice,
   getFlightDeals,
@@ -2799,6 +2800,11 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                   <span style={{ padding: '4px 10px', borderRadius: 9, background: 'rgba(221, 168, 56, 0.16)', color: '#92400E', fontWeight: 800, fontSize: 12 }}>
                                     +{formatPrice(b.autoCheckinFeeTRY ?? 250, currency)}
                                   </span>
+                                  {detectCharterFlight({ airline: b.airline, providerSource: b.providerSource, subtitle: b.subtitle }) && (
+                                    <span style={{ padding: '4px 10px', borderRadius: 9, background: 'rgba(245, 158, 11, 0.2)', color: '#92400E', border: '1px solid rgba(245, 158, 11, 0.45)', fontWeight: 800, fontSize: 11.5 }}>
+                                      CHARTER · WhatsApp
+                                    </span>
+                                  )}
                                   {primarySeatText && (
                                     <span style={{ padding: '4px 10px', borderRadius: 9, background: '#0B1E33', color: '#F2C85C', fontWeight: 900, fontSize: 12 }}>
                                       Koltuk: {primarySeatText}
