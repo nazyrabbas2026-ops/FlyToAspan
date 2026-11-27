@@ -1206,11 +1206,45 @@ test('FlyToAspan API & Security Suite', async (t) => {
     const checkinUpdate = await call(env.origin, `/api/admin/bookings/${autoBk.json.booking.id}/checkin`, {
       method: 'PATCH',
       cookie: adminCookie,
-      body: { checkinStatus: 'completed', assignedSeat: '14A' },
+      body: {
+        checkinStatus: 'completed',
+        assignedSeat: '14A',
+        sendEmail: true,
+        recipientEmail: 'mehmet.kaya@example.com',
+        lang: 'TR',
+        boardingPass: {
+          seat: '14A',
+          passengerSeats: [{ fullName: 'Mehmet Kaya', seat: '14A', seqNo: '042' }],
+          airlinePnr: 'TK99AB',
+          terminal: 'T2 Dış Hatlar',
+          gate: '204',
+          boardingTime: '07:35',
+          gateCloseTime: '07:55',
+          boardingGroup: 'Grup 2',
+          sequenceNo: '042',
+          baggageDropNote: 'Bagaj teslim 205 kontuarı.',
+        },
+      },
     });
     assert.equal(checkinUpdate.status, 200);
     assert.equal(checkinUpdate.json.booking.checkinStatus, 'completed');
     assert.equal(checkinUpdate.json.booking.assignedSeat, '14A');
+    assert.equal(checkinUpdate.json.booking.boardingPass.gate, '204');
+    assert.equal(checkinUpdate.json.booking.boardingPass.boardingTime, '07:35');
+    assert.equal(checkinUpdate.json.booking.boardingPass.sentToEmail, 'mehmet.kaya@example.com');
+    assert.equal(checkinUpdate.json.email.requested, true);
+    assert.ok(checkinUpdate.json.email.previewHtml.includes('14A'));
+    assert.ok(checkinUpdate.json.email.previewHtml.includes('204'));
+    assert.ok(checkinUpdate.json.email.previewHtml.includes('07:35'));
+    assert.ok(checkinUpdate.json.email.previewHtml.includes('TK99AB'));
+
+    // Validation: sendEmail=true without valid email must fail with 400
+    const badEmailCheckin = await call(env.origin, `/api/admin/bookings/${autoBk.json.booking.id}/checkin`, {
+      method: 'PATCH',
+      cookie: adminCookie,
+      body: { checkinStatus: 'completed', assignedSeat: '14A', sendEmail: true, recipientEmail: 'invalid-email' },
+    });
+    assert.equal(badEmailCheckin.status, 400);
 
     // Non-admin user must be rejected with 403 on /checkin endpoint
     const staffCheckinForbidden = await call(env.origin, `/api/admin/bookings/${autoBk.json.booking.id}/checkin`, {

@@ -59,7 +59,7 @@ import { addCalendarDays, toCalendarDate } from '../data/calendarDates';
 import { PanelNavigation } from './PanelNavigation';
 import { AdminFinanceCrmSection } from './AdminFinanceCrmSection';
 import { AdminDealsSection, AdminToursCard } from './AdminDealsSection';
-import { openBrandedEticketPdf } from '../utils/eticketPdf';
+import { openBoardingPassPdf, openBrandedEticketPdf, openRawEmailPreview } from '../utils/eticketPdf';
 import { useAdminDomI18n } from '../hooks/useAdminDomI18n';
 import { api, apiMessage, type AdminCatalog, type AdminCatalogState, type BookingDraft } from '../data/api';
 
@@ -127,6 +127,28 @@ function generateStrongPassword(): string {
   return 'Aspan!' + Array.from(arr, (n) => chars[n % chars.length]).join('').slice(0, 10);
 }
 
+function subtractMinutesHHMM(hhmm: string | undefined, minusMins: number): string {
+  if (!hhmm || !/^\d{1,2}:\d{2}$/.test(hhmm.trim())) return '';
+  const [h, m] = hhmm.trim().split(':').map(Number);
+  const total = ((h * 60 + m - minusMins) % 1440 + 1440) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+interface BoardingPassDraftForm {
+  passengerSeats: Array<{ fullName: string; seat: string; seqNo: string }>;
+  airlinePnr: string;
+  eticketNo: string;
+  terminal: string;
+  gate: string;
+  boardingTime: string;
+  gateCloseTime: string;
+  boardingGroup: string;
+  baggageDropNote: string;
+  mobilePassUrl: string;
+  recipientEmail: string;
+  mailLang: LangCode;
+}
+
 interface AdminPanelPageProps {
   lang?: LangCode;
   onSelectLang?: (next: LangCode) => void;
@@ -137,7 +159,10 @@ interface AdminPanelPageProps {
   bookings: BookingRecord[];
   onAddBooking: (draft: BookingDraft) => Promise<BookingRecord>;
   onUpdateBookingStatus: (id: string, status: BookingRecord['status']) => Promise<void>;
-  onUpdateBookingCheckin?: (id: string, payload: { checkinStatus: 'pending' | 'completed'; assignedSeat?: string }) => Promise<void>;
+  onUpdateBookingCheckin?: (
+    id: string,
+    payload: Parameters<typeof api.updateBookingCheckin>[1]
+  ) => Promise<Awaited<ReturnType<typeof api.updateBookingCheckin>>>;
   onDeleteBooking: (id: string) => Promise<void>;
   onBookingCreated?: (booking: BookingRecord) => void;
   onCatalogUpdated?: () => void;
@@ -863,7 +888,59 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   // Module 2.2: Online Check-In Kontrol state (Super Admin only)
   const [checkinFilter, setCheckinFilter] = useState<'pending' | 'completed' | 'all'>('pending');
   const [checkinSearch, setCheckinSearch] = useState('');
-  const [seatDrafts, setSeatDrafts] = useState<Record<string, string>>({});
+  const [expandedCheckinId, setExpandedCheckinId] = useState<string | null>(null);
+  const [bpDrafts, setBpDrafts] = useState<Record<string, BoardingPassDraftForm>>({});
+  const [emailPreviews, setEmailPreviews] = useState<Record<string, { html: string; subject: string; to: string; sent: boolean }>>({});
+
+  const initBoardingPassDraft = (b: BookingRecord): BoardingPassDraftForm => {
+    const depTime = b.departTime || b.legs?.[0]?.departTime || '';
+    const bp = b.boardingPass;
+    const defaultSeats =
+      bp?.passengerSeats && bp.passengerSeats.length > 0
+        ? bp.passengerSeats.map((ps, idx) => ({
+            fullName: ps.fullName || b.passenger,
+            seat: ps.seat || '',
+            seqNo: ps.seqNo || String(idx + 1).padStart(3, '0'),
+          }))
+        : b.passengersDetail && b.passengersDetail.length > 0
+          ? b.passengersDetail.map((p, idx) => ({
+              fullName: p.fullName,
+              seat: idx === 0 ? (bp?.seat || b.assignedSeat || '') : '',
+              seqNo: String(idx + 1).padStart(3, '0'),
+            }))
+          : [{ fullName: b.passenger, seat: bp?.seat || b.assignedSeat || '', seqNo: bp?.sequenceNo || '001' }];
+    return {
+      passengerSeats: defaultSeats,
+      airlinePnr: bp?.airlinePnr || b.pnr,
+      eticketNo: bp?.eticketNo || b.eticketNumber || '',
+      terminal: bp?.terminal || 'Dış Hatlar / T1',
+      gate: bp?.gate || '',
+      boardingTime: bp?.boardingTime || subtractMinutesHHMM(depTime, 40),
+      gateCloseTime: bp?.gateCloseTime || subtractMinutesHHMM(depTime, 20),
+      boardingGroup: bp?.boardingGroup || 'Grup 2',
+      baggageDropNote:
+        bp?.baggageDropNote ||
+        (activePanelLang === 'EN'
+          ? 'If you have checked baggage, please visit the Bag-Drop counter at least 2 hours before departure. Boarding gate closes 20 minutes prior to departure.'
+          : activePanelLang === 'RU'
+            ? 'При наличии багажа подойдите на стойку Bag-Drop за 2 часа до вылета. Посадка закрывается за 20 минут до вылета.'
+            : activePanelLang === 'KK'
+              ? 'Тіркелетін жолжүгіңіз болса ұшудан 2 сағат бұрын Bag-Drop тағанына келіңіз. Отырғызу қақпасы 20 минут бұрын жабылады.'
+              : 'Kayıtlı bagajınız varsa uçuş saatinden en az 2 saat önce Bag-Drop kontuarına uğrayınız. Biniş kapısı kalkıştan 20 dk önce kapanır.'),
+      mobilePassUrl: bp?.mobilePassUrl || '',
+      recipientEmail: bp?.sentToEmail || b.contactEmail || '',
+      mailLang: activePanelLang,
+    };
+  };
+
+  const getBpDraft = (b: BookingRecord): BoardingPassDraftForm => bpDrafts[b.id] ?? initBoardingPassDraft(b);
+
+  const patchBpDraft = (b: BookingRecord, patch: Partial<BoardingPassDraftForm>) => {
+    setBpDrafts((prev) => ({
+      ...prev,
+      [b.id]: { ...(prev[b.id] ?? initBoardingPassDraft(b)), ...patch },
+    }));
+  };
 
   const autoCheckinBookings = useMemo(() => {
     return bookings
@@ -2570,7 +2647,13 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                           const msDiff = Date.parse(`${b.date}T00:00:00`) - Date.parse(`${todayIso}T00:00:00`);
                           const daysDiff = Number.isFinite(msDiff) ? Math.round(msDiff / 86_400_000) : 99;
                           const isDone = b.checkinStatus === 'completed';
-                          const seatVal = seatDrafts[b.id] ?? b.assignedSeat ?? '';
+                          const isEditorOpen = expandedCheckinId === b.id;
+                          const bpDraft = getBpDraft(b);
+                          const primarySeatText =
+                            bpDraft.passengerSeats.map((p) => p.seat.trim().toUpperCase()).filter(Boolean).join(', ') ||
+                            b.boardingPass?.seat ||
+                            b.assignedSeat ||
+                            '';
                           const airlineCode = (b.flightNumber || '').slice(0, 2).toUpperCase();
                           const airlinePortal = CHECKIN_AIRLINES.find(
                             (a) =>
@@ -2598,6 +2681,81 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                               : daysDiff <= 2
                                 ? 'Check-In Açık (≤48 Saat)'
                                 : `Yaklaşan (${daysDiff} gün)`;
+
+                          const submitCheckinAction = async (sendEmail: boolean, nextStatus: 'pending' | 'completed' = 'completed') => {
+                            if (!onUpdateBookingCheckin) return;
+                            const seatList = bpDraft.passengerSeats.map((p) => ({
+                              fullName: p.fullName,
+                              seat: p.seat.trim().toUpperCase(),
+                              seqNo: p.seqNo.trim(),
+                            }));
+                            const combinedSeat = seatList.map((s) => s.seat).filter(Boolean).join(', ');
+                            if (sendEmail && !combinedSeat) {
+                              setActionError('Müşteriye biniş kartı göndermeden önce koltuk numarası girin (Örn: 14A).');
+                              return;
+                            }
+                            if (sendEmail && (!bpDraft.recipientEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bpDraft.recipientEmail.trim()))) {
+                              setActionError('Geçerli bir müşteri e-posta adresi girin.');
+                              return;
+                            }
+                            const res = await onUpdateBookingCheckin(b.id, {
+                              checkinStatus: nextStatus,
+                              assignedSeat: combinedSeat,
+                              sendEmail,
+                              recipientEmail: bpDraft.recipientEmail.trim(),
+                              lang: bpDraft.mailLang,
+                              boardingPass: {
+                                seat: combinedSeat,
+                                passengerSeats: seatList,
+                                airlinePnr: bpDraft.airlinePnr.trim().toUpperCase(),
+                                eticketNo: bpDraft.eticketNo.trim(),
+                                terminal: bpDraft.terminal.trim(),
+                                gate: bpDraft.gate.trim().toUpperCase(),
+                                boardingTime: bpDraft.boardingTime.trim(),
+                                gateCloseTime: bpDraft.gateCloseTime.trim(),
+                                boardingGroup: bpDraft.boardingGroup.trim(),
+                                sequenceNo: seatList[0]?.seqNo || '001',
+                                baggageDropNote: bpDraft.baggageDropNote.trim(),
+                                mobilePassUrl: bpDraft.mobilePassUrl.trim(),
+                                sentToEmail: bpDraft.recipientEmail.trim(),
+                              },
+                            });
+                            if (res.email?.previewHtml) {
+                              setEmailPreviews((prev) => ({
+                                ...prev,
+                                [b.id]: {
+                                  html: res.email!.previewHtml!,
+                                  subject: res.email!.subject || '',
+                                  to: res.email!.to || bpDraft.recipientEmail.trim(),
+                                  sent: Boolean(res.email!.sent),
+                                },
+                              }));
+                            }
+                            if (nextStatus === 'pending') {
+                              flash(`${b.pnr} tekrar bekleyen listesine alındı.`);
+                            } else if (sendEmail && res.email?.sent) {
+                              flash(`${b.pnr} Online Check-In tamamlandı ve biniş kartı ${res.email.to} adresine gönderildi!`);
+                            } else if (sendEmail) {
+                              flash(`${b.pnr} Check-In kaydedildi ve biniş kartı e-postası hazırlandı (${res.email?.to || bpDraft.recipientEmail}). Canlı gönderim için sunucuda RESEND_API_KEY tanımlı olmalıdır.`);
+                            } else {
+                              flash(`${b.pnr} Online Check-In tamamlandı olarak kaydedildi.`);
+                            }
+                          };
+
+                          const waPhoneDigits = (b.contactPhone || '').replace(/[^\d]/g, '');
+                          const waMessage = encodeURIComponent(
+                            `✈ FlyToAspan Online Check-In Tamamlandı!\n` +
+                            `PNR: ${bpDraft.airlinePnr || b.pnr}\n` +
+                            `Yolcu: ${b.passenger}\n` +
+                            `Uçuş: ${b.title} (${[b.airline, b.flightNumber].filter(Boolean).join(' ')})\n` +
+                            `Tarih / Kalkış: ${b.date} ${depTime}\n` +
+                            `Koltuk: ${primarySeatText || '-'}\n` +
+                            `Biniş Saati: ${bpDraft.boardingTime || '-'}${bpDraft.terminal ? ` | Terminal: ${bpDraft.terminal}` : ''}${bpDraft.gate ? ` | Kapı: ${bpDraft.gate}` : ''}\n` +
+                            `İyi uçuşlar dileriz! — FlyToAspan`
+                          );
+                          const waHref = waPhoneDigits
+                            ? `https://wa.me/${waPhoneDigits}?text=${waMessage}`
+                            : `https://wa.me/?text=${waMessage}`;
 
                           return (
                             <div
@@ -2628,6 +2786,16 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                   <span style={{ padding: '4px 10px', borderRadius: 9, background: 'rgba(221, 168, 56, 0.16)', color: '#92400E', fontWeight: 800, fontSize: 12 }}>
                                     +{formatPrice(b.autoCheckinFeeTRY ?? 250, currency)}
                                   </span>
+                                  {primarySeatText && (
+                                    <span style={{ padding: '4px 10px', borderRadius: 9, background: '#0B1E33', color: '#F2C85C', fontWeight: 900, fontSize: 12 }}>
+                                      Koltuk: {primarySeatText}
+                                    </span>
+                                  )}
+                                  {b.boardingPass?.emailSentAt && (
+                                    <span style={{ padding: '4px 10px', borderRadius: 9, background: b.boardingPass.emailDeliveryStatus === 'sent' ? '#DCFCE7' : '#E0F2FE', color: b.boardingPass.emailDeliveryStatus === 'sent' ? '#166534' : '#0369A1', fontWeight: 800, fontSize: 11.5 }}>
+                                      {b.boardingPass.emailDeliveryStatus === 'sent' ? '✉ Mail Gönderildi' : '✉ Mail Hazırlandı'}: {b.boardingPass.sentToEmail}
+                                    </span>
+                                  )}
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 14, color: '#0B1E33' }}>
                                   <Calendar size={15} color="#00A8B5" />
@@ -2640,7 +2808,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                 </div>
                               </div>
 
-                              <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
                                 <div>
                                   <div style={{ fontWeight: 800, fontSize: 15.5, color: 'var(--aspan-text)' }}>{b.title}</div>
                                   <div style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)', marginTop: 2 }}>
@@ -2668,65 +2836,439 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                 </div>
 
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                  <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, fontWeight: 700, color: 'var(--aspan-text-muted)' }}>
-                                    Koltuk No
-                                    <input
-                                      className="modal-input"
-                                      style={{ width: 96, height: 36, fontWeight: 800, textTransform: 'uppercase' }}
-                                      placeholder="14A"
-                                      maxLength={12}
-                                      value={seatVal}
-                                      onChange={(e) => setSeatDrafts((prev) => ({ ...prev, [b.id]: e.target.value.toUpperCase() }))}
-                                    />
-                                  </label>
-
                                   {airlinePortal && (
                                     <a
                                       href={airlinePortal.url}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="uf-quick-pill"
-                                      style={{ textDecoration: 'none', alignSelf: 'flex-end', height: 36, display: 'inline-flex', alignItems: 'center' }}
+                                      style={{ textDecoration: 'none', height: 36, display: 'inline-flex', alignItems: 'center' }}
                                     >
                                       ✈ Havayolu Check-In
                                     </a>
                                   )}
 
+                                  {isDone && (
+                                    <button
+                                      type="button"
+                                      className="uf-quick-pill"
+                                      style={{ height: 36 }}
+                                      onClick={() => openBoardingPassPdf(b, { lang: activePanelLang })}
+                                    >
+                                      🖨️ Biniş Kartı PDF
+                                    </button>
+                                  )}
+
                                   <button
                                     type="button"
-                                    disabled={busy || !onUpdateBookingCheckin}
                                     className="adm-btn"
+                                    data-open-checkin-editor={b.pnr}
                                     style={{
-                                      alignSelf: 'flex-end',
                                       height: 36,
                                       padding: '0 14px',
                                       borderRadius: 10,
                                       fontWeight: 800,
-                                      background: isDone ? '#FEF3C7' : '#059669',
-                                      color: isDone ? '#92400E' : '#FFFFFF',
-                                      border: isDone ? '1.5px solid #F59E0B' : '1.5px solid #047857',
+                                      background: isEditorOpen ? '#0B1E33' : isDone ? '#E0F2FE' : '#059669',
+                                      color: isEditorOpen ? '#FFFFFF' : isDone ? '#0369A1' : '#FFFFFF',
+                                      border: isEditorOpen ? '1.5px solid #0B1E33' : isDone ? '1.5px solid #7DD3FC' : '1.5px solid #047857',
                                       cursor: 'pointer',
                                     }}
-                                    onClick={() =>
-                                      void runAction(async () => {
-                                        if (!onUpdateBookingCheckin) return;
-                                        const nextStatus = isDone ? 'pending' : 'completed';
-                                        await onUpdateBookingCheckin(b.id, {
-                                          checkinStatus: nextStatus,
-                                          assignedSeat: seatVal.trim(),
-                                        });
-                                        flash(
-                                          nextStatus === 'completed'
-                                            ? `${b.pnr} Online Check-In tamamlandı olarak işaretlendi.`
-                                            : `${b.pnr} tekrar bekleyen listesine alındı.`
-                                        );
-                                      })
-                                    }
+                                    onClick={() => setExpandedCheckinId(isEditorOpen ? null : b.id)}
                                   >
-                                    {isDone ? 'Bekleyene Al' : '✓ Check-In Yapıldı'}
+                                    {isEditorOpen
+                                      ? '▲ Formu Kapat'
+                                      : isDone
+                                        ? '✏ Biniş Kartı / Tekrar Mail Gönder'
+                                        : '✈ Check-In Yap & Biniş Kartı Gönder'}
                                   </button>
                                 </div>
                               </div>
+
+                              {/* Expandable Pegasus / THY Style Boarding Pass Editor & Email Sender */}
+                              {isEditorOpen && (
+                                <div
+                                  style={{
+                                    marginTop: 4,
+                                    padding: 18,
+                                    borderRadius: 14,
+                                    background: '#F8FAFC',
+                                    border: '1.5px solid #CBD5E1',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: 14,
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                                    <div>
+                                      <strong style={{ fontSize: 15, color: '#0B1E33' }}>
+                                        🎫 Biniş Kartı Bilgilerini Doldur &amp; Müşteriye Mail Gönder
+                                      </strong>
+                                      <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>
+                                        Havayolu portalında check-in yaptıktan sonra oluşan koltuk, biniş saati, terminal ve kapı bilgilerini girip tek tıkla müşteriye gönderin.
+                                      </div>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                      <button
+                                        type="button"
+                                        className="uf-quick-pill"
+                                        style={{ fontSize: 11.5 }}
+                                        onClick={() => {
+                                          void navigator.clipboard?.writeText(bpDraft.airlinePnr || b.pnr);
+                                          flash(`PNR kopyalandı: ${bpDraft.airlinePnr || b.pnr}`);
+                                        }}
+                                      >
+                                        📋 PNR Kopyala
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="uf-quick-pill"
+                                        style={{ fontSize: 11.5 }}
+                                        onClick={() => {
+                                          const parts = b.passenger.trim().split(/\s+/);
+                                          const surname = parts[parts.length - 1] || b.passenger;
+                                          void navigator.clipboard?.writeText(surname);
+                                          flash(`Soyad kopyalandı: ${surname}`);
+                                        }}
+                                      >
+                                        📋 Soyad Kopyala
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Per-passenger Seat & SEQ table */}
+                                  <div style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 12, padding: 12 }}>
+                                    <div style={{ fontSize: 12, fontWeight: 800, color: '#0B1E33', marginBottom: 8 }}>
+                                      Yolcu Koltuk &amp; Sıra (SEQ) Atamaları
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                      {bpDraft.passengerSeats.map((ps, pIdx) => (
+                                        <div
+                                          key={`${b.id}-seat-${pIdx}`}
+                                          style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 1.4fr) minmax(110px, 0.7fr) minmax(95px, 0.6fr)', gap: 8, alignItems: 'end' }}
+                                        >
+                                          <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--aspan-text-muted)' }}>
+                                            {`Yolcu #${pIdx + 1}`}
+                                            <input
+                                              className="modal-input"
+                                              style={{ height: 36, marginTop: 3 }}
+                                              value={ps.fullName}
+                                              onChange={(e) => {
+                                                const next = bpDraft.passengerSeats.slice();
+                                                next[pIdx] = { ...next[pIdx], fullName: e.target.value };
+                                                patchBpDraft(b, { passengerSeats: next });
+                                              }}
+                                            />
+                                          </label>
+                                          <label style={{ fontSize: 11.5, fontWeight: 800, color: '#0B1E33' }}>
+                                            Koltuk No *
+                                            <input
+                                              className="modal-input"
+                                              data-bp-seat-input={pIdx}
+                                              style={{ height: 36, marginTop: 3, fontWeight: 900, textTransform: 'uppercase' }}
+                                              placeholder="14A"
+                                              maxLength={12}
+                                              value={ps.seat}
+                                              onChange={(e) => {
+                                                const next = bpDraft.passengerSeats.slice();
+                                                next[pIdx] = { ...next[pIdx], seat: e.target.value.toUpperCase() };
+                                                patchBpDraft(b, { passengerSeats: next });
+                                              }}
+                                            />
+                                          </label>
+                                          <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--aspan-text-muted)' }}>
+                                            Sıra / SEQ
+                                            <input
+                                              className="modal-input"
+                                              style={{ height: 36, marginTop: 3 }}
+                                              placeholder="042"
+                                              maxLength={10}
+                                              value={ps.seqNo}
+                                              onChange={(e) => {
+                                                const next = bpDraft.passengerSeats.slice();
+                                                next[pIdx] = { ...next[pIdx], seqNo: e.target.value };
+                                                patchBpDraft(b, { passengerSeats: next });
+                                              }}
+                                            />
+                                          </label>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  {/* Boarding Pass Metadata Grid */}
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: 10 }}>
+                                    <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--aspan-text-muted)' }}>
+                                      Havayolu PNR
+                                      <input
+                                        className="modal-input"
+                                        style={{ height: 36, marginTop: 3, fontWeight: 800, textTransform: 'uppercase' }}
+                                        value={bpDraft.airlinePnr}
+                                        onChange={(e) => patchBpDraft(b, { airlinePnr: e.target.value.toUpperCase() })}
+                                      />
+                                    </label>
+                                    <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--aspan-text-muted)' }}>
+                                      E-Bilet No (Opsiyonel)
+                                      <input
+                                        className="modal-input"
+                                        style={{ height: 36, marginTop: 3 }}
+                                        placeholder="235-2410998877"
+                                        value={bpDraft.eticketNo}
+                                        onChange={(e) => patchBpDraft(b, { eticketNo: e.target.value })}
+                                      />
+                                    </label>
+                                    <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--aspan-text-muted)' }}>
+                                      Biniş Saati (Boarding)
+                                      <input
+                                        type="time"
+                                        className="modal-input"
+                                        style={{ height: 36, marginTop: 3, fontWeight: 800 }}
+                                        value={bpDraft.boardingTime}
+                                        onChange={(e) => patchBpDraft(b, { boardingTime: e.target.value })}
+                                      />
+                                    </label>
+                                    <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--aspan-text-muted)' }}>
+                                      Kapı Kapanış Saati
+                                      <input
+                                        type="time"
+                                        className="modal-input"
+                                        style={{ height: 36, marginTop: 3 }}
+                                        value={bpDraft.gateCloseTime}
+                                        onChange={(e) => patchBpDraft(b, { gateCloseTime: e.target.value })}
+                                      />
+                                    </label>
+                                    <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--aspan-text-muted)' }}>
+                                      Terminal
+                                      <input
+                                        className="modal-input"
+                                        style={{ height: 36, marginTop: 3 }}
+                                        placeholder="Dış Hatlar / T1"
+                                        value={bpDraft.terminal}
+                                        onChange={(e) => patchBpDraft(b, { terminal: e.target.value })}
+                                      />
+                                    </label>
+                                    <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--aspan-text-muted)' }}>
+                                      Kapı No (Gate)
+                                      <input
+                                        className="modal-input"
+                                        data-bp-gate-input
+                                        style={{ height: 36, marginTop: 3, fontWeight: 800, textTransform: 'uppercase' }}
+                                        placeholder="204 / B12"
+                                        value={bpDraft.gate}
+                                        onChange={(e) => patchBpDraft(b, { gate: e.target.value.toUpperCase() })}
+                                      />
+                                    </label>
+                                    <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--aspan-text-muted)' }}>
+                                      Biniş Grubu / Zone
+                                      <select
+                                        className="modal-input"
+                                        style={{ height: 36, marginTop: 3 }}
+                                        value={bpDraft.boardingGroup}
+                                        onChange={(e) => patchBpDraft(b, { boardingGroup: e.target.value })}
+                                      >
+                                        <option value="Grup 1 (Öncelikli)">Grup 1 (Öncelikli)</option>
+                                        <option value="Grup 2">Grup 2</option>
+                                        <option value="Grup 3">Grup 3</option>
+                                        <option value="Zone A">Zone A</option>
+                                        <option value="Zone B">Zone B</option>
+                                        <option value="Standart">Standart</option>
+                                      </select>
+                                    </label>
+                                    <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--aspan-text-muted)' }}>
+                                      Mail Dili
+                                      <select
+                                        className="modal-input"
+                                        style={{ height: 36, marginTop: 3 }}
+                                        value={bpDraft.mailLang}
+                                        onChange={(e) => patchBpDraft(b, { mailLang: e.target.value as LangCode })}
+                                      >
+                                        <option value="TR">Türkçe (TR)</option>
+                                        <option value="EN">English (EN)</option>
+                                        <option value="RU">Русский (RU)</option>
+                                        <option value="KK">Қазақша (KK)</option>
+                                      </select>
+                                    </label>
+                                  </div>
+
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
+                                    <label style={{ fontSize: 11.5, fontWeight: 800, color: '#0B1E33' }}>
+                                      Müşteri E-Posta Adresi (Biniş Kartı Gönderilecek) *
+                                      <input
+                                        type="email"
+                                        className="modal-input"
+                                        data-bp-email-input
+                                        style={{ height: 38, marginTop: 3 }}
+                                        placeholder="musteri@eposta.com"
+                                        value={bpDraft.recipientEmail}
+                                        onChange={(e) => patchBpDraft(b, { recipientEmail: e.target.value })}
+                                      />
+                                    </label>
+                                    <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--aspan-text-muted)' }}>
+                                      Havayolu Mobil Biniş Kartı Linki (Opsiyonel)
+                                      <input
+                                        type="url"
+                                        className="modal-input"
+                                        style={{ height: 38, marginTop: 3 }}
+                                        placeholder="https://..."
+                                        value={bpDraft.mobilePassUrl}
+                                        onChange={(e) => patchBpDraft(b, { mobilePassUrl: e.target.value })}
+                                      />
+                                    </label>
+                                  </div>
+
+                                  <label style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--aspan-text-muted)' }}>
+                                    Bagaj Teslim (Bag-Drop) &amp; Havalimanı Bilgilendirme Notu
+                                    <textarea
+                                      className="modal-input"
+                                      rows={2}
+                                      style={{ height: 'auto', padding: '8px 10px', marginTop: 3, resize: 'vertical' }}
+                                      value={bpDraft.baggageDropNote}
+                                      onChange={(e) => patchBpDraft(b, { baggageDropNote: e.target.value })}
+                                    />
+                                  </label>
+
+                                  {/* Live Mini Boarding Pass Preview */}
+                                  <div
+                                    style={{
+                                      borderRadius: 12,
+                                      background: 'linear-gradient(135deg, #0B1E33 0%, #0E4D60 100%)',
+                                      color: '#FFFFFF',
+                                      padding: '12px 16px',
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      alignItems: 'center',
+                                      flexWrap: 'wrap',
+                                      gap: 12,
+                                    }}
+                                  >
+                                    <div>
+                                      <div style={{ fontSize: 10, fontWeight: 800, color: '#F2C85C', letterSpacing: '0.08em' }}>
+                                        {`CANLI BİNİŞ KARTI ÖNİZLEMESİ · ${bpDraft.airlinePnr || b.pnr}`}
+                                      </div>
+                                      <div style={{ fontSize: 14, fontWeight: 800, marginTop: 2 }}>
+                                        {b.title} · {b.date} {depTime}
+                                      </div>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+                                      <div>
+                                        <div style={{ fontSize: 9.5, color: '#CBD5E1' }}>KOLTUK</div>
+                                        <div style={{ fontSize: 18, fontWeight: 900, color: '#F2C85C' }}>{primarySeatText || '—'}</div>
+                                      </div>
+                                      <div>
+                                        <div style={{ fontSize: 9.5, color: '#CBD5E1' }}>BİNİŞ</div>
+                                        <div style={{ fontSize: 15, fontWeight: 800 }}>{bpDraft.boardingTime || '—'}</div>
+                                      </div>
+                                      <div>
+                                        <div style={{ fontSize: 9.5, color: '#CBD5E1' }}>KAPI</div>
+                                        <div style={{ fontSize: 15, fontWeight: 800 }}>{bpDraft.gate || 'Ekran'}</div>
+                                      </div>
+                                      <div>
+                                        <div style={{ fontSize: 9.5, color: '#CBD5E1' }}>TERMİNAL</div>
+                                        <div style={{ fontSize: 13.5, fontWeight: 800 }}>{bpDraft.terminal || '—'}</div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Primary Actions Row */}
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                      <button
+                                        type="button"
+                                        disabled={busy || !onUpdateBookingCheckin}
+                                        data-send-boarding-mail={b.pnr}
+                                        className="adm-btn"
+                                        style={{
+                                          height: 40,
+                                          padding: '0 18px',
+                                          borderRadius: 10,
+                                          fontWeight: 800,
+                                          background: 'linear-gradient(135deg, #059669, #047857)',
+                                          color: '#FFFFFF',
+                                          border: '1.5px solid #047857',
+                                          cursor: 'pointer',
+                                        }}
+                                        onClick={() => void runAction(() => submitCheckinAction(true, 'completed'))}
+                                      >
+                                        ✉ Check-In Onayla &amp; Maili Gönder
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        disabled={busy || !onUpdateBookingCheckin}
+                                        className="uf-quick-pill"
+                                        style={{ height: 40 }}
+                                        onClick={() => void runAction(() => submitCheckinAction(false, 'completed'))}
+                                      >
+                                        💾 Sadece Kaydet
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        className="uf-quick-pill"
+                                        style={{ height: 40 }}
+                                        onClick={() =>
+                                          openBoardingPassPdf(
+                                            {
+                                              ...b,
+                                              assignedSeat: primarySeatText,
+                                              boardingPass: {
+                                                seat: primarySeatText,
+                                                passengerSeats: bpDraft.passengerSeats,
+                                                airlinePnr: bpDraft.airlinePnr,
+                                                eticketNo: bpDraft.eticketNo,
+                                                terminal: bpDraft.terminal,
+                                                gate: bpDraft.gate,
+                                                boardingTime: bpDraft.boardingTime,
+                                                gateCloseTime: bpDraft.gateCloseTime,
+                                                boardingGroup: bpDraft.boardingGroup,
+                                                sequenceNo: bpDraft.passengerSeats[0]?.seqNo || '001',
+                                                baggageDropNote: bpDraft.baggageDropNote,
+                                                mobilePassUrl: bpDraft.mobilePassUrl,
+                                              },
+                                            },
+                                            { lang: bpDraft.mailLang, autoPrint: false }
+                                          )
+                                        }
+                                      >
+                                        🖨️ Biniş Kartı PDF Önizle
+                                      </button>
+
+                                      <a
+                                        href={waHref}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="uf-quick-pill"
+                                        style={{ height: 40, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', color: '#047857', borderColor: '#6EE7B7' }}
+                                      >
+                                        💬 WhatsApp Gönder
+                                      </a>
+                                    </div>
+
+                                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                      {emailPreviews[b.id] && (
+                                        <button
+                                          type="button"
+                                          className="uf-quick-pill"
+                                          style={{ height: 38, color: '#0369A1', borderColor: '#7DD3FC' }}
+                                          onClick={() => openRawEmailPreview(emailPreviews[b.id].html)}
+                                        >
+                                          👁️ Gönderilen Maili Önizle
+                                        </button>
+                                      )}
+                                      {isDone && (
+                                        <button
+                                          type="button"
+                                          disabled={busy || !onUpdateBookingCheckin}
+                                          className="uf-quick-pill"
+                                          style={{ height: 38, color: '#92400E', borderColor: '#FCD34D' }}
+                                          onClick={() => void runAction(() => submitCheckinAction(false, 'pending'))}
+                                        >
+                                          Bekleyene Al
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           );
                         })}

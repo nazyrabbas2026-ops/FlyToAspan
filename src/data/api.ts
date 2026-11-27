@@ -1,6 +1,7 @@
 import type {
   AdminMarkupConfig,
   AuditLogEntry,
+  BoardingPassInfo,
   BookingRecord,
   CrmQuote,
   CrmTask,
@@ -113,8 +114,29 @@ export const api = {
   setStatus: (id: string, status: BookingRecord['status'], expectedStatus?: BookingRecord['status']) => request<{ booking: BookingRecord }>(
     `/admin/bookings/${encodeURIComponent(id)}`, 'PATCH', expectedStatus ? { status, expectedStatus } : { status }
   ),
-  updateBookingCheckin: (id: string, payload: { checkinStatus: 'pending' | 'completed'; assignedSeat?: string }) =>
-    request<{ booking: BookingRecord }>(`/admin/bookings/${encodeURIComponent(id)}/checkin`, 'PATCH', payload),
+  updateBookingCheckin: (
+    id: string,
+    payload: {
+      checkinStatus: 'pending' | 'completed';
+      assignedSeat?: string;
+      boardingPass?: Omit<BoardingPassInfo, 'emailSentAt' | 'emailDeliveryStatus'>;
+      sendEmail?: boolean;
+      recipientEmail?: string;
+      lang?: 'TR' | 'EN' | 'RU' | 'KK';
+    }
+  ) =>
+    request<{
+      booking: BookingRecord;
+      email?: {
+        requested: boolean;
+        sent: boolean;
+        status?: 'sent' | 'queued_preview' | 'failed';
+        to?: string;
+        skipped?: string;
+        subject?: string;
+        previewHtml?: string;
+      };
+    }>(`/admin/bookings/${encodeURIComponent(id)}/checkin`, 'PATCH', payload),
   deleteBooking: (id: string) => request<{ ok: true }>(`/admin/bookings/${encodeURIComponent(id)}`, 'DELETE'),
   pricing: (signal?: AbortSignal) => request<{ markup: AdminMarkupConfig | null }>('/pricing', 'GET', undefined, signal),
   publicCatalog: (signal?: AbortSignal) => request<{ catalog: Partial<AdminCatalog> }>('/catalog', 'GET', undefined, signal),

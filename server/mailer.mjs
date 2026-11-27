@@ -99,3 +99,348 @@ export function sendPasswordResetEmail({ to }) {
     ),
   });
 }
+
+function buildBoardingPassEmailHtml({
+  passenger,
+  pnr,
+  airlinePnr,
+  eticketNo,
+  airline,
+  flightNumber,
+  routeTitle,
+  fromCode,
+  toCode,
+  date,
+  departTime,
+  arriveTime,
+  baggage,
+  cabin,
+  seat,
+  passengerSeats,
+  terminal,
+  gate,
+  boardingTime,
+  gateCloseTime,
+  boardingGroup,
+  sequenceNo,
+  baggageDropNote,
+  mobilePassUrl,
+  lang = 'TR',
+}) {
+  const copy = {
+    TR: {
+      header: 'Online Check-In Tamamlandı · Biniş Kartınız Hazır',
+      greeting: 'Sayın',
+      intro: 'Otomatik Check-In & Koltuk Atama hizmetiniz kapsamında uçuşunuzun online check-in işlemi tamamlanmış ve koltuğunuz atanmıştır. Biniş kartı detaylarınız aşağıdadır:',
+      boardingPassTitle: 'DİJİTAL BİNİŞ KARTI / BOARDING PASS',
+      seatLbl: 'KOLTUK / SEAT',
+      boardingLbl: 'BİNİŞ SAATİ',
+      gateCloseLbl: 'KAPI KAPANIŞ',
+      terminalLbl: 'TERMİNAL',
+      gateLbl: 'KAPI / GATE',
+      groupLbl: 'GRUP / ZONE',
+      seqLbl: 'SIRA / SEQ',
+      pnrLbl: 'PNR KODU',
+      airlinePnrLbl: 'HAVAYOLU PNR',
+      eticketLbl: 'E-BİLET NO',
+      dateLbl: 'UÇUŞ TARİHİ',
+      departLbl: 'KALKIŞ',
+      arriveLbl: 'VARIŞ',
+      baggageLbl: 'BAGAJ HAKKI',
+      cabinLbl: 'KABİN',
+      paxTableTitle: 'Yolcu & Koltuk Listesi',
+      paxCol: 'Yolcu Adı Soyadı',
+      seatCol: 'Koltuk',
+      seqCol: 'Sıra No',
+      noteTitle: 'Havalimanı & Biniş Hatırlatmaları',
+      defaultNote: 'Kayıtlı bagajınız varsa uçuş saatinden en az 2 saat önce havalimanındaki Online Check-In / Bagaj Teslim (Bag-Drop) kontuarına uğrayınız. Biniş kapısı kalkıştan 20 dakika önce kapanır. Kimlik veya pasaportunuzu yanınızda bulundurunuz.',
+      openMobileBtn: 'Havayolu Mobil Biniş Kartını Aç',
+      manageHint: 'Biletinizi ve biniş kartınızı istediğiniz zaman flytoaspan.com/bilet-islemleri sayfasından PNR kodunuzla görüntüleyebilirsiniz.',
+      tba: 'Havalimanı Ekranı',
+    },
+    EN: {
+      header: 'Online Check-In Completed · Your Boarding Pass is Ready',
+      greeting: 'Dear',
+      intro: 'Your online check-in has been completed and your seat has been assigned as part of your Auto Check-In & Seat Assignment service. Your boarding pass details are below:',
+      boardingPassTitle: 'DIGITAL BOARDING PASS',
+      seatLbl: 'SEAT',
+      boardingLbl: 'BOARDING',
+      gateCloseLbl: 'GATE CLOSES',
+      terminalLbl: 'TERMINAL',
+      gateLbl: 'GATE',
+      groupLbl: 'ZONE / GROUP',
+      seqLbl: 'SEQ NO',
+      pnrLbl: 'BOOKING PNR',
+      airlinePnrLbl: 'AIRLINE PNR',
+      eticketLbl: 'E-TICKET NO',
+      dateLbl: 'FLIGHT DATE',
+      departLbl: 'DEPARTURE',
+      arriveLbl: 'ARRIVAL',
+      baggageLbl: 'BAGGAGE',
+      cabinLbl: 'CABIN',
+      paxTableTitle: 'Passengers & Assigned Seats',
+      paxCol: 'Passenger Name',
+      seatCol: 'Seat',
+      seqCol: 'Seq',
+      noteTitle: 'Airport & Boarding Instructions',
+      defaultNote: 'If you have checked baggage, please visit the Bag-Drop counter at least 2 hours before departure. Boarding gates close 20 minutes before departure. Keep your passport or ID ready.',
+      openMobileBtn: 'Open Airline Mobile Boarding Pass',
+      manageHint: 'You can view or download your booking and boarding pass anytime at flytoaspan.com/bilet-islemleri.',
+      tba: 'Check Airport Screen',
+    },
+    RU: {
+      header: 'Онлайн-регистрация выполнена · Посадочный талон готов',
+      greeting: 'Уважаемый(ая)',
+      intro: 'В рамках услуги авторегистрации мы выполнили онлайн-регистрацию на ваш рейс и назначили место в салоне. Данные вашего посадочного талона:',
+      boardingPassTitle: 'ПОСАДОЧНЫЙ ТАЛОН / BOARDING PASS',
+      seatLbl: 'МЕСТО / SEAT',
+      boardingLbl: 'ПОСАДКА',
+      gateCloseLbl: 'ЗАКРЫТИЕ ВЫХОДА',
+      terminalLbl: 'ТЕРМИНАЛ',
+      gateLbl: 'ВЫХОД / GATE',
+      groupLbl: 'ГРУППА / ZONE',
+      seqLbl: 'SEQ №',
+      pnrLbl: 'КОД PNR',
+      airlinePnrLbl: 'PNR АВИАКОМПАНИИ',
+      eticketLbl: '№ ЭЛ. БИЛЕТА',
+      dateLbl: 'ДАТА ВЫЛЕТА',
+      departLbl: 'ВЫЛЕТ',
+      arriveLbl: 'ПРИЛЁТ',
+      baggageLbl: 'БАГАЖ',
+      cabinLbl: 'КЛАСС',
+      paxTableTitle: 'Пассажиры и назначенные места',
+      paxCol: 'Пассажир',
+      seatCol: 'Место',
+      seqCol: 'Seq',
+      noteTitle: 'Памятка для аэропорта',
+      defaultNote: 'При наличии регистрируемого багажа подойдите на стойку Bag-Drop не позднее чем за 2 часа до вылета. Посадка закрывается за 20 минут до вылета. Возьмите с собой паспорт.',
+      openMobileBtn: 'Открыть мобильный посадочный',
+      manageHint: 'Вы всегда можете проверить бронирование и посадочный талон на flytoaspan.com/bilet-islemleri.',
+      tba: 'См. табло аэропорта',
+    },
+    KK: {
+      header: 'Онлайн тіркеу аяқталды · Отырғызу талоныңыз дайын',
+      greeting: 'Құрметті',
+      intro: 'Автоматты тіркелу және орын таңдау қызметі аясында рейсіңізге онлайн тіркеу жасалып, орныңыз бекітілді. Отырғызу талонының мәліметтері төменде:',
+      boardingPassTitle: 'САНДЫҚ ОТЫРҒЫЗУ ТАЛОНЫ / BOARDING PASS',
+      seatLbl: 'ОРЫН / SEAT',
+      boardingLbl: 'ОТЫРҒЫЗУ УАҚЫТЫ',
+      gateCloseLbl: 'ҚАҚПА ЖАБЫЛУЫ',
+      terminalLbl: 'ТЕРМИНАЛ',
+      gateLbl: 'ҚАҚПА / GATE',
+      groupLbl: 'ТОП / ZONE',
+      seqLbl: 'РЕТТІК №',
+      pnrLbl: 'PNR КОДЫ',
+      airlinePnrLbl: 'ӘУЕКОМПАНИЯ PNR',
+      eticketLbl: 'E-БИЛЕТ №',
+      dateLbl: 'ҰШУ КҮНІ',
+      departLbl: 'ҰШУ',
+      arriveLbl: 'ҚОНУ',
+      baggageLbl: 'ЖОЛЖҮК',
+      cabinLbl: 'КЛАСС',
+      paxTableTitle: 'Жолаушылар және орындар тізімі',
+      paxCol: 'Жолаушының аты-жөні',
+      seatCol: 'Орын',
+      seqCol: 'Seq',
+      noteTitle: 'Әуежай және отырғызу ескертпесі',
+      defaultNote: 'Тіркелетін жолжүгіңіз болса, ұшудан кемінде 2 сағат бұрын Bag-Drop тағанына келіңіз. Отырғызу қақпасы ұшуға 20 минут қалғанда жабылады. Төлқұжатыңызды ұмытпаңыз.',
+      openMobileBtn: 'Мобильді отырғызу талонын ашу',
+      manageHint: 'Брондау мен отырғызу талонын кез келген уақытта flytoaspan.com/bilet-islemleri бетінен көре аласыз.',
+      tba: 'Әуежай таблосынан қараңыз',
+    },
+  }[lang] || {};
+
+  const c = copy.header ? copy : {
+    header: 'Online Check-In Tamamlandı · Biniş Kartınız Hazır',
+    greeting: 'Sayın',
+    intro: 'Online check-in işleminiz tamamlanmıştır.',
+    boardingPassTitle: 'DİJİTAL BİNİŞ KARTI / BOARDING PASS',
+    seatLbl: 'KOLTUK / SEAT',
+    boardingLbl: 'BİNİŞ SAATİ',
+    gateCloseLbl: 'KAPI KAPANIŞ',
+    terminalLbl: 'TERMİNAL',
+    gateLbl: 'KAPI / GATE',
+    groupLbl: 'GRUP / ZONE',
+    seqLbl: 'SIRA / SEQ',
+    pnrLbl: 'PNR KODU',
+    airlinePnrLbl: 'HAVAYOLU PNR',
+    eticketLbl: 'E-BİLET NO',
+    dateLbl: 'UÇUŞ TARİHİ',
+    departLbl: 'KALKIŞ',
+    arriveLbl: 'VARIŞ',
+    baggageLbl: 'BAGAJ HAKKI',
+    cabinLbl: 'KABİN',
+    paxTableTitle: 'Yolcu & Koltuk Listesi',
+    paxCol: 'Yolcu Adı Soyadı',
+    seatCol: 'Koltuk',
+    seqCol: 'Sıra No',
+    noteTitle: 'Havalimanı & Biniş Hatırlatmaları',
+    defaultNote: 'Kayıtlı bagajınız varsa uçuş saatinden en az 2 saat önce Bag-Drop kontuarına uğrayınız.',
+    openMobileBtn: 'Mobil Biniş Kartını Aç',
+    manageHint: 'flytoaspan.com/bilet-islemleri',
+    tba: 'Havalimanı Ekranı',
+  };
+
+  const seatRows = Array.isArray(passengerSeats) && passengerSeats.length > 0
+    ? passengerSeats
+    : [{ fullName: passenger, seat: seat || '—', seqNo: sequenceNo || '001' }];
+
+  const safeMobileUrl =
+    typeof mobilePassUrl === 'string' && /^https?:\/\//i.test(mobilePassUrl.trim())
+      ? mobilePassUrl.trim()
+      : '';
+
+  const bcbpCode = `M1${String(passenger || 'PASSENGER').toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 18).replace(/\s+/g, '/')} E${String(airlinePnr || pnr || '').toUpperCase()} ${String(fromCode || 'IST')}${String(toCode || 'ALA')}${String(flightNumber || '').toUpperCase()} ${String(seat || '14A').toUpperCase()} ${String(sequenceNo || '001')}`;
+
+  const paxTableHtml = `
+    <div style="margin:18px 0 0;">
+      <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:#475569;margin-bottom:8px;">${escapeHtml(c.paxTableTitle)}</div>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #E2E8F0;border-radius:10px;overflow:hidden;">
+        <thead>
+          <tr style="background:#F8FAFC;text-align:left;font-size:11px;color:#64748B;">
+            <th style="padding:9px 12px;border-bottom:1px solid #E2E8F0;">${escapeHtml(c.paxCol)}</th>
+            <th style="padding:9px 12px;border-bottom:1px solid #E2E8F0;">${escapeHtml(c.seatCol)}</th>
+            <th style="padding:9px 12px;border-bottom:1px solid #E2E8F0;">${escapeHtml(c.seqCol)}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${seatRows.map((r) => `
+            <tr style="font-size:13px;color:#0F172A;">
+              <td style="padding:9px 12px;border-bottom:1px solid #F1F5F9;font-weight:700;">${escapeHtml(r.fullName)}</td>
+              <td style="padding:9px 12px;border-bottom:1px solid #F1F5F9;"><span style="display:inline-block;padding:3px 10px;border-radius:6px;background:#0B1E33;color:#F2C85C;font-weight:900;letter-spacing:0.06em;">${escapeHtml(r.seat || seat || '—')}</span></td>
+              <td style="padding:9px 12px;border-bottom:1px solid #F1F5F9;color:#475569;font-weight:700;">${escapeHtml(r.seqNo || sequenceNo || '—')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>`;
+
+  const bodyHtml = `
+    <p style="margin-top:0;">${escapeHtml(c.greeting)} <strong>${escapeHtml(passenger)}</strong>,</p>
+    <p style="color:#334155;">${escapeHtml(c.intro)}</p>
+
+    <!-- Realistic Airline Boarding Pass Card -->
+    <div style="margin:20px 0;border:2px solid #0B1E33;border-radius:16px;overflow:hidden;background:#FFFFFF;">
+      <div style="background:linear-gradient(135deg,#0B1E33 0%,#0E5368 100%);padding:14px 20px;color:#FFFFFF;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td>
+              <div style="font-size:10px;font-weight:800;letter-spacing:0.12em;color:#F2C85C;">${escapeHtml(c.boardingPassTitle)}</div>
+              <div style="font-size:16px;font-weight:900;margin-top:3px;">${escapeHtml(airline || 'FlyToAspan Flight')} ${flightNumber ? `· ${escapeHtml(flightNumber)}` : ''}</div>
+            </td>
+            <td align="right" style="vertical-align:middle;">
+              <div style="font-size:10px;color:#CBD5E1;">${escapeHtml(c.airlinePnrLbl)}</div>
+              <div style="font-size:17px;font-weight:900;letter-spacing:1.8px;color:#F2C85C;">${escapeHtml(airlinePnr || pnr)}</div>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="padding:18px 20px;">
+        <!-- Route Row -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px;">
+          <tr>
+            <td style="width:40%;">
+              <div style="font-size:26px;font-weight:900;color:#0B1E33;letter-spacing:0.04em;">${escapeHtml(fromCode || 'DEP')}</div>
+              <div style="font-size:12px;color:#475569;font-weight:700;">${escapeHtml(c.departLbl)}: <strong>${escapeHtml(departTime || '—')}</strong></div>
+            </td>
+            <td align="center" style="width:20%;font-size:20px;color:#00A8B5;font-weight:900;">✈</td>
+            <td align="right" style="width:40%;">
+              <div style="font-size:26px;font-weight:900;color:#0B1E33;letter-spacing:0.04em;">${escapeHtml(toCode || 'ARR')}</div>
+              <div style="font-size:12px;color:#475569;font-weight:700;">${escapeHtml(c.arriveLbl)}: <strong>${escapeHtml(arriveTime || '—')}</strong></div>
+            </td>
+          </tr>
+        </table>
+        <div style="font-size:12.5px;color:#475569;padding-bottom:14px;border-bottom:1px dashed #CBD5E1;">
+          <strong>${escapeHtml(routeTitle)}</strong> · ${escapeHtml(c.dateLbl)}: <strong>${escapeHtml(date)}</strong>
+        </div>
+
+        <!-- Key Boarding Grid (Seat, Boarding Time, Terminal, Gate, Group, Seq) -->
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:14px;border-collapse:separate;border-spacing:6px;">
+          <tr>
+            <td style="background:#0B1E33;border-radius:10px;padding:10px 12px;width:33.3%;">
+              <div style="font-size:10px;font-weight:800;color:#94A3B8;letter-spacing:0.08em;">${escapeHtml(c.seatLbl)}</div>
+              <div style="font-size:24px;font-weight:900;color:#F2C85C;margin-top:2px;letter-spacing:0.06em;">${escapeHtml(seat || '—')}</div>
+            </td>
+            <td style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:10px 12px;width:33.3%;">
+              <div style="font-size:10px;font-weight:800;color:#047857;letter-spacing:0.08em;">${escapeHtml(c.boardingLbl)}</div>
+              <div style="font-size:20px;font-weight:900;color:#065F46;margin-top:2px;">${escapeHtml(boardingTime || '—')}</div>
+              ${gateCloseTime ? `<div style="font-size:10.5px;color:#047857;margin-top:2px;">${escapeHtml(c.gateCloseLbl)}: ${escapeHtml(gateCloseTime)}</div>` : ''}
+            </td>
+            <td style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:10px;padding:10px 12px;width:33.3%;">
+              <div style="font-size:10px;font-weight:800;color:#0369A1;letter-spacing:0.08em;">${escapeHtml(c.gateLbl)}</div>
+              <div style="font-size:20px;font-weight:900;color:#0C4A6E;margin-top:2px;">${escapeHtml(gate || c.tba)}</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:9px 12px;">
+              <div style="font-size:10px;font-weight:800;color:#64748B;">${escapeHtml(c.terminalLbl)}</div>
+              <div style="font-size:14px;font-weight:800;color:#0F172A;margin-top:2px;">${escapeHtml(terminal || '—')}</div>
+            </td>
+            <td style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:9px 12px;">
+              <div style="font-size:10px;font-weight:800;color:#64748B;">${escapeHtml(c.groupLbl)}</div>
+              <div style="font-size:14px;font-weight:800;color:#0F172A;margin-top:2px;">${escapeHtml(boardingGroup || 'Standard')}</div>
+            </td>
+            <td style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:9px 12px;">
+              <div style="font-size:10px;font-weight:800;color:#64748B;">${escapeHtml(c.seqLbl)}</div>
+              <div style="font-size:14px;font-weight:800;color:#0F172A;margin-top:2px;">${escapeHtml(sequenceNo || '—')}</div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Meta Details -->
+        <div style="margin-top:12px;padding:10px 12px;background:#F8FAFC;border-radius:10px;font-size:12px;color:#475569;">
+          <span><strong>${escapeHtml(c.pnrLbl)}:</strong> ${escapeHtml(pnr)}</span>
+          ${eticketNo ? ` &nbsp;·&nbsp; <span><strong>${escapeHtml(c.eticketLbl)}:</strong> ${escapeHtml(eticketNo)}</span>` : ''}
+          ${cabin ? ` &nbsp;·&nbsp; <span><strong>${escapeHtml(c.cabinLbl)}:</strong> ${escapeHtml(cabin)}</span>` : ''}
+          ${baggage ? `<div style="margin-top:4px;"><strong>${escapeHtml(c.baggageLbl)}:</strong> ${escapeHtml(baggage)}</div>` : ''}
+        </div>
+
+        ${paxTableHtml}
+
+        <!-- Barcode Footer Strip -->
+        <div style="margin-top:16px;padding:12px;background:#0F172A;border-radius:10px;text-align:center;">
+          <div style="font-family:monospace;font-size:11px;letter-spacing:2px;color:#F8FAFC;word-break:break-all;">${escapeHtml(bcbpCode)}</div>
+        </div>
+      </div>
+    </div>
+
+    ${safeMobileUrl ? `
+      <div style="text-align:center;margin:18px 0;">
+        <a href="${escapeHtml(safeMobileUrl)}" style="display:inline-block;padding:12px 24px;border-radius:10px;background:#00A8B5;color:#FFFFFF;font-weight:800;text-decoration:none;font-size:14px;">
+          ✈ ${escapeHtml(c.openMobileBtn)}
+        </a>
+      </div>
+    ` : ''}
+
+    <div style="background:#FFFBEB;border:1px solid #FCD34D;border-radius:12px;padding:14px 16px;margin:16px 0;font-size:12.5px;color:#92400E;">
+      <div style="font-weight:800;margin-bottom:4px;">ℹ ${escapeHtml(c.noteTitle)}</div>
+      <div>${escapeHtml(baggageDropNote || c.defaultNote)}</div>
+    </div>
+
+    <p style="font-size:12.5px;color:#64748B;">${escapeHtml(c.manageHint)}</p>
+  `;
+
+  const subjectMap = {
+    TR: `✈ Online Check-In Tamamlandı · Biniş Kartınız (Koltuk: ${seat || '-'}) · PNR: ${airlinePnr || pnr}`,
+    EN: `✈ Online Check-In Completed · Your Boarding Pass (Seat: ${seat || '-'}) · PNR: ${airlinePnr || pnr}`,
+    RU: `✈ Онлайн-регистрация выполнена · Посадочный талон (Место: ${seat || '-'}) · PNR: ${airlinePnr || pnr}`,
+    KK: `✈ Онлайн тіркеу аяқталды · Отырғызу талоны (Орын: ${seat || '-'}) · PNR: ${airlinePnr || pnr}`,
+  };
+
+  return {
+    subject: subjectMap[lang] || subjectMap.TR,
+    html: wrapBrandedEmail(c.header, bodyHtml),
+  };
+}
+
+export async function sendBoardingPassEmail(payload) {
+  const { subject, html } = buildBoardingPassEmailHtml(payload);
+  const res = await sendMail({ to: payload.to, subject, html });
+  return {
+    ...res,
+    to: payload.to,
+    subject,
+    previewHtml: html,
+  };
+}

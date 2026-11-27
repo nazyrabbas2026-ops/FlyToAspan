@@ -166,6 +166,30 @@ export interface BookingLegDetail {
   duration?: string;
 }
 
+export interface BoardingPassSeatItem {
+  fullName: string;
+  seat: string;
+  seqNo?: string;
+}
+
+export interface BoardingPassInfo {
+  seat: string;
+  passengerSeats?: BoardingPassSeatItem[];
+  airlinePnr?: string;
+  eticketNo?: string;
+  terminal?: string;
+  gate?: string;
+  boardingTime?: string;
+  gateCloseTime?: string;
+  boardingGroup?: string;
+  sequenceNo?: string;
+  baggageDropNote?: string;
+  mobilePassUrl?: string;
+  sentToEmail?: string;
+  emailSentAt?: number;
+  emailDeliveryStatus?: 'sent' | 'queued_preview' | 'failed';
+}
+
 export interface BookingRecord {
   id: string;
   pnr: string;
@@ -201,6 +225,7 @@ export interface BookingRecord {
   autoCheckinFeeTRY?: number;
   checkinStatus?: 'pending' | 'completed';
   assignedSeat?: string;
+  boardingPass?: BoardingPassInfo;
   createdAt?: number;
   sellerName?: string | null;
   sellerEmail?: string | null;

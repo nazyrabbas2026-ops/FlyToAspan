@@ -16,6 +16,7 @@ import {
   writeAuditLog,
 } from './store.mjs';
 import {
+  sendBoardingPassEmail,
   sendBookingConfirmationEmail,
   sendCorporateApprovedEmail,
   sendPasswordResetEmail,
@@ -929,20 +930,129 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const body = await readJson(req);
         const nextCheckinStatus = body.checkinStatus === 'completed' ? 'completed' : body.checkinStatus === 'pending' ? 'pending' : null;
         if (!nextCheckinStatus) fail(400, 'Check-in durumu geçersiz.');
-        const seatRaw = typeof body.assignedSeat === 'string' ? body.assignedSeat.trim().toUpperCase().slice(0, 12) : undefined;
+
+        const bpRaw = body.boardingPass && typeof body.boardingPass === 'object' ? body.boardingPass : {};
+        const seatRaw = typeof (bpRaw.seat ?? body.assignedSeat) === 'string'
+          ? String(bpRaw.seat ?? body.assignedSeat).trim().toUpperCase().slice(0, 24)
+          : undefined;
         const details = JSON.parse(existingBk.details || '{}');
+
+        const cleanedPaxSeats = Array.isArray(bpRaw.passengerSeats)
+          ? bpRaw.passengerSeats.slice(0, 12).map((ps) => ({
+              fullName: typeof ps?.fullName === 'string' ? ps.fullName.trim().slice(0, 120) : '',
+              seat: typeof ps?.seat === 'string' ? ps.seat.trim().toUpperCase().slice(0, 12) : '',
+              seqNo: typeof ps?.seqNo === 'string' ? ps.seqNo.trim().slice(0, 12) : undefined,
+            })).filter((ps) => ps.fullName || ps.seat)
+          : undefined;
+
+        const primarySeat =
+          seatRaw ||
+          (cleanedPaxSeats && cleanedPaxSeats.length > 0 ? cleanedPaxSeats.map((p) => p.seat).filter(Boolean).join(', ') : '') ||
+          details.assignedSeat ||
+          '';
+
+        const sendEmailFlag = Boolean(body.sendEmail);
+        const recipientEmail = (
+          typeof body.recipientEmail === 'string' && body.recipientEmail.trim()
+            ? body.recipientEmail.trim().slice(0, 120)
+            : typeof bpRaw.sentToEmail === 'string' && bpRaw.sentToEmail.trim()
+              ? bpRaw.sentToEmail.trim().slice(0, 120)
+              : details.contactEmail || ''
+        );
+
+        if (sendEmailFlag) {
+          if (!primarySeat) fail(400, 'Biniş kartı göndermeden önce en az bir koltuk numarası girmelisiniz.');
+          if (!recipientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
+            fail(400, 'Müşteriye bildirim göndermek için geçerli bir e-posta adresi girin.');
+          }
+        }
+
+        const prevBp = details.boardingPass && typeof details.boardingPass === 'object' ? details.boardingPass : {};
+        const nextBoardingPass = {
+          ...prevBp,
+          seat: primarySeat || prevBp.seat || '',
+          passengerSeats: cleanedPaxSeats ?? prevBp.passengerSeats,
+          airlinePnr: typeof bpRaw.airlinePnr === 'string' ? bpRaw.airlinePnr.trim().toUpperCase().slice(0, 20) || undefined : prevBp.airlinePnr,
+          eticketNo: typeof bpRaw.eticketNo === 'string' ? bpRaw.eticketNo.trim().slice(0, 32) || undefined : prevBp.eticketNo,
+          terminal: typeof bpRaw.terminal === 'string' ? bpRaw.terminal.trim().slice(0, 40) || undefined : prevBp.terminal,
+          gate: typeof bpRaw.gate === 'string' ? bpRaw.gate.trim().toUpperCase().slice(0, 24) || undefined : prevBp.gate,
+          boardingTime: typeof bpRaw.boardingTime === 'string' ? bpRaw.boardingTime.trim().slice(0, 10) || undefined : prevBp.boardingTime,
+          gateCloseTime: typeof bpRaw.gateCloseTime === 'string' ? bpRaw.gateCloseTime.trim().slice(0, 10) || undefined : prevBp.gateCloseTime,
+          boardingGroup: typeof bpRaw.boardingGroup === 'string' ? bpRaw.boardingGroup.trim().slice(0, 32) || undefined : prevBp.boardingGroup,
+          sequenceNo: typeof bpRaw.sequenceNo === 'string' ? bpRaw.sequenceNo.trim().slice(0, 16) || undefined : prevBp.sequenceNo,
+          baggageDropNote: typeof bpRaw.baggageDropNote === 'string' ? bpRaw.baggageDropNote.trim().slice(0, 320) || undefined : prevBp.baggageDropNote,
+          mobilePassUrl: typeof bpRaw.mobilePassUrl === 'string' ? bpRaw.mobilePassUrl.trim().slice(0, 280) || undefined : prevBp.mobilePassUrl,
+          sentToEmail: recipientEmail || prevBp.sentToEmail,
+        };
+
+        let emailResult = null;
+        if (sendEmailFlag) {
+          const firstLeg = Array.isArray(details.legs) && details.legs.length > 0 ? details.legs[0] : null;
+          const routeCodes = String(details.title || '').match(/\(([A-Z]{3})\)/g)?.map((m) => m.slice(1, 4)) || [];
+          const mailLang = ['TR', 'EN', 'RU', 'KK'].includes(body.lang) ? body.lang : 'TR';
+          const mailOut = await sendBoardingPassEmail({
+            to: recipientEmail,
+            passenger: details.passenger,
+            pnr: existingBk.pnr,
+            airlinePnr: nextBoardingPass.airlinePnr || existingBk.pnr,
+            eticketNo: nextBoardingPass.eticketNo || details.eticketNumber,
+            airline: details.airline || firstLeg?.airline,
+            flightNumber: details.flightNumber || firstLeg?.flightNumber,
+            routeTitle: details.title,
+            fromCode: firstLeg?.fromCode || routeCodes[0] || '',
+            toCode: firstLeg?.toCode || routeCodes[1] || '',
+            date: details.date,
+            departTime: details.departTime || firstLeg?.departTime,
+            arriveTime: details.arriveTime || firstLeg?.arriveTime,
+            baggage: details.baggage || firstLeg?.baggage,
+            cabin: details.cabin || firstLeg?.cabin,
+            seat: primarySeat,
+            passengerSeats: nextBoardingPass.passengerSeats,
+            terminal: nextBoardingPass.terminal,
+            gate: nextBoardingPass.gate,
+            boardingTime: nextBoardingPass.boardingTime,
+            gateCloseTime: nextBoardingPass.gateCloseTime,
+            boardingGroup: nextBoardingPass.boardingGroup,
+            sequenceNo: nextBoardingPass.sequenceNo,
+            baggageDropNote: nextBoardingPass.baggageDropNote,
+            mobilePassUrl: nextBoardingPass.mobilePassUrl,
+            lang: mailLang,
+          });
+          const deliveryStatus = mailOut.sent ? 'sent' : mailOut.skipped === 'no_api_key' ? 'queued_preview' : 'failed';
+          nextBoardingPass.sentToEmail = recipientEmail;
+          nextBoardingPass.emailSentAt = Date.now();
+          nextBoardingPass.emailDeliveryStatus = deliveryStatus;
+          emailResult = {
+            requested: true,
+            sent: Boolean(mailOut.sent),
+            status: deliveryStatus,
+            to: recipientEmail,
+            skipped: mailOut.skipped,
+            subject: mailOut.subject,
+            previewHtml: mailOut.previewHtml,
+          };
+        }
+
         details.autoCheckin = true;
         details.checkinStatus = nextCheckinStatus;
-        if (seatRaw !== undefined) details.assignedSeat = seatRaw || undefined;
+        if (primarySeat) details.assignedSeat = primarySeat;
+        if (recipientEmail && !details.contactEmail) details.contactEmail = recipientEmail;
+        if (primarySeat || Object.keys(bpRaw).length > 0 || sendEmailFlag) {
+          details.boardingPass = nextBoardingPass;
+        }
+
         const row = db.prepare('UPDATE bookings SET details = ? WHERE id = ? RETURNING *').get(JSON.stringify(details), id);
         if (!row) fail(404, 'Rezervasyon güncellenemedi.');
         writeAuditLog(db, {
           actorEmail: user.email,
-          action: 'admin:checkin_update',
-          target: `${row.pnr}:${nextCheckinStatus}${seatRaw ? ':' + seatRaw : ''}`,
+          action: sendEmailFlag ? 'admin:checkin_email_sent' : 'admin:checkin_update',
+          target: `${row.pnr}:${nextCheckinStatus}${primarySeat ? ':' + primarySeat : ''}${sendEmailFlag ? '->' + recipientEmail : ''}`,
           ip,
         });
-        send(res, 200, { booking: stripHouseMargin(bookingRecord(row), user) });
+        send(res, 200, {
+          booking: stripHouseMargin(bookingRecord(row), user),
+          email: emailResult || { requested: false, sent: false },
+        });
       } else if ((method === 'PATCH' || method === 'DELETE') && /^\/api\/admin\/bookings\/[a-f0-9]{32}$/.test(path)) {
         const id = path.split('/').at(-1);
         const existingBk = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id);

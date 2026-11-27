@@ -18,7 +18,7 @@ import { CHECKIN_RULES_BY_LANG } from '../data/checkinRules';
 import { PHONE_DISPLAY, PHONE_HREF, WA_HREF } from '../i18n/translations';
 import { CurrencyCode, LangCode, SearchTab } from '../types';
 import { api, ApiError, apiMessage, type BookingLookup } from '../data/api';
-import { openBrandedEticketPdf } from '../utils/eticketPdf';
+import { openBoardingPassPdf, openBrandedEticketPdf } from '../utils/eticketPdf';
 import { localizeXmlText } from '../utils/localizeXmlText';
 
 const CAMPAIGNS_PAGE_I18N: Record<
@@ -1240,6 +1240,44 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
                   <div className="adm-banner adm-banner-ok" style={{ marginBottom: 12 }}>
                     <CheckCircle2 size={16} style={{ flexShrink: 0, marginTop: 2 }} />
                     <div>{cancelNotice}</div>
+                  </div>
+                )}
+
+                {matchedBooking.checkinStatus === 'completed' && (matchedBooking.boardingPass?.seat || matchedBooking.assignedSeat) && (
+                  <div
+                    style={{
+                      marginBottom: 14,
+                      padding: '12px 14px',
+                      borderRadius: 12,
+                      background: '#ECFDF5',
+                      border: '1.5px solid #6EE7B7',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ fontSize: 12.5, color: '#065F46' }}>
+                      <strong style={{ display: 'block', fontSize: 13.5 }}>
+                        ✓ {lang === 'EN' ? 'Online Check-In Completed · Boarding Pass Ready' : lang === 'RU' ? 'Онлайн-регистрация выполнена · Посадочный готов' : lang === 'KK' ? 'Онлайн тіркеу аяқталды · Отырғызу талоны дайын' : 'Online Check-In Tamamlandı · Biniş Kartınız Hazır'}
+                      </strong>
+                      <span>
+                        {lang === 'EN' ? 'Seat' : lang === 'RU' ? 'Место' : lang === 'KK' ? 'Орын' : 'Koltuk'}:{' '}
+                        <strong>{matchedBooking.boardingPass?.seat || matchedBooking.assignedSeat}</strong>
+                        {matchedBooking.boardingPass?.boardingTime && ` · ${lang === 'EN' ? 'Boarding' : lang === 'RU' ? 'Посадка' : lang === 'KK' ? 'Отырғызу' : 'Biniş'}: ${matchedBooking.boardingPass.boardingTime}`}
+                        {matchedBooking.boardingPass?.terminal && ` · ${matchedBooking.boardingPass.terminal}`}
+                        {matchedBooking.boardingPass?.gate && ` · Gate: ${matchedBooking.boardingPass.gate}`}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-gold-nav"
+                      style={{ height: 36, fontSize: 12.5, padding: '0 14px' }}
+                      onClick={() => openBoardingPassPdf(matchedBooking, { lang })}
+                    >
+                      🎫 {lang === 'EN' ? 'Download Boarding Pass (PDF)' : lang === 'RU' ? 'Посадочный талон (PDF)' : lang === 'KK' ? 'Отырғызу талоны (PDF)' : 'Biniş Kartı İndir (PDF)'}
+                    </button>
                   </div>
                 )}
 

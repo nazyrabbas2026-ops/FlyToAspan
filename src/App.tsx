@@ -314,9 +314,13 @@ export const App: React.FC = () => {
     changeRecords((records) => records.map((record) => record.id === id ? booking : record));
   };
 
-  const handleUpdateBookingCheckin = async (id: string, payload: { checkinStatus: 'pending' | 'completed'; assignedSeat?: string }) => {
-    const { booking } = await api.updateBookingCheckin(id, payload);
-    changeRecords((records) => records.map((record) => record.id === id ? booking : record));
+  const handleUpdateBookingCheckin = async (
+    id: string,
+    payload: Parameters<typeof api.updateBookingCheckin>[1]
+  ) => {
+    const result = await api.updateBookingCheckin(id, payload);
+    changeRecords((records) => records.map((record) => record.id === id ? result.booking : record));
+    return result;
   };
 
   const handleDeleteBooking = async (id: string) => {
