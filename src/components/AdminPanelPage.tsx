@@ -59,6 +59,7 @@ import { PanelNavigation } from './PanelNavigation';
 import { AdminFinanceCrmSection } from './AdminFinanceCrmSection';
 import { AdminDealsSection, AdminToursCard } from './AdminDealsSection';
 import { openBrandedEticketPdf } from '../utils/eticketPdf';
+import { useAdminDomI18n } from '../hooks/useAdminDomI18n';
 import { api, apiMessage, type AdminCatalog, type AdminCatalogState, type BookingDraft } from '../data/api';
 
 const PERMISSION_OPTIONS: { id: StaffPermission; label: string }[] = [
@@ -436,7 +437,7 @@ const exampleCatalog: AdminCatalog = {
   ],
 };
 
-const ADMIN_I18N: Record<'TR' | 'EN' | 'RU', {
+const ADMIN_I18N: Record<LangCode, {
   backToSite: string;
   adminEyebrow: string;
   teamEyebrow: string;
@@ -584,6 +585,47 @@ const ADMIN_I18N: Record<'TR' | 'EN' | 'RU', {
       'İade Edildi': 'Возвращено',
     },
   },
+  KK: {
+    backToSite: 'Сайтқа оралу',
+    adminEyebrow: 'FLYTOASPAN · ОРТАЛЫҚ БАСҚАРУ ПАНЕЛІ',
+    teamEyebrow: 'FLYTOASPAN · КОМАНДА ПОРТАЛЫ',
+    adminTitle: 'Әкімші панелі',
+    teamTitle: 'Команда және сату панелі',
+    addTestBooking: 'Демо брондау қосу',
+    logout: 'Шығу',
+    navLabel: 'Басқару бөлімдері',
+    sections: {
+      dashboard: { label: 'Жалпы шолу', description: 'Жазбалар қорытындысы, күтудегі істер және валюта бағамдары.' },
+      bookings: { label: 'Брондаулар', description: 'PNR бойынша іздеу, күн бойынша сүзу және күйді жаңарту.' },
+      finance: { label: 'Қаржы және CRM', description: 'Кіріс-шығыс кітабы, CRM ұсыныстары және команда рейтингі.' },
+      pricing: { label: 'Бағалау және XML', description: 'Оператор XML пайда ережелері мен комиссияларды басқару.' },
+      deals: { label: 'Тиімді рейстер', description: 'Басты беттегі Күн ұсынысы мен 6 витрина рейсін басқару.' },
+      inventory: { label: 'Инвентарь және Рейстер', description: 'Қолмен чартерлік рейстер және күнделікті автоматты XML витринасы.' },
+      coupons: { label: 'Науқандар және купондар', description: 'Белсенді жеңілдік купондарын қосу, өшіру немесе жою.' },
+      agents: { label: 'Агенттіктер мен команда', description: 'B2B өтінімдері, несие лимиттері және өкілеттік матрицасы.' },
+      apis: { label: 'Жеткізуші API', description: 'Buranus, Amadeus, XML және төлем шлюздерінің күйі.' },
+    },
+    dateQuickLabel: 'Жылдам күн сүзгісі:',
+    dateAll: 'Барлығы',
+    dateToday: 'Бүгін',
+    dateWeek: 'Осы апта',
+    dateMonth: 'Осы ай',
+    dateUpcoming: 'Алдағы рейстер',
+    dateReset: 'Күнді тазалау',
+    searchLabel: 'PNR / Жолаушы / Бағыт іздеу',
+    searchPh: 'Брондау коды, жолаушы немесе бағыт',
+    fromDate: 'Басталу күні',
+    toDate: 'Аяқталу күні',
+    sortBy: 'Сұрыптау',
+    allServices: 'Барлық қызметтер',
+    statusLabels: {
+      Onaylandı: 'Расталды',
+      Tamamlandı: 'Аяқталды',
+      'İptal Talebi': 'Бас тарту сұранысы',
+      'İptal Edildi': 'Болдырылмады',
+      'İade Edildi': 'Қайтарылды',
+    },
+  },
 };
 
 export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
@@ -601,12 +643,14 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   onLogout,
   onBackHome,
 }) => {
-  const [localLang, setLocalLang] = useState<'TR' | 'EN' | 'RU'>(lang === 'EN' || lang === 'RU' ? lang : 'TR');
-  const activePanelLang: 'TR' | 'EN' | 'RU' = onSelectLang ? (lang === 'EN' || lang === 'RU' ? lang : 'TR') : localLang;
-  const setPanelLang = (next: 'TR' | 'EN' | 'RU') => {
+  const adminRootRef = useRef<HTMLDivElement | null>(null);
+  const [localLang, setLocalLang] = useState<LangCode>(lang);
+  const activePanelLang: LangCode = onSelectLang ? lang : localLang;
+  const setPanelLang = (next: LangCode) => {
     setLocalLang(next);
     onSelectLang?.(next);
   };
+  useAdminDomI18n(adminRootRef, activePanelLang);
   const ui = ADMIN_I18N[activePanelLang];
 
   const isSuperAdmin = !currentUser || currentUser.role === 'admin';
@@ -1212,7 +1256,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   };
 
   return (
-    <>
+    <div ref={adminRootRef}>
       <div className="inner-hero panel-hero">
         <div className="container">
           <div className="panel-hero-row">
@@ -1228,8 +1272,8 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
             </div>
 
             <div className="panel-actions">
-              <div className="adm-lang-switch" role="group" aria-label="Panel Language">
-                {(['TR', 'EN', 'RU'] as const).map((code) => (
+              <div className="adm-lang-switch" role="group" aria-label="Panel Language" data-no-i18n="true">
+                {(['TR', 'EN', 'RU', 'KK'] as const).map((code) => (
                   <button
                     key={code}
                     type="button"
@@ -4914,6 +4958,6 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
           </div>
         </div>
       </section>
-    </>
+    </div>
   );
 };

@@ -434,6 +434,8 @@ export const App: React.FC = () => {
         {notice && <p className="site-action-notice" role="alert">{notice}</p>}
         {page === 'admin' && !canManage && (
           <AdminLoginGate
+            lang={lang}
+            onSelectLang={setLang}
             sessionLoading={sessionLoading}
             currentUser={user}
             isDedicatedSubdomain={isAdminSubdomain}

@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Lock, ShieldCheck, ArrowLeft, LogOut } from 'lucide-react';
 import { api, apiMessage } from '../data/api';
-import type { UserProfile } from '../types';
+import { useAdminDomI18n } from '../hooks/useAdminDomI18n';
+import type { LangCode, UserProfile } from '../types';
 
 interface AdminLoginGateProps {
+  lang?: LangCode;
+  onSelectLang?: (next: LangCode) => void;
   sessionLoading: boolean;
   currentUser: UserProfile | null;
   isDedicatedSubdomain: boolean;
@@ -13,6 +16,8 @@ interface AdminLoginGateProps {
 }
 
 export const AdminLoginGate: React.FC<AdminLoginGateProps> = ({
+  lang = 'TR',
+  onSelectLang,
   sessionLoading,
   currentUser,
   isDedicatedSubdomain,
@@ -20,6 +25,14 @@ export const AdminLoginGate: React.FC<AdminLoginGateProps> = ({
   onLogout,
   onBackToSite,
 }) => {
+  const gateRef = useRef<HTMLDivElement | null>(null);
+  const [localLang, setLocalLang] = useState<LangCode>(lang);
+  const activeLang: LangCode = onSelectLang ? lang : localLang;
+  const setGateLang = (next: LangCode) => {
+    setLocalLang(next);
+    onSelectLang?.(next);
+  };
+  useAdminDomI18n(gateRef, activeLang);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -47,6 +60,7 @@ export const AdminLoginGate: React.FC<AdminLoginGateProps> = ({
 
   return (
     <div
+      ref={gateRef}
       style={{
         minHeight: '100vh',
         background: 'radial-gradient(circle at 20% 15%, #113452 0%, #0B1E33 55%, #071322 100%)',
@@ -57,6 +71,18 @@ export const AdminLoginGate: React.FC<AdminLoginGateProps> = ({
         padding: 24,
       }}
     >
+      <div className="adm-lang-switch" role="group" aria-label="Portal Language" data-no-i18n="true" style={{ marginBottom: 14 }}>
+        {(['TR', 'EN', 'RU', 'KK'] as const).map((code) => (
+          <button
+            key={code}
+            type="button"
+            className={`adm-lang-btn ${activeLang === code ? 'active' : ''}`}
+            onClick={() => setGateLang(code)}
+          >
+            {code}
+          </button>
+        ))}
+      </div>
       <div
         style={{
           width: '100%',
