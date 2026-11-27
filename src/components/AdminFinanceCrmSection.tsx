@@ -15,7 +15,7 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
-import { AIRPORTS, HOTEL_DEALS, formatDisplayDate, formatPrice, generateFlights } from '../data/mockData';
+import { AIRPORTS, HOTEL_DEALS, detectCharterFlight, formatDisplayDate, formatPrice, generateFlights } from '../data/mockData';
 import { addCalendarDays, toCalendarDate } from '../data/calendarDates';
 import { api, apiMessage, type AdminCatalog } from '../data/api';
 import { openBrandedEticketPdf } from '../utils/eticketPdf';
@@ -68,6 +68,7 @@ interface XmlQuoteOffer {
   cabin?: string;
   fromCode?: string;
   toCode?: string;
+  isCharter?: boolean;
   badge?: string;
 }
 
@@ -216,7 +217,8 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
             cabin: qCabin,
             fromCode: qFrom,
             toCode: qTo,
-            badge: 'Charter XML',
+            isCharter: true,
+            badge: 'CHARTER',
           });
         });
 
@@ -226,6 +228,7 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
         const unit = Math.round(f.basePrice);
         const unitNet = Math.round(f.netCostTRY ?? unit * 0.9);
         const bag = f.packages[0]?.checkedBag || '20 kg Bagaj';
+        const charterFlag = detectCharterFlight(f);
         offers.push({
           id: `xml-flt-${f.id}`,
           type: 'Uçak',
@@ -234,7 +237,7 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
           unitPriceTRY: unit,
           totalPriceTRY: unit * pax,
           netCostTRY: unitNet * pax,
-          providerSource: f.providerSource || 'Buranus / Amadeus XML',
+          providerSource: f.providerSource || 'Amadeus GDS XML',
           airline: f.airline,
           flightNumber: f.flightNumber,
           departTime: f.departTime,
@@ -244,7 +247,8 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
           cabin: qCabin,
           fromCode: qFrom,
           toCode: qTo,
-          badge: f.stops === 0 ? 'Direkt' : `${f.stops} Aktarma`,
+          isCharter: charterFlag,
+          badge: charterFlag ? 'CHARTER' : f.stops === 0 ? 'Direkt' : `${f.stops} Aktarma`,
         });
       });
 
@@ -310,6 +314,8 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
     () => xmlOffers.find((o) => o.id === selectedXmlOfferId) ?? xmlOffers[0] ?? null,
     [xmlOffers, selectedXmlOfferId]
   );
+  const isSelectedOfferCharter = Boolean(selectedXmlOffer?.isCharter);
+  const effectiveQuoteDocType: 'kimlik' | 'pasaport' = isSelectedOfferCharter ? 'pasaport' : qDocType;
 
   // Customer 360 & Audit search
   const [custSearch, setCustSearch] = useState('');
@@ -1211,13 +1217,13 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
                   firstName: qFirstName.trim(),
                   lastName: qLastName.trim(),
                   birthDate: qBirthDate || undefined,
-                  documentType: qDocType,
+                  documentType: effectiveQuoteDocType,
                   tcOrPassport: qPassport.trim() || undefined,
                   nationality: qNationality || undefined,
-                  passportCountry: qDocType === 'pasaport' ? (qPassportCountry || qNationality) : undefined,
-                  passportIssueDate: qDocType === 'pasaport' && qPassportIssue ? qPassportIssue : undefined,
-                  passportExpiryDate: qDocType === 'pasaport' && qPassportExpiry ? qPassportExpiry : undefined,
-                  passportIssuer: qDocType === 'pasaport' && qPassportIssuer.trim() ? qPassportIssuer.trim() : undefined,
+                  passportCountry: effectiveQuoteDocType === 'pasaport' ? (qPassportCountry || qNationality) : undefined,
+                  passportIssueDate: effectiveQuoteDocType === 'pasaport' && qPassportIssue ? qPassportIssue : undefined,
+                  passportExpiryDate: effectiveQuoteDocType === 'pasaport' && qPassportExpiry ? qPassportExpiry : undefined,
+                  passportIssuer: effectiveQuoteDocType === 'pasaport' && qPassportIssuer.trim() ? qPassportIssuer.trim() : undefined,
                   gender: qGender,
                   customerEmail: qEmail.trim() || undefined,
                   customerPhone: qPhone.trim(),
@@ -1294,17 +1300,32 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="adm-field-lbl">Belge Tipi</label>
-                  <select className="modal-input" value={qDocType} onChange={(e) => setQDocType(e.target.value as 'kimlik' | 'pasaport')}>
+                  <label className="adm-field-lbl">Belge Tipi{isSelectedOfferCharter ? ' (Charter · Zorunlu)' : ''}</label>
+                  <select
+                    className="modal-input"
+                    value={effectiveQuoteDocType}
+                    disabled={isSelectedOfferCharter}
+                    onChange={(e) => setQDocType(e.target.value as 'kimlik' | 'pasaport')}
+                  >
                     <option value="pasaport">Pasaport</option>
-                    <option value="kimlik">T.C. Kimlik Kartı</option>
+                    {!isSelectedOfferCharter && <option value="kimlik">T.C. Kimlik Kartı</option>}
                   </select>
                 </div>
                 <div>
-                  <label className="adm-field-lbl">{qDocType === 'pasaport' ? 'Pasaport No' : 'T.C. Kimlik / Kimlik No'}</label>
-                  <input className="modal-input" placeholder={qDocType === 'pasaport' ? 'Örn: U12345678' : '11111111111'} value={qPassport} onChange={(e) => setQPassport(e.target.value.toUpperCase())} />
+                  <label className="adm-field-lbl">
+                    {effectiveQuoteDocType === 'pasaport' ? 'Pasaport No' : 'T.C. Kimlik / Kimlik No'}
+                    {isSelectedOfferCharter ? ' *' : ''}
+                  </label>
+                  <input
+                    required={isSelectedOfferCharter}
+                    minLength={isSelectedOfferCharter ? 5 : undefined}
+                    className="modal-input"
+                    placeholder={effectiveQuoteDocType === 'pasaport' ? 'Örn: U12345678' : '11111111111'}
+                    value={qPassport}
+                    onChange={(e) => setQPassport(e.target.value.toUpperCase())}
+                  />
                 </div>
-                {qDocType === 'pasaport' && (
+                {effectiveQuoteDocType === 'pasaport' && (
                   <>
                     <div>
                       <label className="adm-field-lbl">Pasaport Veren Ülke</label>
@@ -1321,12 +1342,12 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
                       </select>
                     </div>
                     <div>
-                      <label className="adm-field-lbl">Pasaport Başlangıç Tarihi</label>
-                      <input type="date" className="modal-input" value={qPassportIssue} onChange={(e) => setQPassportIssue(e.target.value)} />
+                      <label className="adm-field-lbl">Pasaport Başlangıç Tarihi{isSelectedOfferCharter ? ' *' : ''}</label>
+                      <input required={isSelectedOfferCharter} type="date" className="modal-input" value={qPassportIssue} onChange={(e) => setQPassportIssue(e.target.value)} />
                     </div>
                     <div>
-                      <label className="adm-field-lbl">Pasaport Bitiş Tarihi</label>
-                      <input type="date" min={qDate} className="modal-input" value={qPassportExpiry} onChange={(e) => setQPassportExpiry(e.target.value)} />
+                      <label className="adm-field-lbl">Pasaport Bitiş Tarihi{isSelectedOfferCharter ? ' *' : ''}</label>
+                      <input required={isSelectedOfferCharter} type="date" min={qDate} className="modal-input" value={qPassportExpiry} onChange={(e) => setQPassportExpiry(e.target.value)} />
                     </div>
                     <div>
                       <label className="adm-field-lbl">Veren Makam (Opsiyonel)</label>

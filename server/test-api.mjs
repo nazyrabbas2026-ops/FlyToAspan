@@ -333,7 +333,18 @@ test('FlyToAspan API & Security Suite', async (t) => {
         date: '2026-12-20',
         passenger: 'Nurlan Bek',
         passengersDetail: [
-          { fullName: 'Nurlan Bek', tcOrPassport: 'KZ9988776', birthDate: '1991-05-14', gender: 'Erkek', paxType: 'Yetişkin' },
+          {
+            fullName: 'Nurlan Bek',
+            documentType: 'pasaport',
+            tcOrPassport: 'KZ9988776',
+            nationality: 'Kazakistan',
+            passportCountry: 'Kazakistan',
+            passportIssueDate: '2021-05-14',
+            passportExpiryDate: '2031-05-14',
+            birthDate: '1991-05-14',
+            gender: 'Erkek',
+            paxType: 'Yetişkin',
+          },
         ],
         contactEmail: 'nurlan@example.kz',
         contactPhone: '+7 701 555 44 33',
@@ -1059,6 +1070,99 @@ test('FlyToAspan API & Security Suite', async (t) => {
       },
     });
     assert.equal(expiredPassRes.status, 400);
+
+    // Charter flight detection: MUST reject missing passport / non-Latin name; MUST allow valid Charter passport; Regular flight works normally!
+    const charterNoPass = await call(env.origin, '/api/bookings', {
+      method: 'POST',
+      cookie: adminCookie,
+      body: {
+        type: 'Uçak',
+        title: 'Antalya (AYT) → Almatı (ALA)',
+        subtitle: 'SCAT Airlines Charter · DV5241',
+        airline: 'SCAT Airlines Charter',
+        providerSource: 'Kompas / SAMO Charter XML',
+        isCharter: true,
+        date: '2026-12-30',
+        passenger: 'Jalia Coskun',
+        lookupSurname: 'Coskun',
+        price: 6200,
+        passengersDetail: [{ fullName: 'Jalia Coskun', documentType: 'kimlik' }],
+      },
+    });
+    assert.equal(charterNoPass.status, 400);
+
+    const charterNonLatin = await call(env.origin, '/api/bookings', {
+      method: 'POST',
+      cookie: adminCookie,
+      body: {
+        type: 'Uçak',
+        title: 'Antalya (AYT) → Almatı (ALA)',
+        subtitle: 'SCAT Airlines Charter · DV5241',
+        airline: 'SCAT Airlines Charter',
+        isCharter: true,
+        date: '2026-12-30',
+        passenger: 'Jalia Coşkun',
+        lookupSurname: 'Coşkun',
+        price: 6200,
+        passengersDetail: [{
+          fullName: 'Jalia Coşkun',
+          documentType: 'pasaport',
+          tcOrPassport: 'U12345678',
+          birthDate: '1994-08-21',
+          passportIssueDate: '2022-05-01',
+          passportExpiryDate: '2032-05-01',
+        }],
+      },
+    });
+    assert.equal(charterNonLatin.status, 400);
+
+    const charterValid = await call(env.origin, '/api/bookings', {
+      method: 'POST',
+      cookie: adminCookie,
+      body: {
+        type: 'Uçak',
+        title: 'Antalya (AYT) → Almatı (ALA)',
+        subtitle: 'SCAT Airlines Charter · DV5241',
+        airline: 'SCAT Airlines Charter',
+        providerSource: 'Kompas / SAMO Charter XML',
+        isCharter: true,
+        date: '2026-12-30',
+        passenger: 'JALIA COSKUN',
+        lookupSurname: 'COSKUN',
+        price: 6200,
+        passengersDetail: [{
+          fullName: 'JALIA COSKUN',
+          documentType: 'pasaport',
+          tcOrPassport: 'U12345678',
+          nationality: 'Kazakistan',
+          passportCountry: 'Kazakistan',
+          birthDate: '1994-08-21',
+          passportIssueDate: '2022-05-01',
+          passportExpiryDate: '2032-05-01',
+          passportIssuer: 'MVD RK',
+        }],
+      },
+    });
+    assert.equal(charterValid.status, 201);
+
+    const regularValid = await call(env.origin, '/api/bookings', {
+      method: 'POST',
+      cookie: adminCookie,
+      body: {
+        type: 'Uçak',
+        title: 'İstanbul (IST) → Antalya (AYT)',
+        subtitle: 'Turkish Airlines · TK2410',
+        airline: 'Turkish Airlines',
+        providerSource: 'BookingAgora / BiletBank B2B XML',
+        isCharter: false,
+        date: '2026-12-30',
+        passenger: 'Ayşe Yılmaz',
+        lookupSurname: 'Yılmaz',
+        price: 1850,
+        passengersDetail: [{ fullName: 'Ayşe Yılmaz', documentType: 'kimlik' }],
+      },
+    });
+    assert.equal(regularValid.status, 201);
 
     // 16: Automated Daily XML Showcase Sync (5 cheapest hotels 1-per-country & 4 tours from 4 countries)
     const xmlSync = await call(env.origin, '/api/admin/xml-showcase/sync', {

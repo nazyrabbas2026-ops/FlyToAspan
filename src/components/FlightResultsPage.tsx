@@ -23,6 +23,7 @@ import {
   DEFAULT_MARKUP,
   FarePackage,
   FlightResult,
+  detectCharterFlight,
   formatDisplayDate,
   formatPrice,
   generateFlights,
@@ -722,6 +723,7 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
           basePrice: xmlAdjustedPrice,
           netCostTRY: mf.priceTRY,
           providerSource: mf.operator || 'Manuel XML Envanteri',
+          isCharter: true,
           packages: [
             {
               id: `man-eco-${mf.id}`,
@@ -783,10 +785,11 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
   const fromAirport = AIRPORTS.find((a) => a.code === query.fromCode) || AIRPORTS[0];
   const toAirport = AIRPORTS.find((a) => a.code === query.toCode) || AIRPORTS[4];
   const isIntlFlight = !fromAirport.domestic || !toAirport.domestic;
+  const bookingLegs = bookingChoice ? (outboundChoice ? [outboundChoice, bookingChoice] : [bookingChoice]) : [];
+  const isCharterBooking = bookingLegs.some((leg) => detectCharterFlight(leg.flight));
   const [paxDocTypes, setPaxDocTypes] = useState<Record<number, 'kimlik' | 'pasaport'>>({});
   const getPaxDocType = (idx: number): 'kimlik' | 'pasaport' =>
-    paxDocTypes[idx] ?? (isIntlFlight ? 'pasaport' : 'kimlik');
-  const bookingLegs = bookingChoice ? (outboundChoice ? [outboundChoice, bookingChoice] : [bookingChoice]) : [];
+    isCharterBooking ? 'pasaport' : (paxDocTypes[idx] ?? (isIntlFlight ? 'pasaport' : 'kimlik'));
   const unitLegTotal = bookingLegs.reduce((total, { flight, pkg }) => total + flight.basePrice + pkg.priceDelta, 0);
   const adultSubtotalTRY = Math.round(unitLegTotal * query.adults);
   const childSubtotalTRY = Math.round(unitLegTotal * query.children * 0.75);
@@ -1041,6 +1044,7 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
           const passportCountry = docType === 'pasaport' ? String(fields.get(`passportCountry_${idx}`) || nationality || '').trim() : '';
           const passportIssueDate = docType === 'pasaport' ? String(fields.get(`passportIssue_${idx}`) || '').trim() : '';
           const passportExpiryDate = docType === 'pasaport' ? String(fields.get(`passportExpiry_${idx}`) || '').trim() : '';
+          const passportIssuer = docType === 'pasaport' ? String(fields.get(`passportIssuer_${idx}`) || '').trim() : '';
           const rawGender = String(fields.get(`gender_${idx}`) || 'M');
           return {
             fullName: `${fn} ${ln}`.trim(),
@@ -1050,6 +1054,7 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
             passportCountry: passportCountry || undefined,
             passportIssueDate: passportIssueDate || undefined,
             passportExpiryDate: passportExpiryDate || undefined,
+            passportIssuer: passportIssuer || undefined,
             birthDate: dob || undefined,
             gender: rawGender === 'F' ? 'Kadın' : 'Erkek',
             paxType: slot.label,
@@ -1057,6 +1062,34 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
         }).filter((p) => p.fullName);
 
         for (const p of passengersDetail) {
+          if (isCharterBooking) {
+            if (!/^[A-Za-z\s'-]+$/.test(p.fullName)) {
+              setBookingPending(false);
+              setBookingError(
+                lang === 'EN'
+                  ? 'For Charter flights, passenger first and last name must be entered in Latin letters (A–Z) as shown on the passport.'
+                  : lang === 'RU'
+                    ? 'Для чартерных рейсов имя и фамилия должны быть указаны латиницей (A–Z), как в паспорте.'
+                    : lang === 'KK'
+                      ? 'Чартерлік рейстерде аты-жөні төлқұжаттағыдай тек латын әріптерімен (A–Z) жазылуы тиіс.'
+                      : 'Charter uçuşlarda ad ve soyad pasaporttaki gibi sadece Latin harflerle (A–Z) yazılmalıdır (Örn: COSKUN).'
+              );
+              return;
+            }
+            if (!p.birthDate || !p.tcOrPassport || p.tcOrPassport.length < 5 || !p.passportIssueDate || !p.passportExpiryDate) {
+              setBookingPending(false);
+              setBookingError(
+                lang === 'EN'
+                  ? 'Charter flight requires Date of Birth, Passport Number, Issue Date, and Expiry Date for every passenger.'
+                  : lang === 'RU'
+                    ? 'Для чартерного рейса обязательны дата рождения, номер паспорта, дата выдачи и срок действия.'
+                    : lang === 'KK'
+                      ? 'Чартерлік рейс үшін туған күні, төлқұжат нөмірі, берілген және біту күні міндетті.'
+                      : 'Charter uçuşlarda tüm yolcular için Doğum Tarihi, Pasaport No, Pasaport Başlangıç ve Bitiş Tarihi zorunludur.'
+              );
+              return;
+            }
+          }
           if (p.documentType === 'pasaport' && p.passportExpiryDate && p.passportExpiryDate < query.departDate) {
             setBookingPending(false);
             setBookingError(
@@ -1129,6 +1162,7 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
           profitTRY,
           lookupSurname,
           price: bookingTotal,
+          isCharter: isCharterBooking,
           departTime: firstLeg?.flight.departTime,
           arriveTime: firstLeg?.flight.arriveTime,
           flightNumber: firstLeg?.flight.flightNumber,
@@ -1264,6 +1298,11 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                             </span>
                             <strong className="uf-co-airline-name">{flight.airline}</strong>
                             <span className="uf-co-flight-num">{flight.flightNumber}</span>
+                            {detectCharterFlight(flight) && (
+                              <span style={{ padding: '2px 8px', borderRadius: 999, background: 'rgba(245, 158, 11, 0.16)', color: '#B45309', border: '1px solid rgba(245, 158, 11, 0.45)', fontSize: 10.5, fontWeight: 800, letterSpacing: '0.04em' }}>
+                                CHARTER
+                              </span>
+                            )}
                           </div>
                           <span className="uf-co-date-tag">
                             <Calendar size={13} />
@@ -1462,12 +1501,12 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                               <input name={`surname_${idx}`} autoComplete="family-name" className="uf-co-input" required maxLength={64} placeholder={isIntlFlight ? (lang === 'EN' ? 'Latin letters as on passport' : lang === 'RU' ? 'Латиницей как в паспорте' : lang === 'KK' ? 'Төлқұжаттағыдай латынша' : 'Pasaporttaki gibi (Latin)') : ''} />
                             </label>
                             <label className="uf-co-label">
-                              {lang === 'EN' ? 'Date of Birth' : lang === 'RU' ? 'Дата рождения' : lang === 'KK' ? 'Туған күні' : 'Doğum Tarihi'}
-                              <input name={`dob_${idx}`} type="date" className="uf-co-input" />
+                              {lang === 'EN' ? 'Date of Birth' : lang === 'RU' ? 'Дата рождения' : lang === 'KK' ? 'Туған күні' : 'Doğum Tarihi'}{isCharterBooking ? ' *' : ''}
+                              <input name={`dob_${idx}`} type="date" className="uf-co-input" required={isCharterBooking} />
                             </label>
                             <label className="uf-co-label">
-                              {lang === 'EN' ? 'Nationality / Citizenship' : lang === 'RU' ? 'Гражданство' : lang === 'KK' ? 'Азаматтығы' : 'Uyruk / Vatandaşlık'}
-                              <select name={`nationality_${idx}`} className="uf-co-input" defaultValue={docCountries[0]}>
+                              {lang === 'EN' ? 'Nationality / Citizenship' : lang === 'RU' ? 'Гражданство' : lang === 'KK' ? 'Азаматтығы' : 'Uyruk / Vatandaşlık'}{isCharterBooking ? ' *' : ''}
+                              <select name={`nationality_${idx}`} className="uf-co-input" defaultValue={docCountries[0]} required={isCharterBooking}>
                                 {docCountries.map((c) => (
                                   <option key={c} value={c}>{c}</option>
                                 ))}
@@ -1475,12 +1514,17 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                             </label>
                           </div>
 
-                          {/* Document Type Selector (Kimlik vs Pasaport) */}
+                          {/* Document Type Selector (Charter = Pasaport Mandatory; Regular = Kimlik or Pasaport) */}
                           <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed var(--aspan-border)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
                               <span style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--aspan-text)' }}>
                                 {lang === 'EN' ? 'Document Type' : lang === 'RU' ? 'Тип документа' : lang === 'KK' ? 'Құжат түрі' : 'Belge Tipi'}
                               </span>
+                              {isCharterBooking ? (
+                                <span style={{ padding: '5px 11px', borderRadius: 9, fontSize: 11.5, fontWeight: 800, background: 'rgba(245, 158, 11, 0.16)', color: '#92400E', border: '1.5px solid #F59E0B' }}>
+                                  ✈ {lang === 'EN' ? 'Charter Flight · Passport Required' : lang === 'RU' ? 'Чартерный рейс · Паспорт обязателен' : lang === 'KK' ? 'Чартерлік рейс · Төлқұжат міндетті' : 'Charter Uçuş · Pasaport Zorunlu'}
+                                </span>
+                              ) : (
                               <div style={{ display: 'inline-flex', gap: 8 }}>
                                 <button
                                   type="button"
@@ -1515,9 +1559,20 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                                   {lang === 'EN' ? 'Passport' : lang === 'RU' ? 'Загранпаспорт' : lang === 'KK' ? 'Төлқұжат (Паспорт)' : 'Pasaport'}
                                 </button>
                               </div>
+                              )}
                             </div>
 
-                            {isIntlFlight && docType === 'pasaport' && (
+                            {isCharterBooking ? (
+                              <div style={{ fontSize: 11.5, color: '#92400E', background: 'rgba(245, 158, 11, 0.1)', border: '1.5px solid rgba(245, 158, 11, 0.45)', borderRadius: 9, padding: '8px 11px', marginBottom: 10, fontWeight: 700 }}>
+                                {lang === 'EN'
+                                  ? 'Charter / Block-Seat Flight: Passport number, issue date, expiry date, birth date, and Latin-letter full name are mandatory.'
+                                  : lang === 'RU'
+                                    ? 'Чартерный рейс (SAMO / блок мест): номер паспорта, дата выдачи, срок действия, дата рождения и ФИО латиницей обязательны.'
+                                    : lang === 'KK'
+                                      ? 'Чартерлік рейс: төлқұжат нөмірі, берілген және біту күні, туған күні және латынша аты-жөні міндетті.'
+                                      : 'Charter / Blok Koltuk Seferi: Her yolcu için Latin harflerle Ad/Soyad, Doğum Tarihi, Pasaport No, Başlangıç ve Bitiş Tarihi girilmesi zorunludur.'}
+                              </div>
+                            ) : isIntlFlight && docType === 'pasaport' && (
                               <div style={{ fontSize: 11.5, color: '#0369A1', background: 'rgba(2,132,199,0.08)', border: '1px solid rgba(2,132,199,0.22)', borderRadius: 9, padding: '7px 10px', marginBottom: 10, fontWeight: 600 }}>
                                 {lang === 'EN'
                                   ? 'International route: enter passport number, issue date and expiry date exactly as shown on your passport.'
@@ -1539,25 +1594,31 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                             ) : (
                               <div className="uf-co-form-grid-2">
                                 <label className="uf-co-label">
-                                  {lang === 'EN' ? 'Passport Number' : lang === 'RU' ? 'Номер паспорта' : lang === 'KK' ? 'Төлқұжат нөмірі' : 'Pasaport No'}
-                                  <input name={`doc_${idx}`} className="uf-co-input" maxLength={24} placeholder="U12345678" />
+                                  {lang === 'EN' ? 'Passport Number' : lang === 'RU' ? 'Номер паспорта' : lang === 'KK' ? 'Төлқұжат нөмірі' : 'Pasaport No'}{isCharterBooking ? ' *' : ''}
+                                  <input name={`doc_${idx}`} className="uf-co-input" required={isCharterBooking} minLength={isCharterBooking ? 5 : undefined} maxLength={24} placeholder="U12345678" />
                                 </label>
                                 <label className="uf-co-label">
-                                  {lang === 'EN' ? 'Issuing Country' : lang === 'RU' ? 'Страна выдачи паспорта' : lang === 'KK' ? 'Төлқұжат берген ел' : 'Pasaport Veren Ülke'}
-                                  <select name={`passportCountry_${idx}`} className="uf-co-input" defaultValue={docCountries[0]}>
+                                  {lang === 'EN' ? 'Issuing Country' : lang === 'RU' ? 'Страна выдачи паспорта' : lang === 'KK' ? 'Төлқұжат берген ел' : 'Pasaport Veren Ülke'}{isCharterBooking ? ' *' : ''}
+                                  <select name={`passportCountry_${idx}`} className="uf-co-input" defaultValue={docCountries[0]} required={isCharterBooking}>
                                     {docCountries.map((c) => (
                                       <option key={c} value={c}>{c}</option>
                                     ))}
                                   </select>
                                 </label>
                                 <label className="uf-co-label">
-                                  {lang === 'EN' ? 'Passport Issue Date (Start)' : lang === 'RU' ? 'Дата выдачи паспорта' : lang === 'KK' ? 'Төлқұжат берілген күні' : 'Pasaport Başlangıç (Veriliş) Tarihi'}
-                                  <input name={`passportIssue_${idx}`} type="date" className="uf-co-input" />
+                                  {lang === 'EN' ? 'Passport Issue Date (Start)' : lang === 'RU' ? 'Дата выдачи паспорта' : lang === 'KK' ? 'Төлқұжат берілген күні' : 'Pasaport Başlangıç (Veriliş) Tarihi'}{isCharterBooking ? ' *' : ''}
+                                  <input name={`passportIssue_${idx}`} type="date" className="uf-co-input" required={isCharterBooking} />
                                 </label>
                                 <label className="uf-co-label">
-                                  {lang === 'EN' ? 'Passport Expiry Date (Valid Until)' : lang === 'RU' ? 'Действителен до' : lang === 'KK' ? 'Жарамдылық мерзімі (дейін)' : 'Pasaport Bitiş (Geçerlilik) Tarihi'}
-                                  <input name={`passportExpiry_${idx}`} type="date" min={query.departDate} className="uf-co-input" />
+                                  {lang === 'EN' ? 'Passport Expiry Date (Valid Until)' : lang === 'RU' ? 'Действителен до' : lang === 'KK' ? 'Жарамдылық мерзімі (дейін)' : 'Pasaport Bitiş (Geçerlilik) Tarihi'}{isCharterBooking ? ' *' : ''}
+                                  <input name={`passportExpiry_${idx}`} type="date" min={query.departDate} className="uf-co-input" required={isCharterBooking} />
                                 </label>
+                                {isCharterBooking && (
+                                  <label className="uf-co-label">
+                                    {lang === 'EN' ? 'Issuing Authority (e.g. MVD RK / NVI)' : lang === 'RU' ? 'Кем выдан (напр. МВД РК / NVI)' : lang === 'KK' ? 'Берген мекеме (мыс. ҚР ІІМ)' : 'Veren Makam (Örn: NVI / MVD RK)'}
+                                    <input name={`passportIssuer_${idx}`} className="uf-co-input" maxLength={64} placeholder="MVD RK / NVI TURKIYE" />
+                                  </label>
+                                )}
                               </div>
                             )}
                           </div>
@@ -2123,7 +2184,14 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                             {flight.airlineCode}
                           </div>
                           <div>
-                            <div style={{ fontWeight: 800, fontSize: 14.5 }}>{flight.airline}</div>
+                            <div style={{ fontWeight: 800, fontSize: 14.5, display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              {flight.airline}
+                              {detectCharterFlight(flight) && (
+                                <span style={{ padding: '2px 7px', borderRadius: 999, background: 'rgba(245, 158, 11, 0.16)', color: '#B45309', border: '1px solid rgba(245, 158, 11, 0.45)', fontSize: 10, fontWeight: 800, letterSpacing: '0.04em' }}>
+                                  CHARTER
+                                </span>
+                              )}
+                            </div>
                             <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>
                               {flight.flightNumber} · {ui.seatsLeft(flight.seatsLeft)}
                             </div>

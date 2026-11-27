@@ -246,5 +246,6 @@ export const api = {
 
 export type BookingDraft = Pick<BookingRecord, 'type' | 'title' | 'subtitle' | 'date' | 'returnDate' | 'passenger' | 'passengersDetail' | 'legs' | 'contactEmail' | 'contactPhone' | 'providerSource' | 'netCostTRY' | 'profitTRY' | 'price' | 'departTime' | 'arriveTime' | 'flightNumber' | 'airline' | 'baggage' | 'cabin' | 'duration'> & {
   lookupSurname: string;
+  isCharter?: boolean;
   idempotencyKey?: string;
 };

@@ -266,6 +266,33 @@ function newDemoBooking(db, body, owner) {
         duration: typeof l?.duration === 'string' ? l.duration.trim().slice(0, 24) : undefined,
       })).filter((l) => l.fromCode || l.flightNumber)
     : undefined;
+  const isCharterFlight =
+    type === 'Uçak' &&
+    (Boolean(body.isCharter) ||
+      /\b(charter|blok koltuk|block seat|samo|kompas|fun&sun|funsun|selfie travel|corendon|freebird|scat|sunday airlines|southwind)\b/i.test(
+        `${body.airline || ''} ${body.providerSource || ''} ${body.subtitle || ''}`
+      ));
+
+  if (isCharterFlight && passengersDetail && passengersDetail.length > 0) {
+    for (const p of passengersDetail) {
+      if (p.documentType !== 'pasaport') {
+        fail(400, 'Charter uçuşlarda belge tipi olarak Pasaport zorunludur.');
+      }
+      if (!p.tcOrPassport || p.tcOrPassport.length < 5) {
+        fail(400, 'Charter uçuşlarda geçerli Pasaport Numarası girilmesi zorunludur.');
+      }
+      if (!p.birthDate) {
+        fail(400, 'Charter uçuşlarda yolcu doğum tarihi zorunludur.');
+      }
+      if (!p.passportIssueDate || !p.passportExpiryDate) {
+        fail(400, 'Charter uçuşlarda pasaport başlangıç (veriliş) ve bitiş (geçerlilik) tarihi zorunludur.');
+      }
+      if (!/^[A-Za-z\s'-]+$/.test(p.fullName)) {
+        fail(400, 'Charter uçuşlarda yolcu adı ve soyadı pasaporttaki gibi sadece Latin harflerle (A–Z) yazılmalıdır.');
+      }
+    }
+  }
+
   const details = {
     type, date, returnDate,
     title: text(body.title, 160),

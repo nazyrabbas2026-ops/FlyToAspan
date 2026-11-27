@@ -214,8 +214,26 @@ export interface FlightResult {
   basePrice: number;
   netCostTRY?: number;
   providerSource?: string;
+  isCharter?: boolean;
   seatsLeft: number;
   packages: FarePackage[];
+}
+
+const CHARTER_CARRIER_CODES = new Set(['XC', 'FH', 'DV', '2S', '4M']);
+const CHARTER_KEYWORD_RE = /\b(charter|blok koltuk|block seat|samo|kompas|fun&sun|funsun|selfie travel|corendon|freebird|sunday airlines|southwind|mavi g[oö]k)\b/i;
+
+export function detectCharterFlight(info: {
+  isCharter?: boolean;
+  airline?: string;
+  airlineCode?: string;
+  providerSource?: string;
+  operator?: string;
+  subtitle?: string;
+}): boolean {
+  if (info.isCharter === true) return true;
+  if (info.airlineCode && CHARTER_CARRIER_CODES.has(info.airlineCode.toUpperCase())) return true;
+  const combined = `${info.airline || ''} ${info.providerSource || ''} ${info.operator || ''} ${info.subtitle || ''}`;
+  return CHARTER_KEYWORD_RE.test(combined);
 }
 
 export const AIRPORTS: Airport[] = [
@@ -1088,7 +1106,18 @@ export function generateFlights(
   const isReverseDirection = fromCode.localeCompare(toCode) > 0;
   const routeShiftMinutes = isReverseDirection ? 35 : 0;
 
-  const rawTemplates = isDomestic
+  const rawTemplates: Array<{
+    airline: string;
+    code: string;
+    color: string;
+    numBase: number;
+    dep: string;
+    dur: number;
+    stops: number;
+    stopCity?: string;
+    mult: number;
+    charter?: boolean;
+  }> = isDomestic
     ? [
         { airline: 'Turkish Airlines', code: 'TK', color: '#C8102E', numBase: 2410, dep: '06:35', dur: 80, stops: 0, mult: 1.0 },
         { airline: 'Pegasus Airlines', code: 'PC', color: '#D97706', numBase: 2014, dep: '08:15', dur: 85, stops: 0, mult: 0.96 },
@@ -1099,6 +1128,9 @@ export function generateFlights(
         { airline: 'Turkish Airlines', code: 'TK', color: '#C8102E', numBase: 2444, dep: '22:15', dur: 85, stops: 0, mult: 1.05 },
       ]
     : [
+        ...(isCentralAsia
+          ? [{ airline: 'SCAT Airlines Charter', code: 'DV', color: '#0E7490', numBase: 5240, dep: '03:15', dur: 320, stops: 0, mult: 0.91, charter: true }]
+          : []),
         { airline: 'Air Astana', code: 'KC', color: '#B8860B', numBase: 912, dep: '01:45', dur: 315, stops: 0, mult: 1.0 },
         { airline: 'Turkish Airlines', code: 'TK', color: '#C8102E', numBase: 350, dep: '07:20', dur: 310, stops: 0, mult: 1.09 },
         { airline: 'Pegasus Airlines', code: 'PC', color: '#D97706', numBase: 1580, dep: '11:05', dur: 325, stops: 0, mult: 0.95 },
@@ -1147,11 +1179,14 @@ export function generateFlights(
     const priceFactor = isReverseDirection ? t.mult * 1.02 : t.mult;
     const price = Math.round((baseFare * priceFactor * cabinMult) / 10) * 10;
     const netCost = Math.round((rawNetFare * priceFactor * cabinMult) / 10) * 10;
-    const providerSource = isDomestic
-      ? 'BookingAgora / BiletBank B2B XML'
-      : isCentralAsia
-        ? 'Buranus B2B & Charter XML'
-        : 'Amadeus GDS (XML)';
+    const isCharter = Boolean(t.charter);
+    const providerSource = isCharter
+      ? 'Kompas / SAMO Charter XML'
+      : isDomestic
+        ? 'BookingAgora / BiletBank B2B XML'
+        : isCentralAsia
+          ? 'Air Astana / Amadeus GDS XML'
+          : 'Amadeus GDS (XML)';
     const flightNum = `${t.code}${String(t.numBase + (isReverseDirection ? 1 : 0)).padStart(t.numBase < 100 ? 3 : 0, '0')}`;
 
     const packages = cabin === 'Business' || !LCC_CODES.has(t.code)
@@ -1181,6 +1216,7 @@ export function generateFlights(
       basePrice: price,
       netCostTRY: Math.min(price, netCost),
       providerSource,
+      isCharter,
       seatsLeft: 2 + ((idx * 3 + (isReverseDirection ? 2 : 0)) % 7),
       packages,
     };
