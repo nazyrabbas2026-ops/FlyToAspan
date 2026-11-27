@@ -367,6 +367,25 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
     if (token) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(digest(token));
   };
 
+  const enrichAccountProfile = (account) => {
+    const profile = accountProfile(account);
+    if (account?.organization_id) {
+      const org = db.prepare('SELECT discount_percent FROM organizations WHERE id = ?').get(account.organization_id);
+      profile.organizationDiscountPercent = Number(org?.discount_percent || 0);
+    } else {
+      profile.organizationDiscountPercent = 0;
+    }
+    return profile;
+  };
+
+  const stripHouseMargin = (rec, currentUser) => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      delete rec.netCostTRY;
+      delete rec.profitTRY;
+    }
+    return rec;
+  };
+
   const authenticate = (res, previousToken, account) => {
     const token = randomBytes(32).toString('base64url');
     clearSession(previousToken);
@@ -375,7 +394,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
       digest(token), account.id, Date.now() + sessionLifetime * 1000
     );
     setSessionCookie(res, token, sessionLifetime);
-    return accountProfile(account);
+    return enrichAccountProfile(account);
   };
 
   const readMarkup = () => {
@@ -525,7 +544,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
       } else if (method === 'GET' && path === '/api/health') {
         send(res, 200, { ok: true, status: 'healthy', timestamp: new Date().toISOString() });
       } else if (method === 'GET' && path === '/api/session') {
-        send(res, 200, { user: user ? accountProfile(user) : null });
+        send(res, 200, { user: user ? enrichAccountProfile(user) : null });
       } else if (method === 'POST' && path === '/api/auth/register') {
         throttle(`register:${ip}`, 10);
         const body = await readJson(req);
@@ -693,7 +712,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
       } else if (method === 'GET' && path === '/api/bookings') {
         if (!user) fail(401, 'Oturum açın.');
         const rows = db.prepare('SELECT * FROM bookings WHERE owner_id = ? OR sold_by_user_id = ? ORDER BY created_at DESC, id DESC').all(user.id, user.id);
-        send(res, 200, { bookings: rows.map(bookingRecord) });
+        send(res, 200, { bookings: rows.map((row) => stripHouseMargin(bookingRecord(row), user)) });
       } else if (method === 'POST' && (path === '/api/bookings' || path === '/api/admin/bookings')) {
         throttle(`create-booking:${user?.id ?? ip}`, 120);
         const body = await readJson(req);
@@ -776,7 +795,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
             price: booking.price,
           });
         }
-        send(res, 201, { booking });
+        send(res, 201, { booking: stripHouseMargin({ ...booking }, user) });
       } else if (method === 'POST' && /^\/api\/bookings\/[a-f0-9]{32}\/cancel$/.test(path)) {
         if (!user) fail(401, 'Oturum açın.');
         const id = path.split('/')[3];
@@ -785,7 +804,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           RETURNING *
         `).get(id, user.id, user.id);
         if (!row) fail(404, 'İptal talebine uygun bir rezervasyon bulunamadı.');
-        send(res, 200, { booking: bookingRecord(row) });
+        send(res, 200, { booking: stripHouseMargin(bookingRecord(row), user) });
       } else if (method === 'GET' && path === '/api/admin/bookings') {
         const limitParam = Math.min(2000, Math.max(1, Number(url.searchParams.get('limit')) || 500));
         const selectJoin = `
@@ -804,7 +823,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         } else {
           rows = [];
         }
-        send(res, 200, { bookings: rows.map(bookingRecord) });
+        send(res, 200, { bookings: rows.map((row) => stripHouseMargin(bookingRecord(row), user)) });
       } else if (method === 'GET' && path === '/api/admin/catalog') {
         const rows = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'catalog:%'").all();
         const catalog = Object.fromEntries(rows.map(({ key, value }) => [key.slice('catalog:'.length), JSON.parse(value)]));

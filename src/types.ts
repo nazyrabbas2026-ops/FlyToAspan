@@ -122,6 +122,7 @@ export interface UserProfile {
   role: 'member' | 'admin';
   status?: 'active' | 'pending' | 'suspended';
   organizationId?: string | null;
+  organizationDiscountPercent?: number;
   permissions?: StaffPermission[];
   firstName: string;
   lastName: string;

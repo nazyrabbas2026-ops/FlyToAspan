@@ -1092,7 +1092,12 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   const refundedTotalTRY = bookings
     .filter((b) => b.status === 'İade Edildi')
     .reduce((sum, b) => sum + b.price, 0);
-  const estimatedProfitTRY = Math.round(totalRevenueTRY * 0.095);
+  const agencyDiscountPercent = !isSuperAdmin
+    ? Math.max(0, Number(currentUser?.organizationDiscountPercent ?? 0))
+    : 0;
+  const showCommissionCard = isSuperAdmin || agencyDiscountPercent > 0;
+  const commissionRatePercent = isSuperAdmin ? 9.5 : agencyDiscountPercent;
+  const estimatedProfitTRY = Math.round(totalRevenueTRY * (commissionRatePercent / 100));
 
   const countByStatus = useMemo(() => {
     return {
@@ -1229,21 +1234,37 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   };
 
   const handleExportCsv = () => {
-    const headers = ['PNR', 'E-Bilet', 'Tip', 'XML_Kaynagi', 'Guzergah', 'Detay', 'Tarih', 'Yolcu', 'XML_Alis_TRY', 'Satis_TRY', 'Net_Kar_TRY', 'Durum'];
-    const rows = filteredBookings.map((b) => [
-      b.pnr,
-      b.eticketNumber || '-',
-      b.type,
-      `"${b.providerSource || 'Yerel Deneme / Manuel Kayıt'}"`,
-      `"${b.title}"`,
-      `"${b.subtitle}"`,
-      b.date,
-      `"${b.passenger}"`,
-      b.netCostTRY ?? '',
-      b.price,
-      b.profitTRY ?? (b.netCostTRY !== undefined ? Math.max(0, b.price - b.netCostTRY) : ''),
-      b.status,
-    ]);
+    const headers = isSuperAdmin
+      ? ['PNR', 'E-Bilet', 'Tip', 'XML_Kaynagi', 'Guzergah', 'Detay', 'Tarih', 'Yolcu', 'XML_Alis_TRY', 'Satis_TRY', 'Net_Kar_TRY', 'Durum']
+      : ['PNR', 'E-Bilet', 'Tip', 'Guzergah', 'Detay', 'Tarih', 'Yolcu', 'Satis_TRY', 'Durum'];
+    const rows = filteredBookings.map((b) =>
+      isSuperAdmin
+        ? [
+            b.pnr,
+            b.eticketNumber || '-',
+            b.type,
+            `"${b.providerSource || 'Yerel Deneme / Manuel Kayıt'}"`,
+            `"${b.title}"`,
+            `"${b.subtitle}"`,
+            b.date,
+            `"${b.passenger}"`,
+            b.netCostTRY ?? '',
+            b.price,
+            b.profitTRY ?? (b.netCostTRY !== undefined ? Math.max(0, b.price - b.netCostTRY) : ''),
+            b.status,
+          ]
+        : [
+            b.pnr,
+            b.eticketNumber || '-',
+            b.type,
+            `"${b.title}"`,
+            `"${b.subtitle}"`,
+            b.date,
+            `"${b.passenger}"`,
+            b.price,
+            b.status,
+          ]
+    );
     const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -1380,7 +1401,10 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                     </div>
                   </div>
 
-                  <div className="panel-stat-grid">
+                  <div
+                    className="panel-stat-grid"
+                    style={!showCommissionCard ? { gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))' } : undefined}
+                  >
                     <div className="panel-stat-card">
                       <div className="filter-label">Rezervasyon toplamı</div>
                       <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--aspan-text)' }}>
@@ -1391,15 +1415,19 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                       </div>
                     </div>
 
-                    <div className="panel-stat-card">
-                      <div className="filter-label">Tahmini komisyon</div>
-                      <div style={{ fontSize: 28, fontWeight: 800, color: '#059669' }}>
-                        +{formatPrice(estimatedProfitTRY, currency)}
+                    {showCommissionCard && (
+                      <div className="panel-stat-card">
+                        <div className="filter-label">Tahmini komisyon</div>
+                        <div style={{ fontSize: 28, fontWeight: 800, color: '#059669' }}>
+                          +{formatPrice(estimatedProfitTRY, currency)}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>
+                          {isSuperAdmin
+                            ? 'Örnek hesap · %9,5 oran'
+                            : `Tanımlı acente indirimi · %${agencyDiscountPercent} oran`}
+                        </div>
                       </div>
-                      <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>
-                        Örnek hesap · %9,5 oran
-                      </div>
-                    </div>
+                    )}
 
                     <div className="panel-stat-card">
                       <div className="filter-label">Onaylanan rezervasyon</div>
@@ -2161,8 +2189,8 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                 )}
                               </div>
 
-                              {/* XML Alış / Satış / Net Kâr Özeti */}
-                              {(isSuperAdmin || canManageBookings) && b.netCostTRY !== undefined && (
+                              {/* XML Alış / Satış / Net Kâr Özeti (Sadece Süper Admin) */}
+                              {isSuperAdmin && b.netCostTRY !== undefined && (
                                 <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 12 }}>
                                   <span style={{ padding: '3px 9px', borderRadius: 8, background: 'rgba(15,23,42,0.06)', fontWeight: 700 }}>
                                     XML Alış: {formatPrice(b.netCostTRY, currency)}
