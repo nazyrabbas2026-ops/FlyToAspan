@@ -734,6 +734,65 @@ export function buildBoardingPassHtml(
     },
   }[lang];
 
+  const hasOfficialPassFile = Boolean(bp?.officialPassDataUrl);
+  const isOfficialPassImage = Boolean(bp?.officialPassDataUrl && /^data:image\//i.test(bp.officialPassDataUrl));
+
+  // If Super Admin uploaded the airline's official boarding pass image (e.g. Pegasus / THY / Air Astana),
+  // present ONLY a crisp FlyToAspan confirmation header + the FULL-SIZE official airline boarding pass (never shrunk into a tiny QR box!).
+  if (isOfficialPassImage && bp?.officialPassDataUrl) {
+    return `<!DOCTYPE html>
+<html lang="${escapeHtml(lang.toLowerCase())}">
+<head>
+  <meta charset="UTF-8" />
+  <title>FlyToAspan_BoardingPass_${escapeHtml(airlinePnr)}</title>
+  <style>
+    @page { size: A4; margin: 10mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #EEF2F6; color: #0F172A; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .toolbar { position: sticky; top: 0; z-index: 10; background: #0B1E33; color: #fff; padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .toolbar button, .toolbar a { background: linear-gradient(135deg, #F2C85C, #E0AA36); color: #0B1E33; border: none; border-radius: 10px; padding: 9px 16px; font-weight: 800; font-size: 13px; cursor: pointer; text-decoration: none; display: inline-block; }
+    .toolbar .close-btn { background: rgba(255,255,255,0.14); color: #fff; margin-left: 8px; }
+    .wrap { max-width: 680px; margin: 20px auto; background: #fff; border-radius: 18px; overflow: hidden; border: 1.5px solid #CBD5E1; box-shadow: 0 14px 36px rgba(11,30,51,0.14); }
+    .head { background: linear-gradient(135deg, #0B1E33 0%, #0E4D60 100%); color: #fff; padding: 16px 22px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .official-wrap { padding: 20px; text-align: center; background: #F8FAFC; }
+    .official-img { max-width: 460px; width: 100%; height: auto; border-radius: 14px; border: 1px solid #CBD5E1; box-shadow: 0 10px 28px rgba(15,23,42,0.12); display: block; margin: 0 auto; }
+    .foot { padding: 12px 22px; background: #ECFDF5; border-top: 1px solid #A7F3D0; color: #065F46; font-size: 12px; font-weight: 700; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    @media print { .toolbar { display: none; } body { background: #fff; } .wrap { margin: 0; box-shadow: none; border: none; } .official-wrap { background: #fff; padding: 8px 0; } }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <strong>FlyToAspan · ${escapeHtml(airline)} (${escapeHtml(airlinePnr)})</strong>
+    <div>
+      <a href="${escapeHtml(bp.officialPassDataUrl)}" download="${escapeHtml(bp.officialPassFileName || `BoardingPass_${airlinePnr}.png`)}">⬇ ${escapeHtml(lang === 'EN' ? 'Download Original' : lang === 'RU' ? 'Скачать оригинал' : lang === 'KK' ? 'Түпнұсқаны жүктеу' : 'Orijinal Dosyayı İndir')}</a>
+      <button type="button" style="margin-left:8px;" onclick="window.print()">${escapeHtml(t.printBtn)}</button>
+      <button type="button" class="close-btn" onclick="window.close()">${escapeHtml(t.closeBtn)}</button>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <div style="font-size:10.5px;font-weight:800;letter-spacing:0.1em;color:#F2C85C;">FLYTOASPAN · ${escapeHtml(t.checkedIn)}</div>
+        <div style="font-size:17px;font-weight:900;margin-top:3px;">${escapeHtml(booking.title)} · ${escapeHtml(formatDisplayDate(booking.date, lang))}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:10px;color:#CBD5E1;">PNR / ${escapeHtml(t.seat)}</div>
+        <div style="font-size:16px;font-weight:900;color:#F2C85C;">${escapeHtml(airlinePnr)}${seat && seat !== '—' ? ` · ${escapeHtml(seat)}` : ''}</div>
+      </div>
+    </div>
+    <div class="official-wrap">
+      <img src="${escapeHtml(bp.officialPassDataUrl)}" alt="Official Airline Boarding Pass" class="official-img" />
+    </div>
+    <div class="foot">
+      <span>✓ ${escapeHtml(lang === 'EN' ? 'Official Airline-Issued Boarding Pass' : lang === 'RU' ? 'Официальный посадочный талон авиакомпании' : lang === 'KK' ? 'Әуекомпанияның ресми отырғызу талоны' : 'Havayolunun Resmi Biniş Kartı (Havalimanı geçerlidir)')}</span>
+      <span>FlyToAspan 7/24: +90 531 460 61 75</span>
+    </div>
+  </div>
+  ${options.autoPrint !== false ? '<script>window.addEventListener("load", () => { setTimeout(() => window.print(), 350); });</script>' : ''}
+</body>
+</html>`;
+  }
+
   const bcbp = bp?.bcbpString || buildIataBcbpString({
     passenger: booking.passenger,
     pnr: airlinePnr,
@@ -745,10 +804,8 @@ export function buildBoardingPassHtml(
     seat,
     sequenceNo: bp?.sequenceNo || '001',
   });
-  const hasOfficialQr = Boolean(bp?.officialQrDataUrl);
-  const qrBlockHtml = hasOfficialQr
-    ? `<img src="${escapeHtml(bp!.officialQrDataUrl!)}" alt="Official Airline Boarding Pass Barcode" style="width:164px;height:164px;object-fit:contain;display:block;margin:0 auto;" />`
-    : generateQrSvg(bcbp, 164);
+  const hasOfficialQr = hasOfficialPassFile;
+  const qrBlockHtml = generateQrSvg(bcbp, 164);
 
   return `<!DOCTYPE html>
 <html lang="${escapeHtml(lang.toLowerCase())}">
@@ -925,6 +982,16 @@ export function openBoardingPassPdf(
   booking: BookingRecord,
   options: { lang?: LangCode; autoPrint?: boolean } = {}
 ): void {
+  const bp = booking.boardingPass;
+  // If Super Admin uploaded the airline's official PDF boarding pass, download/open that exact official PDF directly!
+  if (bp?.officialPassDataUrl && /^data:application\/pdf/i.test(bp.officialPassDataUrl)) {
+    const a = document.createElement('a');
+    a.href = bp.officialPassDataUrl;
+    a.download = bp.officialPassFileName || `BoardingPass_${bp.airlinePnr || booking.pnr}.pdf`;
+    a.target = '_blank';
+    a.click();
+    return;
+  }
   const html = buildBoardingPassHtml(booking, options);
   const win = window.open('', '_blank', 'width=860,height=780');
   if (!win) {

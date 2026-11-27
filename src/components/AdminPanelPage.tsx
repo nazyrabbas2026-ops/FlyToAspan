@@ -3145,23 +3145,23 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                     />
                                   </label>
 
-                                  {/* Official Airline QR / Boarding Pass File Uploader */}
+                                  {/* Official Airline Boarding Pass File Uploader (Primary Recommended Way!) */}
                                   <div
                                     style={{
-                                      padding: '12px 14px',
+                                      padding: '14px 16px',
                                       borderRadius: 12,
-                                      background: '#FFFFFF',
-                                      border: '1.5px dashed #94A3B8',
+                                      background: bpDraft.officialPassDataUrl ? '#ECFDF5' : '#FFFFFF',
+                                      border: bpDraft.officialPassDataUrl ? '1.5px solid #34D399' : '1.5px dashed #00A8B5',
                                       display: 'flex',
                                       flexDirection: 'column',
                                       gap: 8,
                                     }}
                                   >
-                                    <div style={{ fontSize: 12, fontWeight: 800, color: '#0B1E33' }}>
+                                    <div style={{ fontSize: 12.5, fontWeight: 800, color: '#0B1E33' }}>
                                       Havayolu Resmi Biniş Kartı / QR Barkod Yükle (PNG, JPG, PDF — Opsiyonel)
                                     </div>
                                     <div style={{ fontSize: 11.5, color: 'var(--aspan-text-muted)' }}>
-                                      Pegasus / THY / Air Astana resmi QR görselini veya PDF biniş kartını yüklerseniz müşterinin kartına ve mail ekine doğrudan eklenir. Yüklemezseniz standart IATA 792 2D QR kodu otomatik üretilir.
+                                      Pegasus / THY / Air Astana resmi biniş kartını (PDF veya ekran görüntüsü) yüklerseniz müşteriye doğrudan havayolunun kendi resmi biniş kartı tam boyutlu olarak gönderilir.
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                                       <input
@@ -3182,7 +3182,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                             if (!dataUrl) return;
                                             const isImg = /^image\/(png|jpeg|webp)$/i.test(file.type);
                                             patchBpDraft(b, {
-                                              officialQrDataUrl: isImg ? dataUrl : bpDraft.officialQrDataUrl,
+                                              officialQrDataUrl: isImg ? dataUrl : '',
                                               officialPassDataUrl: dataUrl,
                                               officialPassFileName: file.name,
                                               officialPassMime: file.type,
@@ -3214,6 +3214,18 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                                         </button>
                                       )}
                                     </div>
+                                    {bpDraft.officialQrDataUrl && (
+                                      <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: 10, borderRadius: 10, background: '#FFFFFF', border: '1px solid #A7F3D0' }}>
+                                        <img
+                                          src={bpDraft.officialQrDataUrl}
+                                          alt="Official Airline Boarding Pass"
+                                          style={{ maxHeight: 150, width: 'auto', borderRadius: 8, border: '1px solid #CBD5E1' }}
+                                        />
+                                        <div style={{ fontSize: 12, color: '#065F46', fontWeight: 700, maxWidth: 360 }}>
+                                          ✓ Havayolunun resmi biniş kartı algılandı. Müşteriye gönderilen e-postada ve PDF çıktısında bu orijinal kart tam boyutlu olarak yer alacak.
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
 
                                   {/* Live Mini Boarding Pass Preview WITH Real Scannable 2D QR Code */}

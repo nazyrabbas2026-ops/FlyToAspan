@@ -383,6 +383,81 @@ function buildBoardingPassEmailHtml({
       </table>
     </div>`;
 
+  const hasOfficialImage = Boolean(officialQrDataUrl && /^data:image\//i.test(officialQrDataUrl));
+  const hasOfficialPdf = Boolean(officialPassFileName && !hasOfficialImage);
+
+  // When the airline's official boarding pass (PNG/JPG or PDF) is uploaded, send a clean FlyToAspan Check-In Summary
+  // + the FULL-SIZE official airline boarding pass (or attached PDF) instead of a duplicate FlyToAspan boarding pass!
+  if (hasOfficialImage || hasOfficialPdf) {
+    const officialBodyHtml = `
+      <p style="margin-top:0;">${escapeHtml(c.greeting)} <strong>${escapeHtml(passenger)}</strong>,</p>
+      <p style="color:#334155;">${escapeHtml(c.intro)}</p>
+
+      <div style="margin:18px 0;padding:16px 18px;border-radius:14px;background:#F8FAFC;border:1.5px solid #CBD5E1;">
+        <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;color:#047857;margin-bottom:8px;">✓ ${escapeHtml(c.header)}</div>
+        <div style="font-size:16px;font-weight:900;color:#0B1E33;">${escapeHtml(routeTitle)} ${airline || flightNumber ? `· ${escapeHtml([airline, flightNumber].filter(Boolean).join(' '))}` : ''}</div>
+        <div style="font-size:13px;color:#334155;margin-top:6px;">
+          <strong>${escapeHtml(c.dateLbl)}:</strong> ${escapeHtml(date)} ${departTime ? `· <strong>${escapeHtml(c.departLbl)}:</strong> ${escapeHtml(departTime)}` : ''}
+          · <strong>${escapeHtml(c.airlinePnrLbl)}:</strong> <span style="font-weight:900;color:#0B1E33;">${escapeHtml(airlinePnr || pnr)}</span>
+        </div>
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;border-collapse:separate;border-spacing:6px;">
+          <tr>
+            <td style="background:#0B1E33;border-radius:10px;padding:10px 12px;text-align:center;">
+              <div style="font-size:10px;color:#94A3B8;font-weight:800;">${escapeHtml(c.seatLbl)}</div>
+              <div style="font-size:22px;font-weight:900;color:#F2C85C;">${escapeHtml(seat || '—')}</div>
+            </td>
+            <td style="background:#FFFFFF;border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;text-align:center;">
+              <div style="font-size:10px;color:#64748B;font-weight:800;">${escapeHtml(c.boardingLbl)}</div>
+              <div style="font-size:18px;font-weight:900;color:#065F46;">${escapeHtml(boardingTime || '—')}</div>
+            </td>
+            <td style="background:#FFFFFF;border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;text-align:center;">
+              <div style="font-size:10px;color:#64748B;font-weight:800;">${escapeHtml(c.gateLbl)}</div>
+              <div style="font-size:16px;font-weight:900;color:#0369A1;">${escapeHtml(gate || c.tba)}</div>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      ${hasOfficialImage ? `
+        <div style="margin:20px 0;text-align:center;padding:16px;border-radius:16px;background:#FFFFFF;border:2px solid #0B1E33;">
+          <div style="font-size:11px;font-weight:800;color:#047857;letter-spacing:0.06em;margin-bottom:10px;">✓ Resmi Havayolu Barkodu · Havayolunun Resmi Biniş Kartı</div>
+          <img src="${escapeHtml(officialQrDataUrl)}" alt="Official Airline Boarding Pass" style="max-width:440px;width:100%;height:auto;border-radius:12px;border:1px solid #E2E8F0;display:block;margin:0 auto;" />
+        </div>
+      ` : `
+        <div style="margin:20px 0;padding:16px 18px;border-radius:14px;background:#ECFDF5;border:1.5px solid #6EE7B7;color:#065F46;font-size:13.5px;font-weight:700;">
+          📎 <strong>Resmi Havayolu Biniş Kartınız (${escapeHtml(officialPassFileName)})</strong> bu e-postaya PDF olarak eklenmiştir. Havalimanında doğrudan ekteki resmi havayolu biniş kartını kullanabilirsiniz.
+        </div>
+      `}
+
+      ${safeMobileUrl ? `
+        <div style="text-align:center;margin:18px 0;">
+          <a href="${escapeHtml(safeMobileUrl)}" style="display:inline-block;padding:12px 24px;border-radius:10px;background:#00A8B5;color:#FFFFFF;font-weight:800;text-decoration:none;font-size:14px;">
+            ✈ ${escapeHtml(c.openMobileBtn)}
+          </a>
+        </div>
+      ` : ''}
+
+      <div style="background:#FFFBEB;border:1px solid #FCD34D;border-radius:12px;padding:14px 16px;margin:16px 0;font-size:12.5px;color:#92400E;">
+        <div style="font-weight:800;margin-bottom:4px;">ℹ ${escapeHtml(c.noteTitle)}</div>
+        <div>${escapeHtml(baggageDropNote || c.defaultNote)}</div>
+      </div>
+
+      <p style="font-size:12.5px;color:#64748B;">${escapeHtml(c.manageHint)}</p>
+    `;
+
+    const subjectMapOfficial = {
+      TR: `✈ Online Check-In Tamamlandı · Resmi Biniş Kartınız (Koltuk: ${seat || '-'}) · PNR: ${airlinePnr || pnr}`,
+      EN: `✈ Online Check-In Completed · Official Boarding Pass (Seat: ${seat || '-'}) · PNR: ${airlinePnr || pnr}`,
+      RU: `✈ Онлайн-регистрация выполнена · Официальный посадочный (Место: ${seat || '-'}) · PNR: ${airlinePnr || pnr}`,
+      KK: `✈ Онлайн тіркеу аяқталды · Ресми отырғызу талоны (Орын: ${seat || '-'}) · PNR: ${airlinePnr || pnr}`,
+    };
+
+    return {
+      subject: subjectMapOfficial[lang] || subjectMapOfficial.TR,
+      html: wrapBrandedEmail(c.header, officialBodyHtml),
+    };
+  }
+
   const bodyHtml = `
     <p style="margin-top:0;">${escapeHtml(c.greeting)} <strong>${escapeHtml(passenger)}</strong>,</p>
     <p style="color:#334155;">${escapeHtml(c.intro)}</p>
