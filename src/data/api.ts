@@ -57,7 +57,34 @@ export interface Registration {
   requestedModules?: string[];
 }
 
-export type BookingLookup = BookingRecord;
+export type BookingLookup =
+  | (BookingRecord & { restricted?: false })
+  | { pnr: string; type: BookingRecord['type']; restricted: true };
+export type CustomerServiceKind = 'cancel' | 'change' | 'refund';
+export type OperationsServiceKind = 'ticketing_issue' | 'schedule_change' | 'payment_mismatch';
+export type ServiceStatus = 'received' | 'in_review' | 'rejected' | 'completed';
+export type ServiceScope = 'all' | 'outbound' | 'return';
+
+export interface ServiceRequest {
+  id: string;
+  kind: CustomerServiceKind | OperationsServiceKind;
+  scope: ServiceScope;
+  passenger: number;
+  requestedDate: string;
+  status: ServiceStatus;
+  feeKurus: number | null;
+  refundKurus: number | null;
+  updatedAt: number;
+}
+
+export interface StaffServiceRequest extends ServiceRequest {
+  pnr: string;
+  revision: number;
+  reference: string;
+  contactedAt: number | null;
+}
+
+type ServiceAccess = { pnr: string; surname: string; code: string };
 
 export interface AdminCatalog {
   rules: { id: string; carrier: string; route: string; rule: string }[];
@@ -97,6 +124,22 @@ export type AdminCatalogState = {
 };
 
 export const api = {
+  salesInfo: () => request<{ seller: { name: string; address: string; email: string; phone: string } | null }>('/sales-info'),
+  sendServiceCode: (pnr: string, surname: string) =>
+    request<{ ok: boolean }>('/booking-service/access', 'POST', { pnr, surname }),
+  serviceRequests: (access: ServiceAccess) =>
+    request<{ requests: ServiceRequest[]; hasReturn: boolean; passengerCount: number }>('/booking-service/list', 'POST', access),
+  createServiceRequest: (access: ServiceAccess & { kind: CustomerServiceKind; scope: ServiceScope; passenger: number; requestedDate: string }) =>
+    request<{ request: ServiceRequest }>('/booking-service/requests', 'POST', access),
+  operationsQueue: (page: number, closed: boolean) =>
+    request<{ requests: StaffServiceRequest[]; hasNext: boolean }>(
+      '/admin/booking-service?page=' + page + (closed ? '&closed=1' : ''),
+    ),
+  createOperationsCase: (pnr: string, kind: OperationsServiceKind) =>
+    request<{ request: StaffServiceRequest }>('/admin/booking-service', 'POST', { pnr, kind }),
+  updateOperationsCase: (id: string, update: {
+    status: ServiceStatus; revision: number; feeKurus: number | null; refundKurus: number | null; reference: string; contacted: boolean;
+  }) => request<{ request: StaffServiceRequest }>('/admin/booking-service/' + encodeURIComponent(id), 'PATCH', update),
   session: (signal?: AbortSignal) => request<{ user: UserProfile | null }>('/session', 'GET', undefined, signal),
   register: (details: Registration) =>
     request<{ user: UserProfile | null; pending?: boolean; message?: string }>('/auth/register', 'POST', details),

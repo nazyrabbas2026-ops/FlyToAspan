@@ -658,6 +658,18 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
   const [showPromoCodeBox, setShowPromoCodeBox] = useState(false);
   const [addonAutoCheckin, setAddonAutoCheckin] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [seller, setSeller] = useState<Awaited<ReturnType<typeof api.salesInfo>>['seller']>(null);
+  const checkoutOpen = Boolean(bookingChoice);
+  useEffect(() => {
+    if (!checkoutOpen) return;
+    let active = true;
+    api.salesInfo().then(({ seller }) => {
+      if (active) setSeller(seller);
+    }).catch(() => {
+      if (active) setSeller(null);
+    });
+    return () => { active = false; };
+  }, [checkoutOpen]);
   const [priceChangedNotice, setPriceChangedNotice] = useState<{ newPrice: number; appliedRule?: string } | null>(null);
 
   const totalPax = query.adults + query.children + query.infants;
@@ -1951,6 +1963,19 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                       </div>
                     )}
                     {bookingError && <p className="form-action-error" role="alert">{bookingError}</p>}
+                    <div style={{ display: 'grid', gap: 4, marginBottom: 12, fontSize: 12 }}>
+                      {seller && <>
+                        <strong>{{ TR: 'Satıcı', EN: 'Seller', RU: 'Продавец', KK: 'Сатушы' }[lang]} · {seller.name}</strong>
+                        <span>{seller.address}</span>
+                        <span>{seller.email} · {seller.phone}</span>
+                      </>}
+                      <a href="/yasal/kvkk" target="_blank" rel="noopener noreferrer">
+                        {{ TR: 'KVKK Aydınlatma Metni', EN: 'Privacy Notice', RU: 'Уведомление о конфиденциальности', KK: 'Құпиялық туралы хабарлама' }[lang]}
+                      </a>
+                      <a href="/yasal/kullanim-kosullari" target="_blank" rel="noopener noreferrer">
+                        {{ TR: 'Kullanım koşulları', EN: 'Terms of use', RU: 'Условия использования', KK: 'Пайдалану шарттары' }[lang]}
+                      </a>
+                    </div>
                     <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: 'var(--aspan-text-muted)', marginBottom: 12, cursor: 'pointer' }}>
                       <input
                         type="checkbox"
@@ -1961,15 +1986,12 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                       />
                       <span>
                         {lang === 'EN'
-                          ? 'I agree to the Terms of Use, Airline Carriage Rules, and Privacy Policy.'
+                          ? 'I accept the terms of use.'
                           : lang === 'RU'
-                            ? 'Я принимаю Условия использования, правила авиаперевозки и Политику конфиденциальности.'
+                            ? 'Я принимаю условия использования.'
                             : lang === 'KK'
-                              ? 'Пайдалану шарттары, әуе тасымалы ережелері және Құпиялылық саясатымен келісемін.'
-                              : 'Kullanım Koşulları, Havayolu Taşıma Kuralları ve KVKK Aydınlatma Metni’ni onaylıyorum.'}{' '}
-                        <a href="/yasal/kvkk" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--aspan-teal-deep)', fontWeight: 700 }}>
-                          (KVKK)
-                        </a>
+                              ? 'Пайдалану шарттарын қабылдаймын.'
+                              : 'Kullanım koşullarını kabul ediyorum.'}
                       </span>
                     </label>
                     <button type="submit" className="uf-cc-pay-btn" disabled={bookingPending}>

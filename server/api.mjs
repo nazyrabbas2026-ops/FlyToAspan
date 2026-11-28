@@ -35,6 +35,7 @@ import {
   sendCorporateApprovedEmail,
   sendPasswordResetEmail,
 } from './mailer.mjs';
+import { createBookingService } from './booking-service.mjs';
 import { readXmlShowcaseStatus, runXmlShowcaseSync } from './xml-showcase.mjs';
 
 const VALID_PERMISSIONS = new Set([
@@ -476,7 +477,8 @@ function validateCatalogItems(section, items) {
   });
 }
 
-export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYTOASPAN_ORIGIN } = {}) {
+export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYTOASPAN_ORIGIN, sendServiceMail } = {}) {
+  const bookingService = createBookingService({ db, normalizeSurname, fail, sendServiceMail });
   const origin = publicOrigin ? new URL(publicOrigin) : null;
   if (origin && publicOrigin !== origin.origin) throw new Error('FLYTOASPAN_ORIGIN yalnızca şema, alan adı ve port içermeli.');
   const secureCookie = origin?.protocol === 'https:';
@@ -630,6 +632,10 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const staffBookingRoute =
           path === '/api/admin/bookings' ||
           /^\/api\/admin\/bookings\/[a-f0-9]{32}(\/(history|notes))?$/.test(path);
+        const staffBookingService = path.startsWith('/api/admin/booking-service') &&
+          (method === 'GET' ? hasPerm(user, 'bookings.view_all') : (
+            hasPerm(user, 'bookings.view_all') && hasPerm(user, 'bookings.manage')
+          ) || hasPerm(user, 'refunds.process'));
         const staffCatalogRead = method === 'GET' && path === '/api/admin/catalog';
         const staffCatalogWrite = method === 'PUT' && /^\/api\/admin\/catalog\/(rules|coupons|agencies|hotels|transfers|tours|deals|operators|flights|providers)$/.test(path);
         const staffPricingRoute = path === '/api/admin/pricing' && hasPerm(user, 'pricing.edit');
@@ -670,6 +676,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         if (canAccessPanel(user)) {
           if (
             staffBookingRoute ||
+            staffBookingService ||
             staffCatalogRead ||
             staffPricingRoute ||
             staffFxRoute ||
@@ -697,7 +704,26 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         }
       }
 
-      if (method === 'GET' && path === '/api/passengers') {
+      if ((method === 'POST' && /^\/api\/booking-service\/(access|requests|list)$/.test(path)) ||
+          (/^\/api\/admin\/booking-service(?:\/[a-f0-9]{24})?$/.test(path) && ['GET', 'POST', 'PATCH'].includes(method))) {
+        const admin = path.startsWith('/api/admin/');
+        const action = path.split('/').at(-1);
+        if (!admin) {
+          throttle('booking-service:' + ip, 35);
+          if (action === 'access') throttle('booking-service-access:' + ip, 8);
+        }
+        const body = method === 'GET' ? {} : await readJson(req);
+        const access = {
+          operator: hasPerm(user, 'bookings.view_all') && hasPerm(user, 'bookings.manage'),
+          refunds: hasPerm(user, 'refunds.process'),
+        };
+        const result = await bookingService({ admin, action, method, body, user, ip, access, query: url.searchParams });
+        send(res, 200, result);
+      } else if (method === 'GET' && path === '/api/sales-info') {
+        const seller = ['NAME', 'ADDRESS', 'EMAIL', 'PHONE'].map((field) => process.env['FLYTOASPAN_SELLER_' + field]?.trim() || '');
+        const [name, address, email, phone] = seller;
+        send(res, 200, { seller: seller.every(Boolean) ? { name, address, email, phone } : null });
+      } else if (method === 'GET' && path === '/api/passengers') {
         if (!user) fail(401, 'Oturum açın.');
         const rows = db.prepare('SELECT * FROM saved_passengers WHERE user_id = ? ORDER BY created_at DESC').all(user.id);
         send(res, 200, { passengers: rows.map((r) => savedPassengerRecord(r, db._piiKey)) });
@@ -977,6 +1003,11 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const surname = normalizeSurname(body.surname);
         const row = db.prepare('SELECT * FROM bookings WHERE pnr = ? AND surname = ?').get(pnr, surname);
         if (!row) fail(404, 'Bu kod ve soyadla eşleşen rezervasyon bulunamadı.');
+        const details = JSON.parse(row.details);
+        if (details.demo === false && !canViewFullBooking(user, row)) {
+          send(res, 200, { booking: { pnr: row.pnr, type: details.type, restricted: true } });
+          return true;
+        }
         const rec = bookingRecord(row, db._piiKey);
         const out = canViewFullBooking(user, row)
           ? stripHouseMargin(rec, user)
@@ -993,6 +1024,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           fail(409, `Bu rezervasyon zaten "${existingRow.status}" durumunda olduğu için yeni iptal talebi oluşturulamaz.`);
         }
         const det = JSON.parse(existingRow.details || '{}');
+        if (det.demo === false) fail(409, 'Gerçek bilet için doğrulamalı Bilet İşlemleri ekranını kullanın.');
         det.refundStatus = 'requested';
         const row = db.prepare(`
           UPDATE bookings SET status = 'İptal Talebi', details = ?, revision = revision + 1
@@ -1147,6 +1179,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const existingOwn = db.prepare('SELECT * FROM bookings WHERE id = ? AND (owner_id = ? OR sold_by_user_id = ?) AND status = \'Onaylandı\'').get(id, user.id, user.id);
         if (!existingOwn) fail(404, 'İptal talebine uygun bir rezervasyon bulunamadı.');
         const det = JSON.parse(existingOwn.details || '{}');
+        if (det.demo === false) fail(409, 'Gerçek bilet için doğrulamalı Bilet İşlemleri ekranını kullanın.');
         det.refundStatus = 'requested';
         const row = db.prepare(`
           UPDATE bookings SET status = 'İptal Talebi', details = ?, revision = revision + 1
@@ -1278,6 +1311,9 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const id = path.split('/')[4];
         const existingBk = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id);
         if (!existingBk) fail(404, 'Rezervasyon bulunamadı.');
+        if (JSON.parse(existingBk.details).demo === false) {
+          fail(409, 'Gerçek biniş kartı havayolundan alınmalıdır.');
+        }
         const body = await readJson(req, 3_500_000);
         const nextCheckinStatus = body.checkinStatus === 'completed' ? 'completed' : body.checkinStatus === 'pending' ? 'pending' : null;
         if (!nextCheckinStatus) fail(400, 'Check-in durumu geçersiz.');
@@ -1430,6 +1466,9 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const id = path.split('/').at(-1);
         const existingBk = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id);
         if (!existingBk) fail(404, 'Rezervasyon bulunamadı.');
+        if (JSON.parse(existingBk.details).demo === false) {
+          fail(409, 'Gerçek biletin finansal durumu sağlayıcı kayıtlarıyla güncellenmelidir.');
+        }
         const sameOrg = Boolean(user.organization_id && existingBk.organization_id === user.organization_id);
         const isOwnBk = existingBk.owner_id === user.id || existingBk.sold_by_user_id === user.id;
         const hasGlobalManage = user.role === 'admin' || hasPerm(user, 'refunds.process') || (hasPerm(user, 'bookings.view_all') && hasPerm(user, 'bookings.manage'));

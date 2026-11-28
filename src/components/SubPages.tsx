@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { FlightServiceRequests } from './FlightServiceRequests';
 import {
   Search,
   ExternalLink,
@@ -150,10 +151,10 @@ const SUBPAGES_I18N: Record<
     ciPopular: 'Popüler',
     ciTr: 'Türkiye',
     ciNote: 'Check-in genellikle kalkıştan 24–48 saat önce açılır.',
-    helpEye: '7/24 DESTEK MERKEZİ',
+    helpEye: 'DESTEK MERKEZİ',
     helpTitle: 'Size nasıl yardımcı olabiliriz?',
     helpSearchPh: 'Soru veya konu arayın (iptal, bagaj, paket tur, check-in)...',
-    callCenter: '7/24 Çağrı Merkezi',
+    callCenter: 'Telefon desteği',
     waSupport: 'WhatsApp Destek',
     emailSupport: 'E-Posta Destek',
     opsEye: 'REZERVASYON YÖNETİMİ',
@@ -167,7 +168,7 @@ const SUBPAGES_I18N: Record<
     queryBtn: 'Biletimi Sorgula',
     foundTitle: (p) => `Rezervasyon Bulundu (${p})`,
     statusLabel: 'Durum',
-    supportHint: 'İptal veya tarih değişikliği için 7/24 hattımızdan anında işlem yapabilirsiniz:',
+    supportHint: 'İptal, değişiklik ve iade konusunda destek için arayın.',
     notFoundErr: 'Bu kod ve soyadla eşleşen rezervasyon bulunamadı.',
   },
   EN: {
@@ -189,10 +190,10 @@ const SUBPAGES_I18N: Record<
     ciPopular: 'Popular',
     ciTr: 'Türkiye',
     ciNote: 'Online check-in typically opens 24–48 hours before departure.',
-    helpEye: '24/7 SUPPORT CENTER',
+    helpEye: 'SUPPORT CENTER',
     helpTitle: 'How can we help you?',
     helpSearchPh: 'Search questions or topics (refund, baggage, transfer, check-in)...',
-    callCenter: '24/7 Call Center',
+    callCenter: 'Phone support',
     waSupport: 'WhatsApp Support',
     emailSupport: 'E-Mail Support',
     opsEye: 'BOOKING MANAGEMENT',
@@ -206,7 +207,7 @@ const SUBPAGES_I18N: Record<
     queryBtn: 'Find My Booking',
     foundTitle: (p) => `Booking Found (${p})`,
     statusLabel: 'Status',
-    supportHint: 'For instant date changes or refunds, contact our 24/7 support desk:',
+    supportHint: 'Contact us for help with cancellations, changes or refunds.',
     notFoundErr: 'No reservation matches this booking code and surname.',
   },
   RU: {
@@ -228,10 +229,10 @@ const SUBPAGES_I18N: Record<
     ciPopular: 'Популярные',
     ciTr: 'Турция',
     ciNote: 'Регистрация обычно открывается за 24–48 часов до вылета.',
-    helpEye: 'ЦЕНТР ПОДДЕРЖКИ 24/7',
+    helpEye: 'ЦЕНТР ПОДДЕРЖКИ',
     helpTitle: 'Чем мы можем вам помочь?',
     helpSearchPh: 'Поиск по вопросам (возврат, багаж, трансфер, регистрация)...',
-    callCenter: 'Колл-центр 24/7',
+    callCenter: 'Поддержка по телефону',
     waSupport: 'Поддержка WhatsApp',
     emailSupport: 'Поддержка по E-Mail',
     opsEye: 'УПРАВЛЕНИЕ БРОНИРОВАНИЕМ',
@@ -245,7 +246,7 @@ const SUBPAGES_I18N: Record<
     queryBtn: 'Найти билет',
     foundTitle: (p) => `Бронирование найдено (${p})`,
     statusLabel: 'Статус',
-    supportHint: 'Для возврата или обмена свяжитесь с нашей круглосуточной линией:',
+    supportHint: 'Свяжитесь с нами по вопросам отмены, изменения или возврата.',
     notFoundErr: 'Бронирование с таким кодом и фамилией не найдено.',
   },
   KK: {
@@ -267,10 +268,10 @@ const SUBPAGES_I18N: Record<
     ciPopular: 'Танымал',
     ciTr: 'Түркия',
     ciNote: 'Онлайн тіркелу әдетте ұшуға 24–48 сағат қалғанда ашылады.',
-    helpEye: '24/7 ҚОЛДАУ ОРТАЛЫҒЫ',
+    helpEye: 'ҚОЛДАУ ОРТАЛЫҒЫ',
     helpTitle: 'Сізге қалай көмектесе аламыз?',
     helpSearchPh: 'Сұрақ немесе тақырып іздеңіз (қайтару, жолжүк, трансфер, check-in)...',
-    callCenter: '24/7 Байланыс Орталығы',
+    callCenter: 'Телефон арқылы қолдау',
     waSupport: 'WhatsApp Қолдау',
     emailSupport: 'E-Mail Қолдау',
     opsEye: 'БРОНДАУДЫ БАСҚАРУ',
@@ -284,7 +285,7 @@ const SUBPAGES_I18N: Record<
     queryBtn: 'Билетімді тексеру',
     foundTitle: (p) => `Брондау табылды (${p})`,
     statusLabel: 'Күйі',
-    supportHint: 'Қайтару немесе күнді өзгерту үшін 24/7 желімізге хабарласыңыз:',
+    supportHint: 'Бас тарту, өзгерту немесе қайтару бойынша бізге хабарласыңыз.',
     notFoundErr: 'Бұл код пен текке сәйкес брондау табылмады.',
   },
 };
@@ -1113,7 +1114,7 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
               {ui.queryBtn}
             </button>
 
-            {matchedBooking && (
+            {matchedBooking && !matchedBooking.restricted && (
               <div
                 role="status"
                 style={{
@@ -1297,16 +1298,18 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
                 )}
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-                  <button
-                    type="button"
-                    className="adm-btn adm-btn-green"
-                    style={{ height: 40, padding: '0 16px', fontSize: 13 }}
-                    onClick={() => openBrandedEticketPdf(matchedBooking, { currency, lang })}
-                  >
-                    <Download size={15} /> {ticketUi.downloadPdf}
-                  </button>
+                  {matchedBooking.demo !== false && (
+                    <button
+                      type="button"
+                      className="adm-btn adm-btn-green"
+                      style={{ height: 40, padding: '0 16px', fontSize: 13 }}
+                      onClick={() => openBrandedEticketPdf(matchedBooking, { currency, lang })}
+                    >
+                      <Download size={15} /> {ticketUi.downloadPdf}
+                    </button>
+                  )}
 
-                  {matchedBooking.status === 'Onaylandı' && !confirmCancel && (
+                  {matchedBooking.demo !== false && matchedBooking.status === 'Onaylandı' && !confirmCancel && (
                     <button
                       type="button"
                       className="adm-btn adm-btn-red"
@@ -1317,7 +1320,7 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
                     </button>
                   )}
 
-                  {matchedBooking.status === 'Onaylandı' && confirmCancel && (
+                  {matchedBooking.demo !== false && matchedBooking.status === 'Onaylandı' && confirmCancel && (
                     <span className="adm-confirm-inline" style={{ padding: '6px 10px' }}>
                       {ticketUi.cancelConfirm}
                       <button
@@ -1384,6 +1387,11 @@ export const BookingOpsPage: React.FC<{ lang?: LangCode; currency?: CurrencyCode
               </div>
             )}
           </form>
+          {matchedBooking?.type === 'Uçak' && (
+            <div className="panel-card" style={{ marginTop: 16 }}>
+              <FlightServiceRequests key={matchedBooking.pnr} pnr={matchedBooking.pnr} surname={surname} lang={lang} />
+            </div>
+          )}
         </div>
       </section>
     </>

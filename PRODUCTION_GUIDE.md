@@ -11,6 +11,15 @@ Bu doküman, bir uçak bileti / otel / VIP transfer satış platformunu canlı o
 
 ---
 
+## Uçuş satışından önce operasyon provası
+
+- **Müşteri talepleri.** Bilet İşlemleri ekranında rezervasyon hesabıyla veya rezervasyondaki e-postaya gönderilen kodla iptal, değişiklik ve iade talebi açılır. Talep numarasıyla durum ve varsa tahmini ya da kayda geçirilmiş tutar izlenir. Gidiş, dönüş ve yolcu kapsamı ayrı seçilebilir. Kod teslimi için doğrulanmış gönderen alanı, Resend ayarları ve bir test gelen kutusu gerekir.
+- **Operasyon ve finans.** Yönetim → Rezervasyonlar → Uçuş işlem kuyruğunda ödeme farkı, biletleme hatası ve havayolu kaynaklı uçuş saati değişikliği/iptali kaydedilir. Ekip sağlayıcı veya POS panelinde işlemi doğrular, yolcuya sonucu bildirir, referansı girer ve kaydı kapatır. Buradaki kayıt POS tahsilatı, iade, bilet düzenleme veya bildirim gönderimi başlatmaz. Geliştirici + Analist kuyruğu okuyabilir.
+- **Vardiya ve mutabakat.** Site sahibi çalışma saatlerini, mesai dışı acil sorumluyu ve yedeğini belirler. Açık biletleme ve ödeme farklarını sorumlu ekip takip eder. Finans ekibi her gün rezervasyon kodu, POS referansı, para birimi, tahsilat, bilet ve iade kayıtlarını karşılaştırır. Fark için kuyrukta kayıt açar, sağlayıcı ve POS sonucunu doğrulayana kadar açık tutar.
+- **Sağlayıcı ve POS.** İlk ödeme başlamadan önce sunucuda kalıcı bir bekleyen kayıt ve sipariş numarası oluşturulmalı. POS bildiriminin imzası, siparişi, tutarı ve para birimi doğrulanmalı. Aynı bildirimin tekrar gelmesi veya sunucunun yeniden başlaması ek tahsilat, bilet ya da iade oluşturmamalı. Biletleme zaman aşımında önce sağlayıcının sonucu sorgulanmalı. Bilet kesin olarak kesilmediyse POS üzerinden ödeme iptali veya iade uygulanmalı. Bu bağlantılar seçilen servislerin test erişimiyle kurulacak.
+- **Şirket bilgileri.** Site sahibi satış yapan tüzel kişiyi, fatura düzenleyen tarafı, iade sorumlusunu ve ürün bazında acente yetkisini teyit eder. Onaylı ticari unvan, adres, e-posta ve telefon için dört FLYTOASPAN_SELLER_* ayarını birlikte doldurun. Checkout bu bilgileri gösterir. Yasal metinleri ve uygulanabilir ETBİS/KVKK yükümlülüklerini şirketin fiili satış ve veri akışı üzerinden teyit edin. Canlı ödeme ekranında vergiler, hizmet bedeli, ekler, para birimi ve ödenecek son toplam sağlayıcı verisiyle doğrulanır.
+- **İstanbul–Antalya kabul provası.** HTTPS ön yayın ortamında gerçek sağlayıcı/POS test hesaplarıyla gidiş-dönüş fiyat değişimi, başarılı satış, 3D Secure reddi, ödemeden sonra biletleme hatası, çift bildirim, kısmi/tam iade ve havayolu saat değişikliği denenir. Kısmi iadede tek yolcu ve dönüş bacağı kontrol edilir. E-bilet, doğrulama kodu ve değişiklik mesajı gerçek test gelen kutusuna ulaşmalı. Docker imajı, kalıcı kayıt ve gerçek mobil tarayıcı kontrol edilir. Başarılı sağlayıcı akışı olan ürünler, site sahibi onayından sonra açılır.
+
 ## 0. Canlıya Çıkış Altyapısı, Hosting, Anahtar Yönetimi ve Şifreli Yedekleme
 
 ### 0.1 Alan Adı, Sunucu ve Staging Ortamı

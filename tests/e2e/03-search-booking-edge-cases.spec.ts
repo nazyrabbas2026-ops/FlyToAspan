@@ -10,6 +10,9 @@ async function waitSplashGone(page: import('@playwright/test').Page) {
 test.describe('3. Arama, Rezervasyon, Sınır Durumları ve Mükerrer Kayıt Kontrolü', () => {
   test('IST->AYT round-trip search carries legs, dates, pax, package & total into checkout + creates demo booking & PNR lookup checks', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
+    await page.route('**/api/sales-info', (route) => route.fulfill({ json: {
+      seller: { name: 'Deneme Satıcı', address: 'İstanbul', email: 'seller@example.test', phone: '+900000000000' },
+    } }));
     await page.goto(
       '/ucus-ara?from=IST&to=AYT&depart=2026-12-20&ret=2026-12-24&type=roundtrip&adults=2&children=0&infants=0&cabin=Ekonomi',
       { waitUntil: 'domcontentloaded' }
@@ -39,6 +42,10 @@ test.describe('3. Arama, Rezervasyon, Sınır Durumları ve Mükerrer Kayıt Kon
     await expect(page.locator('input[name="firstName_0"]')).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('input[name="firstName_1"]')).toBeVisible();
     await expect(page.locator('.uf-co-flight-box')).toHaveCount(2);
+    const checkout = page.locator('form.uf-checkout-grid aside');
+    await expect(checkout.getByText('Satıcı · Deneme Satıcı')).toBeVisible();
+    await expect(checkout.getByRole('link', { name: 'KVKK Aydınlatma Metni' })).toBeVisible();
+    await expect(checkout.getByRole('checkbox', { name: 'Kullanım koşullarını kabul ediyorum.' })).not.toBeChecked();
 
     // Fill both passengers + contact
     await page.fill('input[name="firstName_0"]', 'Ahmet');
@@ -102,6 +109,74 @@ test.describe('3. Arama, Rezervasyon, Sınır Durumları ve Mükerrer Kayıt Kon
     await page.locator('form button[type="submit"]').click();
     await expect(page.locator('[role="status"]')).toHaveCount(0);
     await expect(page.locator('[role="alert"]')).toBeVisible();
+  });
+
+  test('Travelers can track a partial refund and operations can record the result', async ({ page, browser, baseURL }, testInfo) => {
+    const origin = baseURL!;
+    const headers = { Origin: origin };
+    const admin = await browser.newContext();
+    try {
+      await page.setViewportSize({ width: 390, height: 844 });
+      const member = await page.request.post('/api/auth/register', { headers, data: {
+        email: 'after-sales-ui@example.test', password: 'TravelTest2026!', firstName: 'Deneme', lastName: 'Yolcu',
+        phone: '+905310000000', accountType: 'individual',
+      } });
+      expect(member.status()).toBe(201);
+      const created = await page.request.post('/api/bookings', { headers, data: {
+        type: 'Uçak', title: 'İstanbul (IST) ↔ Antalya (AYT)', subtitle: 'Deneme Uçuşu',
+        date: '2027-01-15', returnDate: '2027-01-20', passenger: 'Deneme Yolcu',
+        lookupSurname: 'Yolcu', price: 3500,
+      } });
+      expect(created.status()).toBe(201);
+      const { booking } = await created.json();
+
+      await page.goto('/bilet-islemleri');
+      await waitSplashGone(page);
+      await page.locator('#pnr-lookup-code').fill(booking.pnr);
+      await page.locator('#pnr-lookup-surname').fill('Yolcu');
+      await page.locator('form button[type="submit"]').click();
+      const customer = page.getByRole('region', { name: 'Uçuş talebi ve takibi' });
+      await customer.getByRole('button', { name: 'Talepleri aç' }).click();
+      await customer.getByRole('combobox', { name: 'İşlem', exact: true }).selectOption('refund');
+      await customer.getByRole('combobox', { name: 'Uçuş', exact: true }).selectOption('return');
+      await customer.getByRole('button', { name: 'Talep gönder' }).click();
+      const tracking = customer.getByRole('listitem').first();
+      await expect(tracking).toContainText('İade · Alındı');
+      const trackingId = await tracking.locator('code').innerText();
+      expect(trackingId).toMatch(/^[a-f0-9]{24}$/);
+      await customer.screenshot({ path: testInfo.outputPath('ucus-iade-mobil.png') });
+
+      const adminLogin = await admin.request.post(origin + '/api/auth/login', { headers, data: {
+        email: 'qa.admin@flytoaspan.test', password: process.env.QA_ADMIN_PASS || 'QaAdminTempPass!2026',
+      } });
+      expect(adminLogin.ok()).toBeTruthy();
+      const panel = await admin.newPage();
+      await panel.goto(origin + '/yonetim');
+      await waitSplashGone(panel);
+      await panel.getByRole('button', { name: /Rezervasyonlar/i }).first().click();
+      const queue = panel.getByRole('region', { name: 'Uçuş işlem kuyruğu' });
+      const row = queue.getByRole('article').filter({ hasText: trackingId });
+      await row.getByRole('button', { name: 'Düzenle' }).click();
+      await row.getByLabel('İade (TL)').fill('175');
+      await row.getByRole('button', { name: 'Kaydet' }).click();
+      await expect(row).toContainText('İnceleniyor');
+      await queue.screenshot({ path: testInfo.outputPath('ucus-islem-kuyrugu.png') });
+      await row.getByRole('button', { name: 'Düzenle' }).click();
+      await row.getByRole('combobox', { name: 'Durum' }).selectOption('completed');
+      await row.getByLabel('Sağlayıcı veya POS işlem referansı').fill('QA-POS-1');
+      await row.getByLabel('Yolcuya sonucu bildirdim').check();
+      await row.getByRole('button', { name: 'Kaydet' }).click();
+      await expect(row).toHaveCount(0);
+      await queue.getByRole('button', { name: 'Kapalı talepler' }).click();
+      await expect(row).toContainText('Tamamlandı');
+
+      await customer.getByRole('button', { name: 'Talepleri aç' }).click();
+      await expect(tracking).toContainText('İade · Tamamlandı');
+      await expect(tracking).toContainText('175');
+      await expect(tracking).not.toContainText('QA-POS-1');
+    } finally {
+      await admin.close();
+    }
   });
 
   test('Hotel & Package Tour demo bookings + API boundary date checks & idempotency dedup', async ({ page, request }) => {

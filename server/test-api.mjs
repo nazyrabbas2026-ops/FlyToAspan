@@ -4,9 +4,9 @@ import test from 'node:test';
 import { createApi } from './api.mjs';
 import { createAccount, openDatabase } from './store.mjs';
 
-function startTestServer() {
+function startTestServer(options = {}) {
   const db = openDatabase(':memory:');
-  const api = createApi({ db });
+  const api = createApi({ db, ...options });
   const server = createServer(async (req, res) => {
     if (!(await api(req, res))) res.writeHead(404).end();
   });
@@ -1280,4 +1280,87 @@ test('FlyToAspan API & Security Suite', async (t) => {
     });
     assert.equal(staffCheckinForbidden.status, 403);
   });
+});
+
+
+test('Flight after-sales verifies access, deduplicates requests and records manual outcomes', async (t) => {
+  const sent = [];
+  const env = await startTestServer({ sendServiceMail: async (message) => {
+    sent.push(message);
+    return { sent: true };
+  } });
+  t.after(() => env.close());
+
+  const login = async (email, role, permissions = []) => {
+    const password = 'OperationsTest2026!';
+    await createAccount(env.db, { email, password, role, permissions, firstName: 'Test', lastName: 'User', accountType: 'individual' });
+    return (await call(env.origin, '/api/auth/login', { method: 'POST', body: { email, password } })).cookie;
+  };
+  const admin = await login('ops@example.test', 'admin');
+  const analyst = await login('analyst@example.test', 'member', ['bookings.view_all', 'analytics.view']);
+  const stranger = await login('guest@example.test', 'member');
+  const booking = { pnr: 'FTTEST12', surname: 'Test' };
+  env.db.prepare('INSERT INTO bookings (id, pnr, surname, status, details, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run('a'.repeat(32), booking.pnr, 'test', 'Onaylandı', JSON.stringify({
+      type: 'Uçak', demo: false, contactEmail: 'customer@example.test', passenger: 'Private Passenger',
+      legs: [{ direction: 'Gidiş' }, { direction: 'Dönüş' }], passengersDetail: [{}, {}],
+    }), Date.now());
+  const submit = (path, body, cookie) => call(env.origin, path, { method: 'POST', cookie, body });
+  const queue = '/api/admin/booking-service';
+  const list = '/api/booking-service/list';
+  assert.deepEqual((await submit('/api/bookings/lookup', booking)).json.booking,
+    { pnr: booking.pnr, type: 'Uçak', restricted: true });
+  assert.equal((await submit('/api/bookings/lookup-cancel', booking)).status, 409);
+  assert.equal((await submit(list, booking, stranger)).status, 403);
+  assert.equal((await submit('/api/booking-service/access', { ...booking, pnr: 'FTNONE12' })).status, 200);
+  assert.equal(sent.length, 0);
+  assert.equal((await submit('/api/booking-service/access', booking)).status, 200);
+  assert.equal((await submit('/api/booking-service/access', booking)).status, 200);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to, 'customer@example.test');
+
+  const code = sent[0].html.match(/<strong>([A-F0-9]{12})<\/strong>/)[1];
+  const customer = { ...booking, code };
+  const request = { ...customer, kind: 'refund', scope: 'return', passenger: 2 };
+  const requests = '/api/booking-service/requests';
+  assert.equal((await submit(requests, { ...request, passenger: 3 })).status, 400);
+  const [first, duplicate] = await Promise.all([submit(requests, request), submit(requests, request)]);
+  assert.equal(first.status, 200);
+  assert.equal(first.json.request.id, duplicate.json.request.id);
+  assert.equal(first.json.request.scope, 'return');
+  assert.equal(first.json.request.passenger, 2);
+  assert.equal((await submit(requests, { ...customer, kind: 'change', scope: 'all', requestedDate: '2027-02-30' })).status, 400);
+
+  assert.equal((await call(env.origin, queue, { cookie: stranger })).status, 403);
+  assert.equal((await call(env.origin, queue, { cookie: analyst })).json.requests.length, 1);
+  const row = (await call(env.origin, queue, { cookie: admin })).json.requests[0];
+  const update = (record, body, cookie = admin) =>
+    call(env.origin, queue + '/' + record.id, { method: 'PATCH', cookie, body: { revision: record.revision, ...body } });
+  assert.equal((await update(row, { status: 'in_review' }, analyst)).status, 403);
+  const reviewed = await update(row, { status: 'in_review', feeKurus: 2500, refundKurus: 17500 });
+  assert.equal(reviewed.status, 200);
+  assert.equal((await update(row, { status: 'in_review' })).status, 409);
+  const ready = reviewed.json.request;
+  assert.equal((await update(ready, { status: 'completed', refundKurus: 17500, contacted: true })).status, 400);
+  const completed = await update(ready, {
+    status: 'completed', feeKurus: 2500, refundKurus: 17500, contacted: true, reference: 'POS-REF-1',
+  });
+  assert.equal(completed.status, 200);
+  assert.equal((await call(env.origin, queue + '?closed=1', { cookie: admin })).json.requests.length, 1);
+  const customerList = (await submit(list, customer)).json;
+  assert.equal(customerList.hasReturn, true);
+  assert.equal(customerList.passengerCount, 2);
+  assert.equal(customerList.requests[0].refundKurus, 17500);
+  assert.equal(customerList.requests[0].status, 'completed');
+  assert.equal(customerList.requests[0].reference, undefined);
+
+  for (const kind of ['schedule_change', 'ticketing_issue', 'payment_mismatch']) {
+    const incident = await submit(queue, { pnr: booking.pnr, kind }, admin);
+    assert.equal(incident.status, 200);
+    const current = (await update(incident.json.request, { status: 'in_review' })).json.request;
+    assert.equal((await update(current, { status: 'completed', reference: 'SUPPLIER-1' })).status, 400);
+    assert.equal((await update(current, { status: 'completed', reference: 'SUPPLIER-1', contacted: true })).status, 200);
+  }
+  env.db.prepare('UPDATE booking_service_access SET expires_at = 0').run();
+  assert.equal((await submit(list, customer)).status, 403);
 });

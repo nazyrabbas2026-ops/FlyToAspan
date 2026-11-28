@@ -127,6 +127,34 @@ export function openDatabase(filename = process.env.FLYTOASPAN_DB || '.data/flyt
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS bookings_owner ON bookings(owner_id, created_at);
+    CREATE TABLE IF NOT EXISTS booking_service_requests (
+      id TEXT PRIMARY KEY,
+      booking_id TEXT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      passenger INTEGER NOT NULL DEFAULT 0,
+      requested_date TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'received',
+      fee_kurus INTEGER,
+      refund_kurus INTEGER,
+      reference TEXT NOT NULL DEFAULT '',
+      contacted_at INTEGER,
+      revision INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS booking_service_queue ON booking_service_requests(status, created_at);
+    CREATE INDEX IF NOT EXISTS booking_service_history ON booking_service_requests(booking_id, created_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS booking_service_active
+      ON booking_service_requests(booking_id, kind, scope, passenger)
+      WHERE status IN ('received', 'in_review');
+    CREATE TABLE IF NOT EXISTS booking_service_access (
+      booking_id TEXT PRIMARY KEY REFERENCES bookings(id) ON DELETE CASCADE,
+      code_hash TEXT NOT NULL,
+      issued_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0
+    );
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL

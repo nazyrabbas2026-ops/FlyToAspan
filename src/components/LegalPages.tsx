@@ -504,6 +504,12 @@ export const LegalPages: React.FC<LegalPagesProps> = ({
         <div className="container" style={{ maxWidth: 920 }}>
           <div className="panel-card" style={{ lineHeight: 1.75, fontSize: 14.5 }}>
             <h2 style={{ marginTop: 0 }}>{doc.heading}</h2>
+            {(activeDoc === 'terms' || activeDoc === 'refund') && <p role="note"><strong>{{
+              TR: 'Ön yayın metni. Bu ortamda ücret tahsil edilmez ve gerçek bilet düzenlenmez.',
+              EN: 'Preview terms. This environment does not collect payments or issue actual tickets.',
+              RU: 'Предварительные условия. В этой версии оплата не взимается и билеты не оформляются.',
+              KK: 'Алдын ала шарттар. Бұл ортада төлем алынбайды және нақты билет рәсімделмейді.',
+            }[lang]}</strong></p>}
             {doc.paragraphs.map((p, i) => (
               <p key={i}>{p}</p>
             ))}

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { FlightOperationsQueue } from './FlightOperationsQueue';
 import {
   Activity,
   Sliders,
@@ -1933,6 +1934,12 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
               {/* ==================== MODULE 2: BOOKINGS (SORTING + DATE FILTER + CRUD) ==================== */}
               {section === 'bookings' && (
                 <>
+                  {(isSuperAdmin || userPerms.includes('bookings.view_all')) && (
+                    <FlightOperationsQueue
+                      operator={isSuperAdmin || userPerms.includes('bookings.manage')}
+                      refunds={isSuperAdmin || userPerms.includes('refunds.process')}
+                    />
+                  )}
                   <div className="panel-card">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
                       <div>
