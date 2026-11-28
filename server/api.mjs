@@ -21,6 +21,7 @@ import {
 } from './store.mjs';
 import {
   buildOtpAuthUri,
+  decryptPii,
   encryptPii,
   generateTotpSecret,
   verifyTotpCode,
@@ -33,8 +34,10 @@ import {
   sendBoardingPassEmail,
   sendBookingConfirmationEmail,
   sendCorporateApprovedEmail,
+  sendMail,
   sendPasswordResetEmail,
 } from './mailer.mjs';
+import { trustedProxyIps } from './network.mjs';
 import { createBookingService } from './booking-service.mjs';
 import { readXmlShowcaseStatus, runXmlShowcaseSync } from './xml-showcase.mjs';
 
@@ -214,17 +217,6 @@ function generateIataPnr() {
   return code;
 }
 
-function resolveClientIp(req) {
-  const trustProxy = process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true';
-  if (trustProxy) {
-    const cf = req.headers['cf-connecting-ip'];
-    if (typeof cf === 'string' && cf.trim()) return cf.trim().slice(0, 64);
-    const xff = req.headers['x-forwarded-for'];
-    if (typeof xff === 'string' && xff.trim()) return xff.split(',')[0].trim().slice(0, 64);
-  }
-  return req.socket.remoteAddress ?? 'unknown';
-}
-
 function publicBookingSummary(rec) {
   const safeBoardingPass = rec.boardingPass
     ? {
@@ -281,10 +273,47 @@ function publicBookingSummary(rec) {
 function canViewFullBooking(user, row) {
   if (!user || (user.status && user.status !== 'active')) return false;
   if (user.role === 'admin') return true;
-  if (hasPerm(user, 'bookings.view_all')) return true;
+  if (hasPerm(user, 'refunds.process') || (hasPerm(user, 'bookings.view_all') && hasPerm(user, 'bookings.manage'))) return true;
   if (row.owner_id === user.id || row.sold_by_user_id === user.id) return true;
   if (hasPerm(user, 'bookings.view_org') && user.organization_id && row.organization_id === user.organization_id) return true;
   return false;
+}
+
+function isReportingOnly(user) {
+  return user?.role !== 'admin' && (hasPerm(user, 'analytics.view') || hasPerm(user, 'finance.view') || hasPerm(user, 'bookings.view_all')) &&
+    !['bookings.manage', 'refunds.process', 'finance.manage', 'team.manage'].some((permission) => hasPerm(user, permission));
+}
+
+function bookingReport(rec) {
+  return {
+    id: digest(rec.id).slice(0, 32),
+    pnr: '••••' + rec.pnr.slice(-4),
+    type: rec.type,
+    title: rec.title,
+    subtitle: '',
+    passenger: '—',
+    date: rec.date,
+    returnDate: rec.returnDate,
+    createdAt: rec.createdAt,
+    price: rec.price,
+    status: rec.status,
+    paymentStatus: rec.paymentStatus,
+    ticketingStatus: rec.ticketingStatus,
+    refundStatus: rec.refundStatus,
+    demo: rec.demo,
+  };
+}
+
+function maskedAccount(row) {
+  const { id, firstName, lastName, role, accountType, createdAt, registeredAt, status } = accountProfile(row);
+  return {
+    id: digest(id).slice(0, 32),
+    firstName: firstName ? firstName[0] + '•••' : '',
+    lastName: lastName ? lastName[0] + '•••' : '',
+    email: row.email[0] + '•••',
+    role, accountType, createdAt, registeredAt, status,
+    phone: '', miles: 0,
+  };
 }
 
 function newDemoBooking(db, body, owner, { isAdminManual = false, computedPricing = null } = {}) {
@@ -477,7 +506,15 @@ function validateCatalogItems(section, items) {
   });
 }
 
-export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYTOASPAN_ORIGIN, sendServiceMail } = {}) {
+export function createApi({
+  db = openDatabase(),
+  publicOrigin = process.env.FLYTOASPAN_ORIGIN,
+  requirePanelMfa = process.env.NODE_ENV === 'production',
+  trustedProxy = process.env.FLYTOASPAN_TRUSTED_PROXY_IPS,
+  sendServiceMail,
+  sendSecurityMail = sendMail,
+} = {}) {
+  const network = trustedProxyIps(trustedProxy);
   const bookingService = createBookingService({ db, normalizeSurname, fail, sendServiceMail });
   const origin = publicOrigin ? new URL(publicOrigin) : null;
   if (origin && publicOrigin !== origin.origin) throw new Error('FLYTOASPAN_ORIGIN yalnızca şema, alan adı ve port içermeli.');
@@ -510,7 +547,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
   };
 
   const getSessionUser = (token) => token && db.prepare(`
-    SELECT users.* FROM sessions JOIN users ON users.id = sessions.user_id
+    SELECT users.*, sessions.mfa_verified FROM sessions JOIN users ON users.id = sessions.user_id
     WHERE token_hash = ? AND expires_at > ?
   `).get(digest(token), Date.now());
 
@@ -531,6 +568,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
     } else {
       profile.organizationDiscountPercent = 0;
     }
+    profile.panelMfaRequired = requirePanelMfa && canAccessPanel(account) && !(account.totp_enabled && account.mfa_verified);
     return profile;
   };
 
@@ -550,15 +588,15 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
     return rec;
   };
 
-  const authenticate = (res, previousToken, account) => {
+  const authenticate = (res, previousToken, account, mfaVerified = false) => {
     const token = randomBytes(32).toString('base64url');
     clearSession(previousToken);
     db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now());
-    db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)').run(
-      digest(token), account.id, Date.now() + sessionLifetime * 1000
+    db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at, mfa_verified) VALUES (?, ?, ?, ?)').run(
+      digest(token), account.id, Date.now() + sessionLifetime * 1000, Number(mfaVerified)
     );
     setSessionCookie(res, token, sessionLifetime);
-    return enrichAccountProfile(account);
+    return enrichAccountProfile({ ...account, mfa_verified: Number(mfaVerified) });
   };
 
   const readMarkup = () => {
@@ -618,16 +656,21 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
     if (!url.pathname.startsWith('/api/')) return false;
     const method = req.method;
     const path = url.pathname;
-    const ip = resolveClientIp(req);
+    const { ip, protocol } = network.resolve(req);
     try {
-      const trustProxy = process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true';
-      const reqProto = trustProxy && req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-      if (method !== 'GET' && req.headers.origin !== (origin?.origin ?? `${reqProto}://${req.headers.host}`)) {
+      if (!['GET', 'HEAD'].includes(method) && req.headers.origin !== (origin?.origin ?? `${protocol}://${req.headers.host}`)) {
         fail(403, 'İstek kaynağı doğrulanamadı.');
       }
       const token = sessionToken(req, cookieName);
-      const user = getSessionUser(token);
+      const sessionUser = getSessionUser(token);
+      const panelMfaMissing = requirePanelMfa && canAccessPanel(sessionUser) && !(sessionUser.totp_enabled && sessionUser.mfa_verified);
+      const authRoute = path === '/api/session' || path.startsWith('/api/auth/');
+      // During enrollment, public routes see the account as a regular member.
+      const user = panelMfaMissing && !authRoute
+        ? { ...sessionUser, role: 'member', permissions: '[]' }
+        : sessionUser;
       if (path.startsWith('/api/admin/')) {
+        if (panelMfaMissing) fail(403, 'Yönetim erişimi için iki aşamalı doğrulamayı tamamlayın.');
         const isSuperAdmin = user?.role === 'admin' && (user.status || 'active') === 'active';
         const staffBookingRoute =
           path === '/api/admin/bookings' ||
@@ -647,7 +690,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const staffFinanceRead =
           method === 'GET' &&
           (path === '/api/admin/finance' || path === '/api/admin/crm/tasks' || path === '/api/admin/crm/quotes') &&
-          (hasPerm(user, 'finance.view') || hasPerm(user, 'finance.manage') || hasPerm(user, 'analytics.view'));
+          (hasPerm(user, 'finance.manage') || (hasPerm(user, 'finance.view') && hasPerm(user, 'refunds.process')));
         const staffFinanceWrite =
           (method === 'POST' || method === 'PATCH' || method === 'DELETE') &&
           (path === '/api/admin/finance' ||
@@ -895,7 +938,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
             send(res, 401, { requires2fa: true, message: 'İki aşamalı doğrulama (2FA) kodu gerekli.' });
             return true;
           }
-          if (!verifyTotpCode(account.totp_secret, totpCode)) {
+          if (!verifyTotpCode(decryptPii(account.totp_secret, db._piiKey), totpCode)) {
             recordAnalyticsEvent(db, { eventType: 'auth_failure', page: '/auth/login', metadata: { reason: 'invalid_totp' } });
             fail(401, 'İki aşamalı doğrulama (2FA) kodu geçersiz veya süresi dolmuş.');
           }
@@ -910,7 +953,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           page: '/auth/login',
           metadata: { accountId: account.id, role: account.role, method: account.totp_enabled ? 'password_2fa' : 'password', device },
         });
-        send(res, 200, { user: authenticate(res, token, account) });
+        send(res, 200, { user: authenticate(res, token, account, Boolean(account.totp_enabled && account.totp_secret)) });
       } else if (method === 'POST' && path === '/api/auth/logout') {
         clearSession(token);
         setSessionCookie(res, '', 0);
@@ -920,36 +963,73 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const body = await readJson(req);
         const currentPassword = checkPassword(body.currentPassword, 1);
         const newPassword = checkPassword(body.newPassword, 12);
+        if (user.totp_enabled && !user.mfa_verified) fail(403, 'Önce iki aşamalı doğrulamayla yeniden giriş yapın.');
         if (!await verifyPassword(user, currentPassword)) fail(401, 'Mevcut parola hatalı.');
         await setAccountPassword(db, user.id, newPassword);
         db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
         const refreshed = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
         writeAuditLog(db, { actorEmail: user.email, action: 'auth:password_changed', target: user.email, ip });
-        send(res, 200, { ok: true, user: authenticate(res, null, refreshed) });
+        send(res, 200, { ok: true, user: authenticate(res, null, refreshed, Boolean(user.mfa_verified)) });
       } else if (method === 'POST' && path === '/api/auth/2fa/setup') {
-        if (!user || !canAccessPanel(user)) fail(403, 'İki aşamalı doğrulama (2FA) yalnızca panel hesapları için kullanılabilir.');
+        if (!canAccessPanel(user)) fail(403, 'İki aşamalı doğrulama yalnızca panel hesapları için kullanılabilir.');
+        throttle(`mfa-setup:${user.id}`, 5);
+        const body = await readJson(req);
+        const password = checkPassword(body.password, 1);
+        if (!await verifyPassword(user, password)) fail(401, 'Mevcut parola hatalı.');
+        if (user.totp_enabled && !verifyTotpCode(decryptPii(user.totp_secret, db._piiKey), body.currentCode)) {
+          fail(401, 'Mevcut doğrulama kodu geçersiz.');
+        }
         const secret = generateTotpSecret();
-        db.prepare('UPDATE users SET totp_secret = ?, totp_enabled = 0 WHERE id = ?').run(secret, user.id);
+        const prepared = db.prepare(`
+          UPDATE users SET totp_pending_secret = ?, totp_pending_until = ?, totp_pending_session = ?
+          WHERE id = ? AND password_hash = ? AND totp_secret IS ?
+            AND EXISTS (SELECT 1 FROM sessions WHERE token_hash = ? AND user_id = users.id AND expires_at > ?)
+        `).run(encryptPii(secret, db._piiKey), Date.now() + 10 * 60_000, digest(token), user.id,
+          user.password_hash, user.totp_secret, digest(token), Date.now());
+        if (!prepared.changes) fail(409, 'Hesap bilgileri değişti. Yeniden giriş yapın.');
         writeAuditLog(db, { actorEmail: user.email, action: 'auth:2fa_setup_started', target: user.email, ip });
         send(res, 200, { secret, otpauthUri: buildOtpAuthUri({ email: user.email, secret }) });
       } else if (method === 'POST' && path === '/api/auth/2fa/enable') {
-        if (!user || !canAccessPanel(user)) fail(403, 'Yetkisiz işlem.');
+        if (!canAccessPanel(user)) fail(403, 'Yetkisiz işlem.');
+        throttle(`mfa-enable:${user.id}`, 8);
         const body = await readJson(req);
-        const fresh = db.prepare('SELECT totp_secret FROM users WHERE id = ?').get(user.id);
-        if (!fresh?.totp_secret || !verifyTotpCode(fresh.totp_secret, body.code)) {
-          fail(400, 'Doğrulama kodu geçersiz. Authenticator uygulamanızdaki 6 haneli kodu girin.');
+        const now = Date.now();
+        const fresh = db.prepare(`
+          SELECT users.* FROM users JOIN sessions ON sessions.user_id = users.id
+          WHERE users.id = ? AND users.status = 'active' AND sessions.token_hash = ? AND sessions.expires_at > ?
+            AND users.totp_pending_session = sessions.token_hash AND users.totp_pending_until > ?
+        `).get(user.id, digest(token), now, now);
+        if (!fresh?.totp_pending_secret || !verifyTotpCode(decryptPii(fresh.totp_pending_secret, db._piiKey), body.code)) {
+          fail(400, 'Kurulumun süresi doldu veya yeni doğrulama kodu geçersiz.');
         }
-        db.prepare('UPDATE users SET totp_enabled = 1 WHERE id = ?').run(user.id);
-        writeAuditLog(db, { actorEmail: user.email, action: 'auth:2fa_enabled', target: user.email, ip });
-        send(res, 200, { ok: true, totpEnabled: true });
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          const activated = db.prepare(`
+            UPDATE users SET totp_secret = totp_pending_secret, totp_enabled = 1,
+              totp_pending_secret = NULL, totp_pending_until = NULL, totp_pending_session = NULL
+            WHERE id = ? AND status = 'active' AND totp_pending_secret = ? AND totp_pending_until > ?
+              AND EXISTS (SELECT 1 FROM sessions WHERE token_hash = ? AND user_id = users.id AND expires_at > ?)
+          `).run(user.id, fresh.totp_pending_secret, now, digest(token), now);
+          if (!activated.changes) fail(409, 'Kurulum değişti. Tekrar deneyin.');
+          db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+          writeAuditLog(db, { actorEmail: user.email, action: fresh.totp_enabled ? 'auth:2fa_rotated' : 'auth:2fa_enabled', target: user.email, ip });
+          db.exec('COMMIT');
+        } catch (error) {
+          db.exec('ROLLBACK');
+          throw error;
+        }
+        const account = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
+        const updated = authenticate(res, null, account, true);
+        void sendSecurityMail({
+          to: user.email,
+          subject: 'FlyToAspan hesap güvenliği · İki aşamalı doğrulama güncellendi',
+          html: '<p>Hesabınızın iki aşamalı doğrulaması güncellendi. Bu işlemi siz yaptıysanız ek bir adım gerekmez.</p><p>İşlemi tanımıyorsanız şirket yetkilinize ulaşın.</p>',
+        }).then((result) => {
+          if (!result?.sent) writeAuditLog(db, { actorEmail: user.email, action: 'auth:2fa_notice_failed', target: user.email, ip });
+        }).catch(() => console.error('2FA güvenlik bildirimi kaydedilemedi.'));
+        send(res, 200, { ok: true, totpEnabled: true, user: updated });
       } else if (method === 'POST' && path === '/api/auth/2fa/disable') {
-        if (!user || !canAccessPanel(user)) fail(403, 'Yetkisiz işlem.');
-        const body = await readJson(req);
-        const currentPassword = checkPassword(body.password, 1);
-        if (!await verifyPassword(user, currentPassword)) fail(401, 'Parola doğrulanamadı.');
-        db.prepare('UPDATE users SET totp_secret = NULL, totp_enabled = 0 WHERE id = ?').run(user.id);
-        writeAuditLog(db, { actorEmail: user.email, action: 'auth:2fa_disabled', target: user.email, ip });
-        send(res, 200, { ok: true, totpEnabled: false });
+        fail(403, 'Panel hesaplarında iki aşamalı doğrulama kapatılamaz. Güvenlik ekranından anahtarı değiştirin.');
       } else if (method === 'POST' && path === '/api/auth/password-reset-request') {
         throttle(`pwd-reset:${ip}`, 6);
         const body = await readJson(req);
@@ -1011,7 +1091,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const rec = bookingRecord(row, db._piiKey);
         const out = canViewFullBooking(user, row)
           ? stripHouseMargin(rec, user)
-          : publicBookingSummary(rec);
+          : isReportingOnly(user) ? { pnr: row.pnr, type: rec.type, restricted: true } : publicBookingSummary(rec);
         send(res, 200, { booking: out });
       } else if (method === 'POST' && path === '/api/bookings/lookup-cancel') {
         throttle(`lookup:${ip}`, 24);
@@ -1036,7 +1116,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const rec = bookingRecord(row, db._piiKey);
         const out = canViewFullBooking(user, row)
           ? stripHouseMargin(rec, user)
-          : publicBookingSummary(rec);
+          : isReportingOnly(user) ? { pnr: row.pnr, type: rec.type, restricted: true } : publicBookingSummary(rec);
         send(res, 200, { booking: out });
       } else if (method === 'GET' && path === '/api/bookings') {
         if (!user) fail(401, 'Oturum açın.');
@@ -1225,7 +1305,11 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         }
         const whereSql = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
         const allRows = db.prepare(`${selectJoin} ${whereSql} ORDER BY b.created_at DESC, b.id DESC`).all(...params);
-        let mapped = allRows.map((row) => stripHouseMargin(bookingRecord(row, db._piiKey), user));
+        let mapped = allRows.map((row) => {
+          const fullAccess = canViewFullBooking(user, row);
+          const booking = bookingRecord(row, fullAccess ? db._piiKey : null);
+          return fullAccess ? stripHouseMargin(booking, user) : bookingReport(booking);
+        });
         if (typeFilter && ['Uçak', 'Otel', 'Transfer', 'Tur'].includes(typeFilter)) {
           mapped = mapped.filter((b) => b.type === typeFilter);
         }
@@ -1614,7 +1698,8 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           : user.organization_id
             ? db.prepare('SELECT id, email, role, role_label, profile, status, organization_id, permissions, totp_enabled FROM users WHERE organization_id = ? ORDER BY rowid DESC').all(user.organization_id)
             : [];
-        send(res, 200, { users: rows.map(accountProfile) });
+        const canReadDetails = user.role === 'admin' || hasPerm(user, 'team.manage');
+        send(res, 200, { users: rows.map(canReadDetails ? accountProfile : maskedAccount) });
       } else if (method === 'POST' && /^\/api\/admin\/users\/[a-f0-9]{32}\/revoke-sessions$/.test(path)) {
         if (user.role !== 'admin') fail(403, 'Oturum sonlandırma yetkisi yalnızca Süper Admin içindir.');
         const targetId = path.split('/')[4];
@@ -2210,7 +2295,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
             JOIN users u ON u.id = json_extract(e.metadata, '$.accountId')
             WHERE e.event_type IN ('user_login', 'user_register') AND e.created_at BETWEEN ? AND ?
             ORDER BY e.created_at DESC LIMIT 60
-          `).all(sinceMs, untilMs),
+          `).all(sinceMs, untilMs).map((row) => user.role === 'admin' ? row : { ...row, email: row.email[0] + '•••' }),
           journeys: db.prepare(`
             WITH steps AS (
               SELECT substr(session_hash, 1, 10) AS session, created_at AS occurredAt,
@@ -2253,7 +2338,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           activity,
           integrations: {
             posthog: { configured: Boolean(process.env.POSTHOG_KEY?.trim()), host: process.env.POSTHOG_HOST || 'https://eu.i.posthog.com', piiBlocked: true },
-            cloudflare: { configured: Boolean(process.env.CLOUDFLARE_ZONE_ID?.trim()), trustProxy: process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true' },
+            cloudflare: { configured: Boolean(process.env.CLOUDFLARE_ZONE_ID?.trim()), trustProxy: network.configured },
             sentry: { configured: Boolean(process.env.SENTRY_DSN?.trim()), piiScrubbed: true },
           },
         });
@@ -2274,7 +2359,8 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         send(res, 200, result);
       } else if (method === 'GET' && path === '/api/admin/audit') {
         const rows = db.prepare('SELECT id, actor_email, action, target, ip, created_at FROM audit_logs ORDER BY created_at DESC LIMIT 150').all();
-        send(res, 200, { logs: rows });
+        send(res, 200, { logs: user.role === 'admin' ? rows : rows.map(({ id, action, created_at }) =>
+          ({ id, action, created_at, actor_email: '—', target: '—', ip: '—' })) });
       } else {
         fail(404, 'İşlem bulunamadı.');
       }

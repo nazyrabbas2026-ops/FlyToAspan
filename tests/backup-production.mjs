@@ -73,3 +73,35 @@ test('Production backup uses a separate key and restores encrypted reservation d
     recovered.close();
   }
 });
+
+
+test('Production rejects missing HTTPS or invalid keys and detects a wrong existing database key', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'flytoaspan-key-validation-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const dbPath = join(dir, 'keycheck.sqlite');
+  const pii = randomBytes(32).toString('hex');
+  const backup = randomBytes(32).toString('base64');
+  const env = {
+    ...process.env,
+    NODE_ENV: 'production',
+    FLYTOASPAN_ORIGIN: 'https://preview.example.test',
+    FLYTOASPAN_DB: dbPath,
+    FLYTOASPAN_PII_KEY: pii,
+    FLYTOASPAN_BACKUP_KEY: backup,
+  };
+  const run = (args, vars = {}) => spawnSync(process.execPath, args, {
+    env: { ...env, ...vars }, encoding: 'utf8', timeout: 5_000,
+  });
+  const server = ['server/index.mjs'];
+  assert.match(run(server, { FLYTOASPAN_ORIGIN: 'http://127.0.0.1' }).stderr, /HTTPS/);
+  assert.match(run(server, { FLYTOASPAN_BACKUP_KEY: '' }).stderr, /FLYTOASPAN_BACKUP_KEY/);
+  assert.match(run(server, { FLYTOASPAN_PII_KEY: 'invalid' }).stderr, /FLYTOASPAN_PII_KEY/);
+  assert.match(run(server, { FLYTOASPAN_BACKUP_KEY: pii }).stderr, /farklı olmalıdır/);
+  const openDb = ['--input-type=module', '--eval', "import {openDatabase} from './server/store.mjs'; openDatabase().close();"];
+  const initialized = run(openDb);
+  assert.equal(initialized.status, 0, initialized.stderr);
+  const wrongKey = run(openDb, { FLYTOASPAN_PII_KEY: randomBytes(32).toString('hex') });
+  assert.equal(wrongKey.status, 1);
+  assert.match(wrongKey.stderr, /anahtarı veritabanıyla eşleşmiyor/);
+  assert.equal(run(openDb).status, 0);
+});

@@ -31,8 +31,9 @@ Bu doküman, bir uçak bileti / otel / VIP transfer satış platformunu canlı o
 - Hassas yolcu belgeleri (TCKN / pasaport numarası) veritabanında `enc:v1:...` biçiminde **AES-256-GCM** ile şifrelenir.
 - Anahtar **asla kaynak kodda veya veritabanında saklanmaz**:
   - Üretimde `FLYTOASPAN_PII_KEY` (32 byte hex veya base64) ortam değişkenini gizli kasa / sunucu secret store üzerinden verin.
+  - Üretim modunda doğru HTTPS adresi ile iki ayrı ve geçerli anahtar olmadan sunucu açılmaz. Mevcut şifreli veriyi taşırken o veriyi koruyan orijinal yolcu anahtarını yükleyin. Uygulama açılışta anahtarın veritabanıyla eşleştiğini kontrol eder.
   - Üretim yedekleri için farklı bir 32 baytlık `FLYTOASPAN_BACKUP_KEY` tanımlayın. Yedekleme ve geri yükleme, iki anahtar da geçerli ve farklı olduğunda çalışır. Anahtarları veritabanı ve yedek dosyalarından ayrı saklayın.
-  - Geliştirme ortamında değişken verilmezse anahtar otomatik olarak DB klasörünün dışındaki `0600` izinli bir anahtar dosyasında oluşturulur.
+  - Geliştirme ortamında değişken verilmezse anahtar otomatik olarak DB dosyasından ayrı, aynı dizindeki `0600` izinli bir anahtar dosyasında oluşturulur.
 
 ### 0.3 Şifreli SQLite Yedekleme ve Geri Yükleme Doğrulaması
 - SQLite canlı iken tutarlı anlık kopya (`VACUUM INTO`) alıp AES-256-GCM + SHA-256 bütünlük doğrulamasıyla şifreleyen betik dahildir:
@@ -42,8 +43,9 @@ Bu doküman, bir uçak bileti / otel / VIP transfer satış platformunu canlı o
 
 ### 0.4 Yönetici, Ekip ve Geliştirici + Analist (Nazyr) Hesapları
 - **Site Sahibi (Süper Admin):** `npm run admin:create` ile oluşturulur; tam yetkiye, iade/silme/rol değiştirme ve 2FA yönetimine sahiptir.
-- **Geliştirici + Analist (Nazyr):** Sunucu başlangıcında `FLYTOASPAN_DEV_ANALYST_EMAIL` ve `FLYTOASPAN_DEV_ANALYST_PASSWORD` (min 12 karakter) ile kişiye özel tanımlanabilir veya Süper Admin tarafından **Geliştirici + Analist (Nazyr)** rol şablonuyla atanır (`bookings.view_all`, `analytics.view`, `finance.view`). Bu hesap üye, operasyon, satış, hata ve analiz verilerini görür; **iade, silme, rol verme ve sağlayıcı anahtarı değiştirme yetkisi kapalıdır**.
-- **2FA (TOTP) & Oturum İptali:** Tüm canlı yönetici hesapları paneldeki **Analiz & Site Sağlığı → Hesap Güvenliği** bölümünden TOTP 2FA (Google Authenticator / 1Password) açmalıdır. Parola değişimi diğer tüm açık oturumları otomatik sonlandırır.
+- **Geliştirici + Analist (Nazyr):** Sunucu başlangıcında `FLYTOASPAN_DEV_ANALYST_EMAIL` ve `FLYTOASPAN_DEV_ANALYST_PASSWORD` (min 12 karakter) ile kişiye özel tanımlanabilir veya Süper Admin tarafından **Geliştirici + Analist (Nazyr)** rol şablonuyla atanır (`bookings.view_all`, `analytics.view`, `finance.view`). Bu hesap maskeli rezervasyon, üye ve giriş verilerini ve özet analizleri görür. Ayrıntılı müşteri kaydı, biniş kartı, CRM teklifi, iade, dışa aktarma, silme ve rol verme yetkileri kapalıdır.
+- **2FA ve oturum iptali.** Üretim modunda tüm panel hesapları ilk girişten sonra 2FA kurulumu tamamlanmadan yönetim verilerine erişemez. Anahtar değişimi mevcut parola ve mevcut doğrulama kodunu gerektirir. Yeni kod doğrulanınca diğer oturumlar kapanır. Güvenlik bildiriminin teslimi için doğrulanmış e-posta gönderenini kurun ve test edin.
+- **2FA kurtarma.** Şirket yetkilisi hesap sahibini önceden belirlenen kanaldan doğruladıktan sonra yetkili sunucu terminalinde `npm run admin:recover-2fa` çalıştırır. İşlem mevcut faktörü kaldırıp bütün oturumları kapatır ve denetim kaydına işlenir. Hesap sahibi tekrar girişte 2FA kurmak zorundadır. Şirket yetkilisi olayı hesap sahibine ayrıca bildirir.
 
 ### 0.5 Analiz, Hata İzleme ve Çerez Rızası (PostHog, Cloudflare, Sentry)
 - **Birinci Taraf Panel Metrikleri:** Üye sayısı, giriş hareketleri, canlı/deneme satış & iade ayrımı, şüpheli trafik uyarıları ve dönüşüm hunisi `/yonetim#analytics` ekranında otomatik sunulur.
@@ -55,13 +57,12 @@ Bu doküman, bir uçak bileti / otel / VIP transfer satış platformunu canlı o
 ---
 
 ## 1. Sunucu, Reverse Proxy ve Ağ Güvenliği
-- **Cloudflare (WAF + DDoS + Bot Koruması):**
-  - Arama motoru endpoint'lerine (GDS fiyat sorgusu pahalıdır) gelen bot/scraper saldırılarını **Cloudflare Bot Management** ve **Rate Limiting** (ör. IP başına dakikada 30 uçuş araması) ile engelleyin.
-  - Tüm trafik **TLS 1.3 + HSTS** zorunlu olacak şekilde şifrelenmelidir.
-- **Reverse Proxy (Nginx veya Caddy):**
-  - Frontend (React build) ve Backend API'yi tek domain arkasında yönlendirin (`/api/*` → Backend, `/*` → Frontend).
-  - GDS/havayolu API anahtarları **asla** tarayıcıda (frontend'de) tutulmaz; tüm GDS çağrıları **Backend Proxy** üzerinden yapılır.
-  - Zorunlu HTTP güvenlik başlıkları: `Content-Security-Policy (CSP)`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, sıkı `CORS` whitelist.
+
+- `FLYTOASPAN_ORIGIN` alanına yalnız şema, alan adı ve varsa portu içeren tam HTTPS kökenini yazın. `deploy/nginx.conf` dosyasını Nginx’in `http` kapsamına dahil edin. Node’a internetten doğrudan ulaşılmamalı. Compose örneği portu yalnızca host döngü adresine açar.
+- `FLYTOASPAN_TRUSTED_PROXY_IPS` değerine Node’un doğrudan gördüğü giriş sunucusunun gerçek IP’sini yazın. Örneğin doğrudan aynı host üzerindeki Nginx için `127.0.0.1`. Docker kullanıldığında konteynerin gördüğü ağ geçidi bu adresten farklı olabilir. CDN kullanılıyorsa Nginx’te gerçek IP başlığını yalnız sağlayıcının doğrulanmış ağlarından kabul edin.
+- Nginx gelen yönlendirme başlıklarını aktarmak yerine `X-Real-IP` ve `X-Forwarded-Proto` değerlerini kendisi yazar. Giriş, parola sıfırlama ve bilet sorgusu için ağ katmanında istek sınırı var. HTTPS ön yayında gerçek istemci IP’sinin alındığını, aşırı isteklerin sınırlandığını ve uygulama portunun dışarıya kapalı olduğunu doğrulayın.
+- Tarayıcı betikleri kendi kökeninden yüklenir. Site ilk taraf analitik olaylarını çerez tercihine göre işler. Üçüncü taraf analiz veya oturum kaydı entegrasyonunu ödeme sayfasına eklemeden ayrı değerlendirin.
+- GitHub yönetiminde ana dal için doğrudan gönderim yerine inceleme isteyin. `Build, API and security checks` işini zorunlu kılın. Secret scanning, push protection ve uygun depolarda CodeQL ayarlarını depo yöneticisi etkinleştirir.
 
 ## 2. Uçuş, Otel ve Transfer API / GDS Entegrasyonları
 - **Uçuş (GDS / NDC):** Amadeus Enterprise / Self-Service API, Sabre, Travelport, Duffel veya yerli konsolidatör XML/JSON (THY, Pegasus, AJet, Air Astana için IATA yetkili acente sözleşmesi).

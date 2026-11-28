@@ -1,3 +1,4 @@
+import { PanelMfaForm } from './PanelMfaForm';
 import { useEffect, useRef, useState } from 'react';
 import { Activity, Clipboard, Code2, ExternalLink, LayoutGrid, LogOut, RefreshCw, Search, Ticket, Users, Wallet, X } from 'lucide-react';
 import { api, apiMessage } from '../data/api';
@@ -56,7 +57,9 @@ function Pager({ page, pages, total, onPage }: { page: number; pages: number; to
   );
 }
 
-export default function DeveloperWorkspace({ user, onLogout }: { user: UserProfile; onLogout: () => void }) {
+export default function DeveloperWorkspace({ user, onLogout, onAccountChanged }: {
+  user: UserProfile; onLogout: () => void; onAccountChanged: (user: UserProfile) => void;
+}) {
   const [section, setSection] = useState(currentSection);
   const [range, setRange] = useState<Period>('7d');
   const [revision, setRevision] = useState(0);
@@ -142,6 +145,10 @@ export default function DeveloperWorkspace({ user, onLogout }: { user: UserProfi
         </div>
       </header>
 
+      <details className="dev-box">
+        <summary>Hesap güvenliği</summary>
+        <PanelMfaForm active={Boolean(user.totpEnabled)} onComplete={onAccountChanged} />
+      </details>
       <nav className="dev-nav" aria-label="Geliştirici paneli bölümleri">
         {sections.map(({ id, label, compact, icon: Icon }) => (
           <button key={id} type="button" aria-label={label} aria-current={section === id ? 'page' : undefined}
@@ -219,7 +226,7 @@ export default function DeveloperWorkspace({ user, onLogout }: { user: UserProfi
               setBookingPage(1);
               setQuery(bookingText.trim());
             }}>
-              <input aria-label="PNR, yolcu veya rota" placeholder="PNR, yolcu veya rota" value={bookingText} onChange={(event) => setBookingText(event.target.value)} />
+              <input aria-label="Rezervasyon kodu veya rota" placeholder="Rezervasyon kodu veya rota" value={bookingText} onChange={(event) => setBookingText(event.target.value)} />
               <select aria-label="Hizmet" value={product} onChange={(event) => { setBookingPage(1); setProduct(event.target.value); }}>
                 <option value="ALL">Tüm hizmetler</option>
                 {['Uçak', 'Otel', 'Transfer', 'Tur'].map((item) => <option key={item}>{item}</option>)}
@@ -252,7 +259,7 @@ export default function DeveloperWorkspace({ user, onLogout }: { user: UserProfi
         {section === 'uyeler' && (
           <section className="dev-box" aria-label="Üye kayıtları">
             <div className="dev-filters">
-              <input type="search" aria-label="Üye ara" placeholder="Ad veya e-posta ara" value={userQuery}
+              <input type="search" aria-label="Üye ara" placeholder="Maskeli üye bilgisi ara" value={userQuery}
                 onChange={(event) => { setUserPage(1); setUserQuery(event.target.value); }} />
             </div>
             <div className="dev-table-wrap">

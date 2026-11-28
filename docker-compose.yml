@@ -10,7 +10,6 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
-      TRUST_PROXY: "1"
       FLYTOASPAN_DB: /app/.data/flytoaspan.sqlite
     volumes:
       - ./data:/app/.data

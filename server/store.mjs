@@ -94,11 +94,14 @@ export function migratePlaintextPii(db) {
   return { migratedBookings, migratedPassengers, migratedQuotes };
 }
 
-export function openDatabase(filename = process.env.FLYTOASPAN_DB || '.data/flytoaspan.sqlite') {
+export function openDatabase(filename = process.env.FLYTOASPAN_DB || '.data/flytoaspan.sqlite', {
+  requireProductionKey = process.env.NODE_ENV === 'production',
+} = {}) {
+  const piiKey = resolvePiiKey(filename, { requireProductionKey });
   if (filename !== ':memory:') mkdirSync(dirname(resolve(filename)), { recursive: true, mode: 0o700 });
   const db = new DatabaseSync(filename);
   db._dbFilename = filename;
-  db._piiKey = resolvePiiKey(filename);
+  db._piiKey = piiKey;
   db.exec(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
@@ -277,6 +280,10 @@ export function openDatabase(filename = process.env.FLYTOASPAN_DB || '.data/flyt
   safeAlter('ALTER TABLE users ADD COLUMN organization_id TEXT REFERENCES organizations(id) ON DELETE SET NULL');
   safeAlter("ALTER TABLE users ADD COLUMN permissions TEXT NOT NULL DEFAULT '[]'");
   safeAlter('ALTER TABLE users ADD COLUMN totp_secret TEXT');
+  safeAlter('ALTER TABLE users ADD COLUMN totp_pending_secret TEXT');
+  safeAlter('ALTER TABLE users ADD COLUMN totp_pending_until INTEGER');
+  safeAlter('ALTER TABLE users ADD COLUMN totp_pending_session TEXT');
+  safeAlter('ALTER TABLE sessions ADD COLUMN mfa_verified INTEGER NOT NULL DEFAULT 0');
   safeAlter('ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0');
   safeAlter('ALTER TABLE users ADD COLUMN password_changed_at INTEGER');
   safeAlter("ALTER TABLE users ADD COLUMN role_label TEXT NOT NULL DEFAULT ''");
@@ -290,7 +297,19 @@ export function openDatabase(filename = process.env.FLYTOASPAN_DB || '.data/flyt
   safeAlter('CREATE UNIQUE INDEX IF NOT EXISTS org_ledger_ref_unique ON org_ledger(ref_key) WHERE ref_key IS NOT NULL');
   safeAlter("ALTER TABLE crm_quotes ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'");
 
+  if (requireProductionKey) {
+    try {
+      checkPiiKey(db);
+    } catch (error) {
+      db.close();
+      throw error;
+    }
+  }
   migratePlaintextPii(db);
+  const saveTotp = db.prepare('UPDATE users SET totp_secret = ? WHERE id = ? AND totp_secret = ?');
+  for (const { id, totp_secret: secret } of db.prepare('SELECT id, totp_secret FROM users WHERE totp_secret IS NOT NULL').all()) {
+    if (!isEncryptedPii(secret)) saveTotp.run(encryptPii(secret, db._piiKey), id, secret);
+  }
   return db;
 }
 
@@ -321,6 +340,34 @@ export function recordAnalyticsEvent(db, { eventType, page = '', productType = '
       Date.now()
     );
   } catch { /* never break user flow on analytics write */ }
+}
+
+function checkPiiKey(db) {
+  const existing = db.prepare("SELECT value FROM settings WHERE key = 'pii_key_check'").get();
+  const checkText = 'flytoaspan-pii-key-check';
+  if (existing) {
+    if (decryptPii(existing.value, db._piiKey) !== checkText) throw new Error('Yolcu verisi anahtarı veritabanıyla eşleşmiyor.');
+    return;
+  }
+  const legacy = db.prepare(`
+    SELECT tc_or_passport AS value FROM saved_passengers WHERE tc_or_passport LIKE 'enc:v1:%'
+    UNION ALL
+    SELECT totp_secret AS value FROM users WHERE totp_secret LIKE 'enc:v1:%'
+    UNION ALL
+    SELECT json_extract(p.value, '$.tcOrPassport') AS value FROM bookings b, json_each(b.details, '$.passengersDetail') p
+    WHERE json_extract(p.value, '$.tcOrPassport') LIKE 'enc:v1:%'
+    UNION ALL
+    SELECT json_extract(metadata, '$.tcOrPassport') AS value FROM crm_quotes
+    WHERE json_extract(metadata, '$.tcOrPassport') LIKE 'enc:v1:%'
+    LIMIT 1
+  `).get();
+  if (legacy && decryptPii(legacy.value, db._piiKey) === '[ŞİFRE ÇÖZÜLEMEDİ]') {
+    throw new Error('Yolcu verisi anahtarı mevcut şifreli kayıtla eşleşmiyor.');
+  }
+  db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('pii_key_check', ?)")
+    .run(encryptPii(checkText, db._piiKey));
+  const saved = db.prepare("SELECT value FROM settings WHERE key = 'pii_key_check'").get();
+  if (decryptPii(saved?.value, db._piiKey) !== checkText) throw new Error('Yolcu verisi anahtarı veritabanıyla eşleşmiyor.');
 }
 
 export function accountProfile(row) {
@@ -474,10 +521,33 @@ export async function createAccount(db, {
   return db.prepare('SELECT * FROM users WHERE id = ?').get(id);
 }
 
+export function recoverPanelMfa(db, email) {
+  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+  if (!user || user.status !== 'active' || (user.role !== 'admin' && !accountProfile(user).permissions.length)) return false;
+
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    db.prepare(`
+      UPDATE users SET totp_secret = NULL, totp_enabled = 0,
+        totp_pending_secret = NULL, totp_pending_until = NULL, totp_pending_session = NULL WHERE id = ?
+    `).run(user.id);
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+    writeAuditLog(db, { actorEmail: 'server-console', action: 'auth:2fa_recovery', target: user.email });
+    db.exec('COMMIT');
+    return true;
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
 export async function setAccountPassword(db, userId, newPassword) {
   const salt = randomBytes(16).toString('hex');
   const hash = await deriveKey(newPassword, salt, 64, scryptOptions);
-  db.prepare('UPDATE users SET salt = ?, password_hash = ?, password_changed_at = ? WHERE id = ?')
+  db.prepare(`
+    UPDATE users SET salt = ?, password_hash = ?, password_changed_at = ?,
+      totp_pending_secret = NULL, totp_pending_until = NULL, totp_pending_session = NULL WHERE id = ?
+  `)
     .run(salt, hash.toString('hex'), Date.now(), userId);
 }
 

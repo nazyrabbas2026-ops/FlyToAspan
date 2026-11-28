@@ -130,6 +130,7 @@ export interface UserProfile {
   role: 'member' | 'admin';
   roleLabel?: string;
   totpEnabled?: boolean;
+  panelMfaRequired?: boolean;
   status?: 'active' | 'pending' | 'suspended';
   organizationId?: string | null;
   organizationDiscountPercent?: number;

@@ -670,13 +670,17 @@ export function buildBrandedEticketHtml(
     </div>
   </div>
 
-  <script>
-    window.addEventListener('load', () => {
-      setTimeout(() => { window.print(); }, 350);
-    });
-  </script>
 </body>
 </html>`;
+}
+
+function writePrintableDocument(win: Window, html: string, autoPrint = true) {
+  win.document.open();
+  win.document.write(html);
+  if (autoPrint) {
+    win.addEventListener('load', () => { window.setTimeout(() => { if (!win.closed) win.print(); }, 350); }, { once: true });
+  }
+  win.document.close();
 }
 
 export function openBrandedEticketPdf(
@@ -696,14 +700,12 @@ export function openBrandedEticketPdf(
     URL.revokeObjectURL(url);
     return;
   }
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
+  writePrintableDocument(win, html);
 }
 
 export function buildBoardingPassHtml(
   booking: BookingRecord,
-  options: { lang?: LangCode; autoPrint?: boolean } = {}
+  options: { lang?: LangCode } = {}
 ): string {
   const lang = options.lang ?? 'TR';
   const bp = booking.boardingPass;
@@ -874,7 +876,6 @@ export function buildBoardingPassHtml(
       <span>FlyToAspan 7/24: +90 531 460 61 75</span>
     </div>
   </div>
-  ${options.autoPrint !== false ? '<script>window.addEventListener("load", () => { setTimeout(() => window.print(), 350); });</script>' : ''}
 </body>
 </html>`;
   }
@@ -1059,7 +1060,6 @@ export function buildBoardingPassHtml(
       </div>
     </div>
   </div>
-  ${options.autoPrint !== false ? '<script>window.addEventListener("load", () => { setTimeout(() => window.print(), 350); });</script>' : ''}
 </body>
 </html>`;
 }
@@ -1090,9 +1090,7 @@ export function openBoardingPassPdf(
     URL.revokeObjectURL(url);
     return;
   }
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
+  writePrintableDocument(win, html, options.autoPrint !== false);
 }
 
 export function openRawEmailPreview(html: string): void {

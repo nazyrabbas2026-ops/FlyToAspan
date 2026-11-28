@@ -12,6 +12,7 @@ import {
   Users,
 } from 'lucide-react';
 import { api, apiMessage } from '../data/api';
+import { PanelMfaForm } from './PanelMfaForm';
 import { formatPrice } from '../data/mockData';
 import type { CurrencyCode, LangCode, UserProfile } from '../types';
 
@@ -21,6 +22,7 @@ interface AdminAnalyticsSectionProps {
   currentUser: UserProfile | null;
   onFlash: (msg: string) => void;
   onError: (msg: string) => void;
+  onAccountChanged?: (user: UserProfile) => void;
 }
 
 type AnalyticsData = Awaited<ReturnType<typeof api.adminAnalytics>>;
@@ -31,6 +33,7 @@ export const AdminAnalyticsSection: React.FC<AdminAnalyticsSectionProps> = ({
   currentUser,
   onFlash,
   onError,
+  onAccountChanged,
 }) => {
   const [range, setRange] = useState<'today' | '7d' | '30d' | 'custom'>('7d');
   const [customFrom, setCustomFrom] = useState(() => new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10));
@@ -42,8 +45,6 @@ export const AdminAnalyticsSection: React.FC<AdminAnalyticsSectionProps> = ({
   const [curPass, setCurPass] = useState('');
   const [newPass, setNewPass] = useState('');
   const [secBusy, setSecBusy] = useState(false);
-  const [totpSetup, setTotpSetup] = useState<{ secret: string; otpauthUri: string } | null>(null);
-  const [totpCode, setTotpCode] = useState('');
   const [totpActive, setTotpActive] = useState(Boolean(currentUser?.totpEnabled));
 
   const loadAnalytics = async (
@@ -80,36 +81,6 @@ export const AdminAnalyticsSection: React.FC<AdminAnalyticsSectionProps> = ({
       setCurPass('');
       setNewPass('');
       onFlash('Parolanız güncellendi ve diğer açık oturumlar sonlandırıldı.');
-    } catch (err) {
-      onError(apiMessage(err));
-    } finally {
-      setSecBusy(false);
-    }
-  };
-
-  const handleStart2fa = async () => {
-    setSecBusy(true);
-    onError('');
-    try {
-      const res = await api.setup2fa();
-      setTotpSetup(res);
-    } catch (err) {
-      onError(apiMessage(err));
-    } finally {
-      setSecBusy(false);
-    }
-  };
-
-  const handleEnable2fa = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSecBusy(true);
-    onError('');
-    try {
-      await api.enable2fa(totpCode);
-      setTotpActive(true);
-      setTotpSetup(null);
-      setTotpCode('');
-      onFlash('İki aşamalı doğrulama (2FA) hesabınızda aktifleştirildi.');
     } catch (err) {
       onError(apiMessage(err));
     } finally {
@@ -404,29 +375,10 @@ export const AdminAnalyticsSection: React.FC<AdminAnalyticsSectionProps> = ({
                 {totpActive ? 'Aktif' : 'Kapalı'}
               </span>
             </div>
-            {!totpActive && !totpSetup && (
-              <button type="button" disabled={secBusy} className="uf-quick-pill" onClick={handleStart2fa}>
-                2FA Kurulumunu Başlat (Authenticator)
-              </button>
-            )}
-            {totpSetup && (
-              <form onSubmit={handleEnable2fa} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>
-                  Authenticator uygulamanıza anahtarı ekleyin: <code style={{ fontWeight: 800 }}>{totpSetup.secret}</code>
-                </div>
-                <input
-                  required
-                  maxLength={6}
-                  className="modal-input"
-                  placeholder="6 haneli doğrulama kodu"
-                  value={totpCode}
-                  onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                />
-                <button type="submit" disabled={secBusy} className="btn-gold-nav" style={{ height: 36, justifyContent: 'center' }}>
-                  2FA’yı Aktifleştir
-                </button>
-              </form>
-            )}
+            <PanelMfaForm active={totpActive} onComplete={(user) => {
+              setTotpActive(true);
+              onAccountChanged?.(user);
+            }} />
           </div>
         </div>
       </div>

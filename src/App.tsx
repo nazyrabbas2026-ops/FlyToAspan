@@ -13,6 +13,7 @@ import {
 } from './components/SubPages';
 import { AuthModals } from './components/AuthModals';
 import { AdminLoginGate } from './components/AdminLoginGate';
+import { PanelMfaForm } from './components/PanelMfaForm';
 import { canOpenDeveloperWorkspace } from './data/developerAccess';
 import { DEFAULT_MARKUP, FlightDeal, refreshLiveExchangeRates } from './data/mockData';
 import { addCalendarDays, toCalendarDate } from './data/calendarDates';
@@ -170,7 +171,9 @@ export const App: React.FC = () => {
   const [sessionLoading, setSessionLoading] = useState(true);
   const [notice, setNotice] = useState('');
   const [bookingView, setBookingView] = useState<{ key: string; records: BookingRecord[] } | null>(null);
-  const canManage = user?.role === 'admin' || Boolean(user?.permissions && user.permissions.length > 0);
+  const needsPanelMfa = Boolean(user?.panelMfaRequired);
+  const canManage = !needsPanelMfa && (user?.role === 'admin' || Boolean(user?.permissions?.length));
+  const canOpenDeveloper = !needsPanelMfa && canOpenDeveloperWorkspace(user);
   const bookingKey = user && (page === 'panel' || (page === 'admin' && canManage)) ? user.id + ':' + page : '';
   const bookings = bookingView && bookingView.key === bookingKey ? bookingView.records : [];
 
@@ -524,7 +527,20 @@ export const App: React.FC = () => {
 
       <main>
         {notice && <p className="site-action-notice" role="alert">{notice}</p>}
-        {((page === 'admin' && !canManage) || (page === 'developer' && !canOpenDeveloperWorkspace(user))) && (
+        {(page === 'admin' || page === 'developer') && user && needsPanelMfa && (
+          <section className="results-workspace">
+            <div className="container" style={{ maxWidth: 560 }}>
+              <div className="panel-card">
+                <h1>Panel için iki aşamalı doğrulama</h1>
+                {user.totpEnabled
+                  ? <p>Devam etmek için doğrulama kodunuzla yeniden giriş yapın.</p>
+                  : <PanelMfaForm active={false} onComplete={setUser} />}
+                <button type="button" className="uf-quick-pill" onClick={() => void signOut()}>Çıkış yap</button>
+              </div>
+            </div>
+          </section>
+        )}
+        {!needsPanelMfa && ((page === 'admin' && !canManage) || (page === 'developer' && !canOpenDeveloper)) && (
           <AdminLoginGate
             developerWorkspace={page === 'developer'}
             lang={lang}
@@ -733,8 +749,8 @@ export const App: React.FC = () => {
             />
           )}
 
-          {page === 'developer' && user && canOpenDeveloperWorkspace(user) && (
-            <DeveloperWorkspace user={user} onLogout={signOut} />
+          {page === 'developer' && user && canOpenDeveloper && (
+            <DeveloperWorkspace user={user} onLogout={signOut} onAccountChanged={setUser} />
           )}
           {page === 'admin' && canManage && (
             <AdminPanelPage
@@ -742,6 +758,7 @@ export const App: React.FC = () => {
               onSelectLang={setLang}
               currency={currency}
               currentUser={user}
+              onAccountChanged={setUser}
               markup={markup}
               onUpdateMarkup={async (next) => setMarkup((await api.updatePricing(next)).markup)}
               bookings={bookings}

@@ -128,7 +128,13 @@ export function createBookingService({ db, normalizeSurname, fail, sendServiceMa
         WHERE (r.status IN ('completed', 'rejected')) = ?
         ORDER BY r.updated_at DESC, r.id DESC LIMIT 51 OFFSET ?
       `).all(Number(archived), (page - 1) * 50);
-      return { requests: rows.slice(0, 50).map((row) => serviceRecord(row, true)), hasNext: rows.length > 50 };
+      const canReadReferences = access.operator || access.refunds;
+      return {
+        requests: rows.slice(0, 50).map((row) => serviceRecord(canReadReferences ? row : {
+          ...row, pnr: '••••' + row.pnr.slice(-4), reference: '',
+        }, true)),
+        hasNext: rows.length > 50,
+      };
     }
     if (method === 'POST' && action === 'booking-service') {
       if (!access.operator) fail(403, 'Operasyon kaydı açma yetkiniz yok.');

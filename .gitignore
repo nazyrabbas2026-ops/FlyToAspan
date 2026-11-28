@@ -7,3 +7,12 @@ node_modules/
 .data/
 backups/
 test-results/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.key
+*.pem
+*.pfx
+*.ftaenc
+CANLIYA_CIKIS_ONCESI_DENETIM_RAPORU.md
+TESLIM_RAPORU_TR.md

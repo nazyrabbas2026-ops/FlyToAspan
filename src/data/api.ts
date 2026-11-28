@@ -148,9 +148,10 @@ export const api = {
   logout: () => request<{ ok: true }>('/auth/logout', 'POST'),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<{ ok: true; user: UserProfile }>('/auth/change-password', 'POST', { currentPassword, newPassword }),
-  setup2fa: () => request<{ secret: string; otpauthUri: string }>('/auth/2fa/setup', 'POST', {}),
-  enable2fa: (code: string) => request<{ ok: true; totpEnabled: boolean }>('/auth/2fa/enable', 'POST', { code }),
-  disable2fa: (password: string) => request<{ ok: true; totpEnabled: boolean }>('/auth/2fa/disable', 'POST', { password }),
+  setup2fa: (password: string, currentCode: string) =>
+    request<{ secret: string; otpauthUri: string }>('/auth/2fa/setup', 'POST', { password, currentCode }),
+  enable2fa: (code: string) =>
+    request<{ ok: true; user: UserProfile }>('/auth/2fa/enable', 'POST', { code }),
   myOrganization: (signal?: AbortSignal) =>
     request<{
       organization: Organization | null;

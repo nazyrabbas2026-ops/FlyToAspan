@@ -29,8 +29,27 @@ function normalizeKeyMaterial(raw) {
   return createHash('sha256').update(trimmed).digest();
 }
 
-export function resolvePiiKey(dbFilename = process.env.FLYTOASPAN_DB || '.data/flytoaspan.sqlite') {
+export function requireEncryptionKey(raw, name) {
+  const material = String(raw || '').trim();
+  if (/^[0-9a-fA-F]{64}$/.test(material)) return Buffer.from(material, 'hex');
+  const decoded = Buffer.from(material, 'base64');
+  if (decoded.length === 32 && decoded.toString('base64').replace(/=+$/, '') === material.replace(/=+$/, '')) {
+    return decoded;
+  }
+  throw new Error(name + ' canlı ortamda 32 baytlık hex veya base64 anahtar olmalıdır.');
+}
+
+export function requireDistinctProductionKeys() {
+  const pii = requireEncryptionKey(process.env.FLYTOASPAN_PII_KEY, 'FLYTOASPAN_PII_KEY');
+  const backup = requireEncryptionKey(process.env.FLYTOASPAN_BACKUP_KEY, 'FLYTOASPAN_BACKUP_KEY');
+  if (pii.equals(backup)) throw new Error('Veri ve yedek anahtarları farklı olmalıdır.');
+}
+
+export function resolvePiiKey(dbFilename = process.env.FLYTOASPAN_DB || '.data/flytoaspan.sqlite', {
+  requireProductionKey = process.env.NODE_ENV === 'production',
+} = {}) {
   const envKey = process.env.FLYTOASPAN_PII_KEY?.trim();
+  if (requireProductionKey) return requireEncryptionKey(envKey, 'FLYTOASPAN_PII_KEY');
   if (envKey) return normalizeKeyMaterial(envKey);
 
   const cacheId = String(dbFilename || ':memory:');
@@ -52,9 +71,6 @@ export function resolvePiiKey(dbFilename = process.env.FLYTOASPAN_DB || '.data/f
     return buf;
   }
 
-  if (process.env.NODE_ENV === 'production') {
-    console.warn('[SECURITY] FLYTOASPAN_PII_KEY env variable is not set; generating isolated local key file outside SQLite.');
-  }
   mkdirSync(dirname(keyFile), { recursive: true, mode: 0o700 });
   const generated = randomBytes(32);
   writeFileSync(keyFile, generated.toString('hex'), { mode: 0o600 });

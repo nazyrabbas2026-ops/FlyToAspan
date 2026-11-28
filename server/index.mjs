@@ -4,7 +4,18 @@ import { createServer } from 'node:http';
 import { extname, resolve } from 'node:path';
 import { createApi, normalizeEmail, checkPassword } from './api.mjs';
 import { createAccount, openDatabase } from './store.mjs';
+import { requireDistinctProductionKeys } from './crypto.mjs';
 import { startDailyXmlShowcaseScheduler } from './xml-showcase.mjs';
+
+const production = process.env.NODE_ENV === 'production';
+if (production) {
+  const configuredOrigin = process.env.FLYTOASPAN_ORIGIN;
+  const origin = configuredOrigin ? new URL(configuredOrigin) : null;
+  if (origin?.protocol !== 'https:' || configuredOrigin !== origin.origin) {
+    throw new Error('Canlı ortamda FLYTOASPAN_ORIGIN tam HTTPS kökeni olmalıdır.');
+  }
+  requireDistinctProductionKeys();
+}
 
 const buildDirectory = resolve(process.env.FLYTOASPAN_DIST || 'dist');
 const db = openDatabase();
@@ -123,7 +134,7 @@ const server = createServer({ requestTimeout: 20_000, headersTimeout: 10_000 }, 
       'X-Frame-Options': 'DENY',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
       'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src 'self' https://open.er-api.com https://eu.i.posthog.com https://us.i.posthog.com https://*.ingest.sentry.io; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+      'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src 'self' https://open.er-api.com; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
       'Cache-Control': rawPath.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
     };
     if (process.env.NODE_ENV === 'production') {
@@ -140,7 +151,7 @@ const server = createServer({ requestTimeout: 20_000, headersTimeout: 10_000 }, 
 });
 
 const port = Number(process.env.PORT || 4178);
-const host = process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1');
+const host = process.env.HOST || '127.0.0.1';
 server.listen(port, host, () => {
   console.log(`FlyToAspan: http://${host}:${port}`);
 });

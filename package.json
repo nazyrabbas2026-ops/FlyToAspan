@@ -9,6 +9,7 @@
     "preview": "node --env-file-if-exists=.env node_modules/vite/bin/vite.js preview",
     "start": "node --env-file-if-exists=.env server/index.mjs",
     "admin:create": "node --env-file-if-exists=.env server/create-admin.mjs",
+    "admin:recover-2fa": "node --env-file-if-exists=.env server/recover-panel-mfa.mjs",
     "backup:db": "node --env-file-if-exists=.env server/backup-db.mjs",
     "test:api": "node --test server/test-api.mjs",
     "test:e2e": "playwright test",
@@ -26,8 +27,8 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.3",
+    "@vitejs/plugin-react": "6.3.0",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "vite": "8.4.0"
   }
 }

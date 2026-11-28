@@ -177,6 +177,7 @@ interface AdminPanelPageProps {
   onSelectLang?: (next: LangCode) => void;
   currency?: CurrencyCode;
   currentUser?: UserProfile | null;
+  onAccountChanged?: (user: UserProfile) => void;
   markup: AdminMarkupConfig;
   onUpdateMarkup: (next: AdminMarkupConfig) => Promise<void>;
   bookings: BookingRecord[];
@@ -697,6 +698,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   onSelectLang,
   currency = 'TRY',
   currentUser = null,
+  onAccountChanged,
   markup,
   onUpdateMarkup,
   bookings,
@@ -730,7 +732,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
   const canManageBookings = isSuperAdmin || userPerms.includes('bookings.manage');
   const canProcessRefunds = isSuperAdmin || userPerms.includes('refunds.process') || userPerms.includes('bookings.manage');
   const canCancelRequest = isSuperAdmin || canManageBookings || userPerms.includes('bookings.cancel_request');
-  const canViewFinance = isSuperAdmin || userPerms.includes('finance.view') || userPerms.includes('finance.manage');
+  const canViewFinance = isSuperAdmin || userPerms.includes('finance.manage') || (userPerms.includes('finance.view') && userPerms.includes('refunds.process'));
   const canManageFinance = isSuperAdmin || userPerms.includes('finance.manage');
   const canViewAnalytics = isSuperAdmin || userPerms.includes('analytics.view');
   const canEditFx = isSuperAdmin || userPerms.includes('fx.manage');
@@ -1951,6 +1953,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                         </div>
                       </div>
                       <div className="panel-actions">
+                        {(canManageBookings || canProcessRefunds) && (
                         <button
                           type="button"
                           className="uf-quick-pill"
@@ -1959,6 +1962,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                           <Download size={13} style={{ verticalAlign: 'middle', marginRight: 5 }} />
                           CSV İndir
                         </button>
+                        )}
                         <button
                           type="button"
                           className="btn-gold-nav"
@@ -3649,6 +3653,7 @@ export const AdminPanelPage: React.FC<AdminPanelPageProps> = ({
                   lang={activePanelLang}
                   currency={currency}
                   currentUser={currentUser}
+                  onAccountChanged={onAccountChanged}
                   onFlash={flash}
                   onError={setActionError}
                 />

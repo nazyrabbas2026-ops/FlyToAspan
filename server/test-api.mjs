@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import test from 'node:test';
 import { createApi } from './api.mjs';
-import { createAccount, openDatabase } from './store.mjs';
+import { createAccount, openDatabase, recoverPanelMfa } from './store.mjs';
+import { computeTotpCode } from './crypto.mjs';
+import { trustedProxyIps } from './network.mjs';
 
 function startTestServer(options = {}) {
   const db = openDatabase(':memory:');
@@ -1303,7 +1305,8 @@ test('Flight after-sales verifies access, deduplicates requests and records manu
   env.db.prepare('INSERT INTO bookings (id, pnr, surname, status, details, created_at) VALUES (?, ?, ?, ?, ?, ?)')
     .run('a'.repeat(32), booking.pnr, 'test', 'Onaylandı', JSON.stringify({
       type: 'Uçak', demo: false, contactEmail: 'customer@example.test', passenger: 'Private Passenger',
-      legs: [{ direction: 'Gidiş' }, { direction: 'Dönüş' }], passengersDetail: [{}, {}],
+      contactPhone: '+900000000000', boardingPass: { bcbpString: 'PRIVATE-PASS' },
+      legs: [{ direction: 'Gidiş' }, { direction: 'Dönüş' }], passengersDetail: [{ tcOrPassport: 'PRIVATE-DOC' }, {}],
     }), Date.now());
   const submit = (path, body, cookie) => call(env.origin, path, { method: 'POST', cookie, body });
   const queue = '/api/admin/booking-service';
@@ -1333,6 +1336,22 @@ test('Flight after-sales verifies access, deduplicates requests and records manu
 
   assert.equal((await call(env.origin, queue, { cookie: stranger })).status, 403);
   assert.equal((await call(env.origin, queue, { cookie: analyst })).json.requests.length, 1);
+  const reported = await call(env.origin, '/api/admin/bookings', { cookie: analyst });
+  assert.equal(reported.status, 200);
+  assert.equal(reported.json.bookings[0].pnr, '••••ST12');
+  assert.equal(reported.json.bookings[0].passenger, '—');
+  for (const field of ['contactEmail', 'contactPhone', 'passengersDetail', 'boardingPass']) {
+    assert.equal(reported.json.bookings[0][field], undefined);
+  }
+  assert.equal((await call(env.origin, '/api/admin/bookings/' + 'a'.repeat(32) + '/history', { cookie: analyst })).status, 403);
+  assert.equal((await call(env.origin, '/api/admin/crm/quotes', { cookie: analyst })).status, 403);
+  const members = await call(env.origin, '/api/admin/users', { cookie: analyst });
+  assert.equal(members.status, 200);
+  assert.ok(members.json.users.every((member) => !member.email.includes('@') && member.phone === ''));
+  const loginActivity = await call(env.origin, '/api/admin/analytics?activity=1', { cookie: analyst });
+  assert.ok(loginActivity.json.activity.accounts.length > 0);
+  assert.ok(loginActivity.json.activity.accounts.every((account) => !account.email.includes('@')));
+
   const row = (await call(env.origin, queue, { cookie: admin })).json.requests[0];
   const update = (record, body, cookie = admin) =>
     call(env.origin, queue + '/' + record.id, { method: 'PATCH', cookie, body: { revision: record.revision, ...body } });
@@ -1363,4 +1382,75 @@ test('Flight after-sales verifies access, deduplicates requests and records manu
   }
   env.db.prepare('UPDATE booking_service_access SET expires_at = 0').run();
   assert.equal((await submit(list, customer)).status, 403);
+});
+
+
+test('Panel accounts enroll and rotate 2FA with fresh credentials; recovery revokes sessions', async (t) => {
+  const notices = [];
+  const env = await startTestServer({
+    requirePanelMfa: true,
+    sendSecurityMail: async (notice) => { notices.push(notice); return { sent: true }; },
+  });
+  t.after(() => env.close());
+  const email = 'panel-mfa@example.test';
+  const password = 'OperationsVerification2026!';
+  const account = await createAccount(env.db, {
+    email, password, role: 'admin', firstName: 'Test', lastName: 'Ops',
+    phone: '', accountType: 'individual',
+  });
+  const post = (path, body, cookie) => call(env.origin, path, { method: 'POST', body, cookie });
+  const login = (totpCode) => post('/api/auth/login', { email, password, totpCode });
+  const queue = (cookie) => call(env.origin, '/api/admin/bookings', { cookie });
+  const setup = (cookie, body) => post('/api/auth/2fa/setup', body, cookie);
+  const enable = (cookie, code) => post('/api/auth/2fa/enable', { code }, cookie);
+
+  const first = await login();
+  const second = await login();
+  assert.ok(first.cookie && second.cookie && first.cookie !== second.cookie);
+  assert.equal(first.json.user.panelMfaRequired, true);
+  const refreshed = await call(env.origin, '/api/session', { cookie: first.cookie });
+  assert.equal(refreshed.json.user.panelMfaRequired, true);
+  assert.equal((await queue(first.cookie)).status, 403);
+  assert.equal((await setup(first.cookie, { password: 'wrong' })).status, 401);
+  const enrollment = await setup(first.cookie, { password });
+  assert.equal(enrollment.status, 200);
+  const enrollmentCode = computeTotpCode(enrollment.json.secret);
+  assert.equal((await enable(second.cookie, enrollmentCode)).status, 400);
+  const enabled = await enable(first.cookie, enrollmentCode);
+  assert.equal(enabled.status, 200);
+  assert.equal(enabled.json.user.panelMfaRequired, false);
+  assert.equal((await queue(enabled.cookie)).status, 200);
+  assert.equal((await queue(second.cookie)).status, 401);
+  assert.match(env.db.prepare('SELECT totp_secret FROM users WHERE id = ?').get(account.id).totp_secret, /^enc:v1:/);
+
+  assert.equal((await setup(enabled.cookie, { password })).status, 401);
+  assert.equal((await post('/api/auth/2fa/disable', { password }, enabled.cookie)).status, 403);
+  const rotation = await setup(enabled.cookie, { password, currentCode: computeTotpCode(enrollment.json.secret) });
+  assert.equal(rotation.status, 200);
+  assert.equal((await login()).json.requires2fa, true);
+  const priorFactor = await login(computeTotpCode(enrollment.json.secret));
+  assert.equal(priorFactor.status, 200);
+  const rotated = await enable(enabled.cookie, computeTotpCode(rotation.json.secret));
+  assert.equal(rotated.status, 200);
+  assert.equal((await queue(priorFactor.cookie)).status, 401);
+  assert.equal((await queue(rotated.cookie)).status, 200);
+  assert.equal((await login(computeTotpCode(rotation.json.secret))).status, 200);
+  assert.deepEqual(notices.map(({ to }) => to), [email, email]);
+
+  assert.equal(recoverPanelMfa(env.db, email), true);
+  assert.equal((await queue(rotated.cookie)).status, 401);
+  const afterRecovery = await login();
+  assert.equal(afterRecovery.json.user.panelMfaRequired, true);
+  assert.equal((await queue(afterRecovery.cookie)).status, 403);
+});
+
+test('Only a configured ingress peer can provide canonical request metadata', () => {
+  const network = trustedProxyIps('127.0.0.1,::1');
+  const req = (peer, headers, encrypted = false) => ({ socket: { remoteAddress: peer, encrypted }, headers });
+  const canonical = { 'x-real-ip': '192.0.2.19', 'x-forwarded-proto': 'https', 'x-forwarded-for': '198.51.100.19' };
+  assert.deepEqual(network.resolve(req('192.0.2.18', canonical)), { ip: '192.0.2.18', protocol: 'http' });
+  assert.deepEqual(network.resolve(req('::ffff:127.0.0.1', canonical)), { ip: '192.0.2.19', protocol: 'https' });
+  assert.deepEqual(network.resolve(req('::1', { 'x-real-ip': '192.0.2.1, 192.0.2.2' })), { ip: '::1', protocol: 'http' });
+  assert.deepEqual(trustedProxyIps('').resolve(req('::1', canonical, true)), { ip: '::1', protocol: 'https' });
+  assert.throws(() => trustedProxyIps('localhost'), /FLYTOASPAN_TRUSTED_PROXY_IPS/);
 });
