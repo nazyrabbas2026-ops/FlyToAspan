@@ -227,8 +227,92 @@ export function buildBrandedEticketHtml(
     formatDisplayDate(booking.date, lang) +
     (booking.returnDate ? ` → ${formatDisplayDate(booking.returnDate, lang)}` : '');
 
-  const eticketNo = booking.eticketNumber || `235-${booking.pnr.replace(/[^A-Z0-9]/g, '').slice(0, 8)}01`;
+  const eticketNo = isDemo
+    ? `DENEME-${booking.pnr.replace(/[^A-Z0-9]/g, '').slice(0, 8)}`
+    : (booking.eticketNumber || `235-${booking.pnr.replace(/[^A-Z0-9]/g, '').slice(0, 8)}01`);
   const barcodeSvg = buildBarcodeSvg(booking.pnr + eticketNo);
+  const pdfCopy = {
+    TR: {
+      toolbarTitle: isDemo ? 'Deneme Rezervasyon Özeti' : 'E-Bilet & Voucher Önizleme',
+      printBtn: 'PDF Olarak Kaydet / Yazdır',
+      closeBtn: 'Kapat',
+      issuedLbl: 'Düzenlenme',
+      pnrLbl: 'Rezervasyon Kodu (PNR)',
+      docNoLbl: isDemo ? 'Deneme Referans No' : 'E-Bilet / Belge No',
+      paxLbl: 'Yolcu / Rezervasyon Sahibi',
+      dateLbl: 'Seyahat / Hizmet Tarihi',
+      catLbl: 'Hizmet Kategorisi',
+      channelLbl: 'Satış Kanalı / Acente',
+      priceLbl: isDemo ? 'Örnek Tutar (Tahsilat Yapılmadı · Deneme Kaydı)' : 'Doğrulanmış Toplam Tutar (Vergi & Hizmet Bedeli Dahil)',
+      tryEq: 'TL Karşılığı',
+      depLbl: 'Kalkış',
+      arrLbl: 'Varış',
+      bagLbl: 'Bagaj',
+      demoAlert: 'DENEME KAYDI: Bu belge yerel önizleme/deneme kaydıdır; ödeme tahsil edilmemiştir ve gerçek bir havayolu/otel e-bileti değildir.',
+      noteTitle: 'Önemli Seyahat Bilgilendirmesi',
+      noteBody: 'Dış hat uçuşlarında kalkıştan en az 3 saat, iç hat uçuşlarında en az 2 saat önce havalimanında bulunmanız ve geçerli kimlik/pasaportunuzu yanınızda taşımanız gerekmektedir.',
+    },
+    EN: {
+      toolbarTitle: isDemo ? 'Demo Reservation Summary' : 'E-Ticket & Voucher Preview',
+      printBtn: 'Save as PDF / Print',
+      closeBtn: 'Close',
+      issuedLbl: 'Issued',
+      pnrLbl: 'Booking Reference (PNR)',
+      docNoLbl: isDemo ? 'Demo Reference No' : 'E-Ticket / Document No',
+      paxLbl: 'Passenger / Guest',
+      dateLbl: 'Travel / Service Date',
+      catLbl: 'Service Category',
+      channelLbl: 'Sales Channel / Agency',
+      priceLbl: isDemo ? 'Sample Amount (No Payment Taken · Demo Record)' : 'Verified Total Amount (Taxes & Fees Included)',
+      tryEq: 'TRY Equivalent',
+      depLbl: 'Departure',
+      arrLbl: 'Arrival',
+      bagLbl: 'Baggage',
+      demoAlert: 'DEMO RECORD: This summary was created in local preview/demo mode. No payment has been charged and this is not a live issued ticket.',
+      noteTitle: 'Important Travel Notice',
+      noteBody: 'Please arrive at the airport at least 3 hours before international flights and 2 hours before domestic flights with a valid passport or ID.',
+    },
+    RU: {
+      toolbarTitle: isDemo ? 'Демо-резюме бронирования' : 'Предпросмотр билета и ваучера',
+      printBtn: 'Сохранить PDF / Печать',
+      closeBtn: 'Закрыть',
+      issuedLbl: 'Оформлено',
+      pnrLbl: 'Код бронирования (PNR)',
+      docNoLbl: isDemo ? 'Демо-номер записи' : '№ Эл. билета / документа',
+      paxLbl: 'Пассажир / Клиент',
+      dateLbl: 'Дата поездки / услуги',
+      catLbl: 'Категория услуги',
+      channelLbl: 'Канал продаж / Агентство',
+      priceLbl: isDemo ? 'Примерная сумма (Оплата не списана · Демо)' : 'Подтверждённая сумма (включая сборы)',
+      tryEq: 'В турецких лирах',
+      depLbl: 'Вылет',
+      arrLbl: 'Прилёт',
+      bagLbl: 'Багаж',
+      demoAlert: 'ДЕМО-ЗАПИСЬ: Этот документ создан в тестовом режиме; оплата не производилась, документ не является действующим билетом.',
+      noteTitle: 'Важная информация для поездки',
+      noteBody: 'Рекомендуем прибыть в аэропорт минимум за 3 часа до международного и за 2 часа до внутреннего рейса с действующим паспортом.',
+    },
+    KK: {
+      toolbarTitle: isDemo ? 'Демо брондау қорытындысы' : 'Билет және ваучер алдын ала қарау',
+      printBtn: 'PDF сақтау / Басып шығару',
+      closeBtn: 'Жабу',
+      issuedLbl: 'Рәсімделген уақыты',
+      pnrLbl: 'Брондау коды (PNR)',
+      docNoLbl: isDemo ? 'Демо сілтеме №' : 'E-Билет / Құжат №',
+      paxLbl: 'Жолаушы / Тапсырыс беруші',
+      dateLbl: 'Сапар / Қызмет күні',
+      catLbl: 'Қызмет санаты',
+      channelLbl: 'Сату арнасы / Агенттік',
+      priceLbl: isDemo ? 'Үлгі сома (Төлем алынбады · Демо жазба)' : 'Расталған жалпы сома (салықтармен бірге)',
+      tryEq: 'TRY баламасы',
+      depLbl: 'Ұшу',
+      arrLbl: 'Қону',
+      bagLbl: 'Жолжүк',
+      demoAlert: 'ДЕМО ЖАЗБА: Бұл құжат сынақ режимінде жасалды; төлем алынбаған және нақты әуе билеті болып табылмайды.',
+      noteTitle: 'Маңызды сапар ақпараты',
+      noteBody: 'Халықаралық рейстерге кемінде 3 сағат, ішкі рейстерге 2 сағат бұрын жарамды төлқұжатпен әуежайға келуіңізді сұраймыз.',
+    },
+  }[lang];
   const originUrl = options.origin ?? (typeof window !== 'undefined' ? window.location.origin : '');
   const logoUrl = originUrl ? `${originUrl}/images/logo-light.png` : '/images/logo-light.png';
 
@@ -505,10 +589,10 @@ export function buildBrandedEticketHtml(
 </head>
 <body>
   <div class="toolbar">
-    <div><strong>FlyToAspan</strong> · E-Bilet &amp; Voucher Önizleme (${escapeHtml(booking.pnr)})</div>
+    <div><strong>FlyToAspan</strong> · ${escapeHtml(pdfCopy.toolbarTitle)} (${escapeHtml(booking.pnr)})</div>
     <div>
-      <button type="button" onclick="window.print()">PDF Olarak Kaydet / Yazdır</button>
-      <button type="button" class="close-btn" onclick="window.close()">Kapat</button>
+      <button type="button" onclick="window.print()">${escapeHtml(pdfCopy.printBtn)}</button>
+      <button type="button" class="close-btn" onclick="window.close()">${escapeHtml(pdfCopy.closeBtn)}</button>
     </div>
   </div>
 
@@ -520,17 +604,19 @@ export function buildBrandedEticketHtml(
       </div>
       <div style="text-align: right;">
         <span class="status-pill">${escapeHtml(booking.status.toUpperCase())}</span>
-        <div style="font-size: 11.5px; color: #CBD5E1; margin-top: 6px;">Düzenlenme: ${escapeHtml(issuedAt)}</div>
+        <div style="font-size: 11.5px; color: #CBD5E1; margin-top: 6px;">${escapeHtml(pdfCopy.issuedLbl)}: ${escapeHtml(issuedAt)}</div>
       </div>
     </div>
 
+    ${isDemo ? `<div style="background:#FFFBEB;border-bottom:1.5px solid #F59E0B;padding:12px 32px;font-size:12.5px;font-weight:700;color:#92400E;">⚠️ ${escapeHtml(pdfCopy.demoAlert)}</div>` : ''}
+
     <div class="pnr-band">
       <div>
-        <div class="lbl">Rezervasyon Kodu (PNR)</div>
+        <div class="lbl">${escapeHtml(pdfCopy.pnrLbl)}</div>
         <div class="pnr-code">${escapeHtml(booking.pnr)}</div>
       </div>
       <div>
-        <div class="lbl">E-Bilet / Belge No</div>
+        <div class="lbl">${escapeHtml(pdfCopy.docNoLbl)}</div>
         <div class="val" style="font-family: ui-monospace, monospace;">${escapeHtml(eticketNo)}</div>
       </div>
       <div style="text-align: right;">
@@ -547,34 +633,34 @@ export function buildBrandedEticketHtml(
 
       <div class="grid">
         <div class="box">
-          <div class="lbl">Yolcu / Rezervasyon Sahibi</div>
+          <div class="lbl">${escapeHtml(pdfCopy.paxLbl)}</div>
           <div class="val">${escapeHtml(booking.passenger)}</div>
           ${contactParts.length > 0 ? `<div style="font-size: 12px; color: #475569; margin-top: 4px;">${contactParts.join(' · ')}</div>` : ''}
         </div>
         <div class="box">
-          <div class="lbl">Seyahat / Hizmet Tarihi</div>
+          <div class="lbl">${escapeHtml(pdfCopy.dateLbl)}</div>
           <div class="val">${escapeHtml(travelDateStr)}</div>
         </div>
         <div class="box">
-          <div class="lbl">Hizmet Kategorisi${booking.providerSource ? ' / Kaynak' : ''}</div>
+          <div class="lbl">${escapeHtml(pdfCopy.catLbl)}${booking.providerSource ? ' / Kaynak' : ''}</div>
           <div class="val">${escapeHtml(booking.type)}${booking.providerSource ? ` · ${escapeHtml(booking.providerSource)}` : ''}</div>
         </div>
         <div class="box">
-          <div class="lbl">Satış Kanalı / Acente</div>
+          <div class="lbl">${escapeHtml(pdfCopy.channelLbl)}</div>
           <div class="val">${escapeHtml(booking.organizationName || 'FlyToAspan · Infinitive Travel')}${booking.sellerName ? ` (${escapeHtml(booking.sellerName)})` : ''}</div>
         </div>
       </div>
 
       <div class="price-box">
         <div>
-          <div class="lbl" style="color: #0369A1;">Toplam Ödenen Tutar (Vergi &amp; Hizmet Bedeli Dahil)</div>
-          <div style="font-size: 12px; color: #475569;">TL Karşılığı: ₺${escapeHtml(formatTRY(booking.price))}</div>
+          <div class="lbl" style="color: #0369A1;">${escapeHtml(pdfCopy.priceLbl)}</div>
+          <div style="font-size: 12px; color: #475569;">${escapeHtml(pdfCopy.tryEq)}: ₺${escapeHtml(formatTRY(booking.price))}</div>
         </div>
         <div class="price-main">${escapeHtml(formatPrice(booking.price, currency))}</div>
       </div>
 
       <div class="notes">
-        <strong>Önemli Seyahat Bilgilendirmesi:</strong> Dış hat uçuşlarında kalkıştan en az 3 saat, iç hat uçuşlarında en az 2 saat önce havalimanında bulunmanız ve geçerli kimlik/pasaportunuzu yanınızda taşımanız gerekmektedir. Online Check-In ve değişiklik işlemleri için <strong>flytoaspan.com</strong> üzerinden PNR kodunuz ve soyadınızla sorgulama yapabilirsiniz.
+        <strong>${escapeHtml(pdfCopy.noteTitle)}:</strong> ${escapeHtml(pdfCopy.noteBody)}
       </div>
     </div>
 

@@ -7,7 +7,41 @@ Bu doküman, bir uçak bileti / otel / VIP transfer satış platformunu canlı o
 - Node.js 24 veya üzeriyle `npm install` ve `npm run dev` çalıştırın. Derlenmiş sürüm için `npm run build` ve `npm start` kullanın. Ana sayfa ve paylaşılabilir adresler aynı sunucudan açılır.
 - Üye hesabı sitedeki **Kayıt Ol** ekranından açılır. Yönetici hesabını sunucunun terminalinde `npm run admin:create` komutuyla oluşturun ve `/yonetim` adresinden giriş yapın. Parola yazılırken ekranda görünmez.
 - Hesaplar, rezervasyonlar ve fiyat kuralları varsayılan olarak `.data/flytoaspan.sqlite` dosyasında saklanır. İsteğe bağlı `FLYTOASPAN_DB` değişkeni kalıcı veritabanının konumunu belirler. Dış erişimde HTTPS sağlayan vekil sunucu kullanın ve `FLYTOASPAN_ORIGIN` değerini sitenin tam HTTPS adresi olarak ayarlayın.
-- Uçuş, otel ve transfer kayıtları şu aşamada denemedir. Anlaşmalı sağlayıcının test erişimi geldiğinde İstanbul–Antalya gidiş-dönüş fiyatı, ödeme, biletleme ve iptal uçtan uca doğrulanacaktır. Parola sıfırlama, e-posta doğrulaması ve iki aşamalı giriş henüz bağlı değildir.
+- Uçuş, otel, transfer ve tur kayıtları şu aşamada yerel deneme envanteridir. Anlaşmalı tedarikçilerin (Amadeus / Buranus / SAMO-Tour / Hotelbeds) ve Sanal POS'un (iyzico / PayTR) test erişimi geldiğinde İstanbul–Antalya gidiş-dönüş fiyatı, ödeme, biletleme ve iptal uçtan uca doğrulanacaktır.
+
+---
+
+## 0. Canlıya Çıkış Altyapısı, Hosting, Anahtar Yönetimi ve Şifreli Yedekleme
+
+### 0.1 Alan Adı, Sunucu ve Staging Ortamı
+- **Alan Adı & HTTPS:** Şirket alan adı (`flytoaspan.com` / `www.flytoaspan.com`) arkasında TLS 1.3 + HSTS zorunlu reverse proxy (Nginx / Caddy veya Cloudflare) çalıştırın.
+- **Staging (Ön Yayın) Ortamı:** Canlıya çıkmadan önce `staging.flytoaspan.com` alt alan adında ayrı bir `FLYTOASPAN_DB` dosyası ve ayrı şifreleme anahtarıyla tüm tedarikçi, POS ve sürüm güncellemelerini doğrulayın.
+- **Kalıcı Disk & Yalıtılmış Veri Dizini:** SQLite dosyası (`FLYTOASPAN_DB=/var/lib/flytoaspan/flytoaspan.sqlite`) kalıcı bir disk biriminde (`chmod 700 /var/lib/flytoaspan`) tutulmalı, uygulama derleme/deploy sırasında üzerine yazılmamalıdır.
+
+### 0.2 Şifreleme Anahtarlarının Ayrı Yönetimi (AES-256-GCM)
+- Hassas yolcu belgeleri (TCKN / pasaport numarası) veritabanında `enc:v1:...` biçiminde **AES-256-GCM** ile şifrelenir.
+- Anahtar **asla kaynak kodda veya veritabanında saklanmaz**:
+  - Üretimde `FLYTOASPAN_PII_KEY` (32 byte hex veya base64) ortam değişkenini gizli kasa / sunucu secret store üzerinden verin.
+  - Üretim yedekleri için farklı bir 32 baytlık `FLYTOASPAN_BACKUP_KEY` tanımlayın. Yedekleme ve geri yükleme, iki anahtar da geçerli ve farklı olduğunda çalışır. Anahtarları veritabanı ve yedek dosyalarından ayrı saklayın.
+  - Geliştirme ortamında değişken verilmezse anahtar otomatik olarak DB klasörünün dışındaki `0600` izinli bir anahtar dosyasında oluşturulur.
+
+### 0.3 Şifreli SQLite Yedekleme ve Geri Yükleme Doğrulaması
+- SQLite canlı iken tutarlı anlık kopya (`VACUUM INTO`) alıp AES-256-GCM + SHA-256 bütünlük doğrulamasıyla şifreleyen betik dahildir:
+  - **Yedek alma:** Üretim ortam değişkenleriyle `NODE_ENV=production npm run backup:db` komutunu çalıştırın. `FLYTOASPAN_BACKUP_DIR` yedek dizinini belirler.
+  - **Geri yükleme ve bütünlük testi (`PRAGMA integrity_check`):** Aynı anahtarlarla `NODE_ENV=production node --env-file-if-exists=.env server/backup.mjs restore /var/backups/flytoaspan/backup.ftaenc /tmp/verify-yeni.sqlite` çalıştırın. Hedef dosya yeni olmalıdır. Geri yüklenen kopyada bir rezervasyon ve şifreli yolcu alanının okunabildiğini doğrulayın.
+- Günlük otomatik zamanlanmış görev (cron) ile yedek alın, farklı bir sunucu/nesne depolamaya kopyalayın ve haftada bir geçici dosyaya geri yükleyerek bütünlüğü test edin.
+
+### 0.4 Yönetici, Ekip ve Geliştirici + Analist (Nazyr) Hesapları
+- **Site Sahibi (Süper Admin):** `npm run admin:create` ile oluşturulur; tam yetkiye, iade/silme/rol değiştirme ve 2FA yönetimine sahiptir.
+- **Geliştirici + Analist (Nazyr):** Sunucu başlangıcında `FLYTOASPAN_DEV_ANALYST_EMAIL` ve `FLYTOASPAN_DEV_ANALYST_PASSWORD` (min 12 karakter) ile kişiye özel tanımlanabilir veya Süper Admin tarafından **Geliştirici + Analist (Nazyr)** rol şablonuyla atanır (`bookings.view_all`, `analytics.view`, `finance.view`). Bu hesap üye, operasyon, satış, hata ve analiz verilerini görür; **iade, silme, rol verme ve sağlayıcı anahtarı değiştirme yetkisi kapalıdır**.
+- **2FA (TOTP) & Oturum İptali:** Tüm canlı yönetici hesapları paneldeki **Analiz & Site Sağlığı → Hesap Güvenliği** bölümünden TOTP 2FA (Google Authenticator / 1Password) açmalıdır. Parola değişimi diğer tüm açık oturumları otomatik sonlandırır.
+
+### 0.5 Analiz, Hata İzleme ve Çerez Rızası (PostHog, Cloudflare, Sentry)
+- **Birinci Taraf Panel Metrikleri:** Üye sayısı, giriş hareketleri, canlı/deneme satış & iade ayrımı, şüpheli trafik uyarıları ve dönüşüm hunisi `/yonetim#analytics` ekranında otomatik sunulur.
+- **İsteğe Bağlı Dış Araçlar (Site Sahibi Onayı ile):**
+  - `POSTHOG_HOST` / `POSTHOG_API_KEY`: Yalnızca kullanıcı analitik çerezine onay verdikten sonra etkinleştirilir; pasaport, TCKN, e-posta, telefon gibi **PII alanları gönderilmez**.
+  - `CLOUDFLARE_ZONE_ID` / WAF: Bot, scraper ve DDoS koruması.
+  - `SENTRY_DSN`: Sunucu ve istemci hatalarını toplar; yolcu PII ve oturum token'ları `scrubSensitiveFields` ile temizlenir.
 
 ---
 

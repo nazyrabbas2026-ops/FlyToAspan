@@ -5,16 +5,30 @@ import {
   createAccount,
   crmQuoteRecord,
   crmTaskRecord,
+  deriveLifecycleStates,
+  encryptBookingDetails,
+  encryptQuoteMetadata,
   financeEntryRecord,
   openDatabase,
   orgLedgerRecord,
   organizationRecord,
   priceAlertRecord,
+  recordAnalyticsEvent,
   savedPassengerRecord,
   setAccountPassword,
   verifyPassword,
   writeAuditLog,
 } from './store.mjs';
+import {
+  buildOtpAuthUri,
+  encryptPii,
+  generateTotpSecret,
+  verifyTotpCode,
+} from './crypto.mjs';
+import {
+  DEFAULT_MARKUP,
+  verifyAndComputeBookingPrice,
+} from './pricing.mjs';
 import {
   sendBoardingPassEmail,
   sendBookingConfirmationEmail,
@@ -30,8 +44,13 @@ const VALID_PERMISSIONS = new Set([
   'tours.sell',
   'bookings.view_own',
   'bookings.view_org',
+  'bookings.view_all',
   'bookings.cancel_request',
   'bookings.manage',
+  'refunds.process',
+  'finance.view',
+  'finance.manage',
+  'analytics.view',
   'inventory.manage',
   'flights.manual',
   'pricing.edit',
@@ -205,20 +224,85 @@ function resolveClientIp(req) {
   return req.socket.remoteAddress ?? 'unknown';
 }
 
-function newDemoBooking(db, body, owner) {
+function publicBookingSummary(rec) {
+  const safeBoardingPass = rec.boardingPass
+    ? {
+        seat: rec.boardingPass.seat,
+        passengerSeats: rec.boardingPass.passengerSeats,
+        airlinePnr: rec.boardingPass.airlinePnr,
+        eticketNo: rec.boardingPass.eticketNo,
+        terminal: rec.boardingPass.terminal,
+        gate: rec.boardingPass.gate,
+        boardingTime: rec.boardingPass.boardingTime,
+        gateCloseTime: rec.boardingPass.gateCloseTime,
+        boardingGroup: rec.boardingPass.boardingGroup,
+        sequenceNo: rec.boardingPass.sequenceNo,
+        baggageDropNote: rec.boardingPass.baggageDropNote,
+        mobilePassUrl: rec.boardingPass.mobilePassUrl,
+        officialQrDataUrl: rec.boardingPass.officialQrDataUrl,
+        officialPassDataUrl: rec.boardingPass.officialPassDataUrl,
+        officialPassFileName: rec.boardingPass.officialPassFileName,
+        officialPassMime: rec.boardingPass.officialPassMime,
+        bcbpString: rec.boardingPass.bcbpString,
+      }
+    : undefined;
+  return {
+    id: rec.id,
+    pnr: rec.pnr,
+    status: rec.status,
+    paymentStatus: rec.paymentStatus,
+    ticketingStatus: rec.ticketingStatus,
+    refundStatus: rec.refundStatus,
+    type: rec.type,
+    title: rec.title,
+    subtitle: rec.subtitle,
+    date: rec.date,
+    returnDate: rec.returnDate,
+    passenger: rec.passenger,
+    legs: rec.legs,
+    price: rec.price,
+    demo: rec.demo,
+    departTime: rec.departTime,
+    arriveTime: rec.arriveTime,
+    flightNumber: rec.flightNumber,
+    airline: rec.airline,
+    baggage: rec.baggage,
+    cabin: rec.cabin,
+    duration: rec.duration,
+    autoCheckin: rec.autoCheckin,
+    checkinStatus: rec.checkinStatus,
+    assignedSeat: rec.assignedSeat,
+    boardingPass: safeBoardingPass,
+    createdAt: rec.createdAt,
+  };
+}
+
+function canViewFullBooking(user, row) {
+  if (!user || (user.status && user.status !== 'active')) return false;
+  if (user.role === 'admin') return true;
+  if (hasPerm(user, 'bookings.view_all')) return true;
+  if (row.owner_id === user.id || row.sold_by_user_id === user.id) return true;
+  if (hasPerm(user, 'bookings.view_org') && user.organization_id && row.organization_id === user.organization_id) return true;
+  return false;
+}
+
+function newDemoBooking(db, body, owner, { isAdminManual = false, computedPricing = null } = {}) {
   const type = text(body.type, 10);
   if (!['Uçak', 'Otel', 'Transfer', 'Tur'].includes(type)) fail(400, 'Rezervasyon türü geçersiz.');
   const surname = normalizeSurname(body.lookupSurname);
   const date = isoDate(body.date);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  if (!isAdminManual && date < todayIso) fail(400, 'Geçmiş tarihli rezervasyon oluşturulamaz.');
   const returnDate = body.returnDate ? isoDate(body.returnDate) : undefined;
   if (returnDate && returnDate < date) fail(400, 'Dönüş tarihi başlangıç tarihinden önce olamaz.');
-  if (!Number.isFinite(body.price) || body.price <= 0 || body.price > 10_000_000) fail(400, 'Tutar geçersiz.');
-  const salePrice = Math.round(body.price * 100) / 100;
-  const rawNetCost = Number(body.netCostTRY);
+  const effectivePrice = computedPricing?.price ?? body.price;
+  if (!Number.isFinite(effectivePrice) || effectivePrice <= 0 || effectivePrice > 10_000_000) fail(400, 'Tutar geçersiz.');
+  const salePrice = Math.round(effectivePrice * 100) / 100;
+  const rawNetCost = computedPricing?.netCostTRY !== undefined ? computedPricing.netCostTRY : Number(body.netCostTRY);
   const netCostTRY = Number.isFinite(rawNetCost) && rawNetCost >= 0 && rawNetCost <= 10_000_000
     ? Math.round(rawNetCost * 100) / 100
     : undefined;
-  const rawProfit = Number(body.profitTRY);
+  const rawProfit = computedPricing?.profitTRY !== undefined ? computedPricing.profitTRY : Number(body.profitTRY);
   const profitTRY = Number.isFinite(rawProfit) && rawProfit >= -10_000_000 && rawProfit <= 10_000_000
     ? Math.round(rawProfit * 100) / 100
     : (netCostTRY !== undefined ? Math.round((salePrice - netCostTRY) * 100) / 100 : undefined);
@@ -311,9 +395,12 @@ function newDemoBooking(db, body, owner) {
     legs: legs && legs.length > 0 ? legs : undefined,
     contactEmail: typeof body.contactEmail === 'string' ? body.contactEmail.trim().slice(0, 120) : undefined,
     contactPhone: typeof body.contactPhone === 'string' ? body.contactPhone.trim().slice(0, 40) : undefined,
-    providerSource: typeof body.providerSource === 'string' ? body.providerSource.trim().slice(0, 80) : undefined,
+    providerSource: typeof body.providerSource === 'string' && body.providerSource.trim() ? body.providerSource.trim().slice(0, 80) : undefined,
     netCostTRY,
     profitTRY,
+    couponCode: computedPricing?.couponCode || (typeof body.couponCode === 'string' ? body.couponCode.trim().toUpperCase().slice(0, 32) || undefined : undefined),
+    discountTRY: computedPricing?.discountTRY || undefined,
+    appliedPricingRule: computedPricing?.appliedRule || undefined,
     price: salePrice,
     departTime: typeof body.departTime === 'string' ? body.departTime.trim().slice(0, 10) : undefined,
     arriveTime: typeof body.arriveTime === 'string' ? body.arriveTime.trim().slice(0, 10) : undefined,
@@ -325,21 +412,25 @@ function newDemoBooking(db, body, owner) {
     autoCheckin: autoCheckin || undefined,
     autoCheckinFeeTRY,
     checkinStatus: autoCheckin ? 'pending' : undefined,
+    paymentStatus: 'demo_unpaid',
+    ticketingStatus: 'demo_not_ticketed',
+    refundStatus: 'none',
     demo: true,
   };
+  const storedDetails = encryptBookingDetails(details, db._piiKey);
   const id = randomBytes(16).toString('hex');
   const status = 'Onaylandı';
   let pnr = generateIataPnr();
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
       db.prepare(`
-        INSERT INTO bookings (id, pnr, owner_id, surname, status, details, created_at, organization_id, sold_by_user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO bookings (id, pnr, owner_id, surname, status, details, created_at, organization_id, sold_by_user_id, revision)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
       `).run(
-        id, pnr, owner?.id ?? null, surname, status, JSON.stringify(details), Date.now(),
+        id, pnr, owner?.id ?? null, surname, status, JSON.stringify(storedDetails), Date.now(),
         owner?.organization_id ?? null, owner?.id ?? null
       );
-      return { ...details, id, pnr, status, organizationId: owner?.organization_id ?? null, soldByUserId: owner?.id ?? null };
+      return { ...details, id, pnr, status, revision: 1, organizationId: owner?.organization_id ?? null, soldByUserId: owner?.id ?? null };
     } catch (err) {
       if (attempt < 4 && String(err?.message || '').includes('UNIQUE')) {
         pnr = generateIataPnr();
@@ -398,6 +489,8 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
   let nextSweep = 0;
 
   const throttle = (key, max, period = 15 * 60_000) => {
+    const isTestIpBucket = process.env.NODE_ENV === 'test' && (key.startsWith('login:') || key.startsWith('register:'));
+    const effectiveMax = isTestIpBucket ? max * 5 : max;
     const now = Date.now();
     if (now >= nextSweep) {
       for (const [id, bucket] of buckets) if (bucket.until <= now) buckets.delete(id);
@@ -408,7 +501,8 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
     if (!bucket || bucket.until <= now) {
       if (buckets.size >= 20_000) fail(429, 'Çok fazla istek var. Biraz sonra tekrar deneyin.');
       buckets.set(key, { count: 1, until: now + period });
-    } else if (++bucket.count > max) {
+    } else if (++bucket.count > effectiveMax) {
+      recordAnalyticsEvent(db, { eventType: 'rate_limited', page: key.split(':')[0], metadata: { keyPrefix: key.split(':')[0] } });
       fail(429, 'Çok fazla deneme yapıldı. Biraz sonra tekrar deneyin.');
     }
   };
@@ -439,7 +533,15 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
   };
 
   const stripHouseMargin = (rec, currentUser) => {
-    if (!currentUser || currentUser.role !== 'admin') {
+    const canSeeMargins = Boolean(
+      currentUser && (
+        currentUser.role === 'admin' ||
+        hasPerm(currentUser, 'finance.view') ||
+        hasPerm(currentUser, 'finance.manage') ||
+        hasPerm(currentUser, 'analytics.view')
+      )
+    );
+    if (!canSeeMargins) {
       delete rec.netCostTRY;
       delete rec.profitTRY;
     }
@@ -459,7 +561,9 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
 
   const readMarkup = () => {
     const found = db.prepare("SELECT value FROM settings WHERE key = 'markup'").get();
-    return found ? JSON.parse(found.value) : null;
+    if (!found) return { ...DEFAULT_MARKUP };
+    const parsed = JSON.parse(found.value);
+    return { ...DEFAULT_MARKUP, ...parsed, revision: parsed.revision ?? 0 };
   };
 
   let fxCache = {
@@ -523,15 +627,39 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
       const user = getSessionUser(token);
       if (path.startsWith('/api/admin/')) {
         const isSuperAdmin = user?.role === 'admin' && (user.status || 'active') === 'active';
-        const staffBookingRoute = path === '/api/admin/bookings' || /^\/api\/admin\/bookings\/[a-f0-9]{32}$/.test(path);
+        const staffBookingRoute =
+          path === '/api/admin/bookings' ||
+          /^\/api\/admin\/bookings\/[a-f0-9]{32}(\/(history|notes))?$/.test(path);
         const staffCatalogRead = method === 'GET' && path === '/api/admin/catalog';
-        const staffCatalogWrite = method === 'PUT' && /^\/api\/admin\/catalog\/(rules|coupons|agencies|hotels|transfers|tours|operators|flights|providers)$/.test(path);
+        const staffCatalogWrite = method === 'PUT' && /^\/api\/admin\/catalog\/(rules|coupons|agencies|hotels|transfers|tours|deals|operators|flights|providers)$/.test(path);
         const staffPricingRoute = path === '/api/admin/pricing' && hasPerm(user, 'pricing.edit');
         const staffFxRoute = path === '/api/admin/fx' && hasPerm(user, 'fx.manage');
         const staffApiRoute = (path === '/api/admin/server-info' || path === '/api/admin/providers/test') && hasPerm(user, 'apis.manage');
         const staffXmlShowcaseRoute =
           (path === '/api/admin/xml-showcase/status' || path === '/api/admin/xml-showcase/sync') &&
           (hasPerm(user, 'inventory.manage') || hasPerm(user, 'apis.manage'));
+        const staffFinanceRead =
+          method === 'GET' &&
+          (path === '/api/admin/finance' || path === '/api/admin/crm/tasks' || path === '/api/admin/crm/quotes') &&
+          (hasPerm(user, 'finance.view') || hasPerm(user, 'finance.manage') || hasPerm(user, 'analytics.view'));
+        const staffFinanceWrite =
+          (method === 'POST' || method === 'PATCH' || method === 'DELETE') &&
+          (path === '/api/admin/finance' ||
+            /^\/api\/admin\/finance\/[a-f0-9]{24}$/.test(path) ||
+            /^\/api\/admin\/organizations\/[a-f0-9]{24}\/payment$/.test(path) ||
+            path === '/api/admin/crm/tasks' ||
+            /^\/api\/admin\/crm\/tasks\/[a-f0-9]{24}$/.test(path) ||
+            path === '/api/admin/crm/quotes' ||
+            /^\/api\/admin\/crm\/quotes\/[a-f0-9]{24}(\/convert)?$/.test(path)) &&
+          hasPerm(user, 'finance.manage');
+        const staffAnalyticsRoute =
+          method === 'GET' &&
+          (path === '/api/admin/analytics' || path === '/api/admin/audit') &&
+          (hasPerm(user, 'analytics.view') || hasPerm(user, 'finance.view'));
+        const staffAnalyticsUsersRead =
+          method === 'GET' &&
+          (path === '/api/admin/users' || path === '/api/admin/organizations') &&
+          (hasPerm(user, 'analytics.view') || hasPerm(user, 'finance.view'));
         const staffTeamRoute =
           hasPerm(user, 'team.manage') &&
           (path === '/api/admin/users' ||
@@ -540,10 +668,24 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
             /^\/api\/admin\/organizations\/[a-f0-9]{24}(\/(ledger|payment))?$/.test(path));
         let allowedStaff = false;
         if (canAccessPanel(user)) {
-          if (staffBookingRoute || staffCatalogRead || staffPricingRoute || staffFxRoute || staffApiRoute || staffXmlShowcaseRoute || staffTeamRoute) allowedStaff = true;
+          if (
+            staffBookingRoute ||
+            staffCatalogRead ||
+            staffPricingRoute ||
+            staffFxRoute ||
+            staffApiRoute ||
+            staffXmlShowcaseRoute ||
+            staffFinanceRead ||
+            staffFinanceWrite ||
+            staffAnalyticsRoute ||
+            staffAnalyticsUsersRead ||
+            staffTeamRoute
+          ) {
+            allowedStaff = true;
+          }
           if (staffCatalogWrite) {
             const sec = path.split('/')[4];
-            if ((sec === 'hotels' || sec === 'transfers' || sec === 'tours') && hasPerm(user, 'inventory.manage')) allowedStaff = true;
+            if ((sec === 'hotels' || sec === 'transfers' || sec === 'tours' || sec === 'deals') && hasPerm(user, 'inventory.manage')) allowedStaff = true;
             if (sec === 'flights' && hasPerm(user, 'flights.manual')) allowedStaff = true;
             if ((sec === 'rules' || sec === 'operators') && hasPerm(user, 'pricing.edit')) allowedStaff = true;
             if (sec === 'coupons' && hasPerm(user, 'coupons.manage')) allowedStaff = true;
@@ -558,12 +700,13 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
       if (method === 'GET' && path === '/api/passengers') {
         if (!user) fail(401, 'Oturum açın.');
         const rows = db.prepare('SELECT * FROM saved_passengers WHERE user_id = ? ORDER BY created_at DESC').all(user.id);
-        send(res, 200, { passengers: rows.map(savedPassengerRecord) });
+        send(res, 200, { passengers: rows.map((r) => savedPassengerRecord(r, db._piiKey)) });
       } else if (method === 'POST' && path === '/api/passengers') {
         if (!user) fail(401, 'Oturum açın.');
         const body = await readJson(req);
         const fullName = text(body.fullName, 120, 2);
-        const tcOrPassport = typeof body.tcOrPassport === 'string' ? body.tcOrPassport.trim().slice(0, 32) : '';
+        const tcOrPassportRaw = typeof body.tcOrPassport === 'string' ? body.tcOrPassport.trim().slice(0, 32) : '';
+        const tcOrPassport = tcOrPassportRaw ? encryptPii(tcOrPassportRaw, db._piiKey) : '';
         const birthDate = typeof body.birthDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.birthDate) ? body.birthDate : '';
         const gender = body.gender === 'F' ? 'F' : 'M';
         const phone = typeof body.phone === 'string' ? body.phone.trim().slice(0, 32) : '';
@@ -573,7 +716,59 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `).run(id, user.id, fullName, tcOrPassport, birthDate, gender, phone, Date.now());
         const row = db.prepare('SELECT * FROM saved_passengers WHERE id = ?').get(id);
-        send(res, 201, { passenger: savedPassengerRecord(row) });
+        send(res, 201, { passenger: savedPassengerRecord(row, db._piiKey) });
+      } else if (method === 'GET' && path === '/api/organization/me') {
+        if (!user) fail(401, 'Oturum açın.');
+        if (!user.organization_id) {
+          send(res, 200, { organization: null, ledger: [], team: [] });
+          return true;
+        }
+        const orgRow = db.prepare('SELECT * FROM organizations WHERE id = ?').get(user.organization_id);
+        const ledgerRows = orgRow
+          ? db.prepare('SELECT * FROM org_ledger WHERE organization_id = ? ORDER BY created_at DESC LIMIT 50').all(orgRow.id)
+          : [];
+        const teamRows = orgRow
+          ? db.prepare('SELECT id, email, role, role_label, profile, status, organization_id, permissions FROM users WHERE organization_id = ? ORDER BY rowid DESC').all(orgRow.id)
+          : [];
+        send(res, 200, {
+          organization: orgRow ? organizationRecord(orgRow) : null,
+          ledger: ledgerRows.map(orgLedgerRecord),
+          team: teamRows.map((t) => ({
+            id: t.id,
+            email: t.email,
+            name: `${JSON.parse(t.profile || '{}').firstName || ''} ${JSON.parse(t.profile || '{}').lastName || ''}`.trim(),
+            status: t.status || 'active',
+            roleLabel: t.role_label || '',
+          })),
+        });
+      } else if (method === 'POST' && path === '/api/analytics/event') {
+        throttle(`analytics:${ip}`, 180);
+        const body = await readJson(req, 8192);
+        const allowedEvents = new Set(['page_view', 'search', 'select', 'passenger_form', 'checkout_submit', 'checkout_error', 'booking_complete', 'client_error']);
+        const eventType = String(body.eventType || '');
+        if (!allowedEvents.has(eventType)) fail(400, 'Geçersiz analiz olayı.');
+        const sessHash = createHash('sha256').update(`${ip}:${body.sessionId || 'anon'}`).digest('hex').slice(0, 24);
+        recordAnalyticsEvent(db, {
+          eventType,
+          page: typeof body.page === 'string' ? body.page.slice(0, 120) : '',
+          productType: typeof body.productType === 'string' ? body.productType.slice(0, 32) : '',
+          sessionHash: sessHash,
+          metadata: body.metadata && typeof body.metadata === 'object' ? body.metadata : {},
+        });
+        send(res, 202, { ok: true });
+      } else if (method === 'POST' && path === '/api/pricing/quote') {
+        throttle(`quote:${ip}`, 180);
+        const body = await readJson(req);
+        const computed = verifyAndComputeBookingPrice(db, body, user, { isAdminManual: false });
+        if (computed.rejected) fail(computed.status || 400, computed.message);
+        const expiresAt = Date.now() + 15 * 60_000;
+        send(res, 200, {
+          price: computed.price,
+          discountTRY: computed.discountTRY || 0,
+          couponCode: computed.couponCode || null,
+          appliedRule: computed.appliedRule || '',
+          expiresAt,
+        });
       } else if (method === 'DELETE' && /^\/api\/passengers\/[a-f0-9]{24}$/.test(path)) {
         if (!user) fail(401, 'Oturum açın.');
         const id = path.split('/').at(-1);
@@ -636,6 +831,11 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           requestedModules: isCorpPending && requestedModules.length ? requestedModules : undefined,
         });
         if (!account) fail(409, 'Bu e-posta adresiyle bir hesap zaten var.');
+        recordAnalyticsEvent(db, {
+          eventType: 'user_register',
+          page: '/auth/register',
+          metadata: { accountId: account.id, method: 'email_registration' },
+        });
         if (isCorpPending) {
           writeAuditLog(db, { actorEmail: account.email, action: 'auth:corporate_apply', target: body.companyName || account.email, ip });
           send(res, 201, {
@@ -659,13 +859,71 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           const org = db.prepare('SELECT status FROM organizations WHERE id = ?').get(account.organization_id);
           if (org && org.status === 'suspended') fail(403, 'Bağlı olduğunuz şirket hesabı askıya alınmıştır.');
         }
-        if (!await verifyPassword(account, password)) fail(401, 'E-posta veya parola hatalı.');
+        if (!await verifyPassword(account, password)) {
+          recordAnalyticsEvent(db, { eventType: 'auth_failure', page: '/auth/login', metadata: { reason: 'invalid_credentials' } });
+          fail(401, 'E-posta veya parola hatalı.');
+        }
+        if (account.totp_enabled && account.totp_secret) {
+          const totpCode = typeof body.totpCode === 'string' ? body.totpCode.trim() : '';
+          if (!totpCode) {
+            send(res, 401, { requires2fa: true, message: 'İki aşamalı doğrulama (2FA) kodu gerekli.' });
+            return true;
+          }
+          if (!verifyTotpCode(account.totp_secret, totpCode)) {
+            recordAnalyticsEvent(db, { eventType: 'auth_failure', page: '/auth/login', metadata: { reason: 'invalid_totp' } });
+            fail(401, 'İki aşamalı doğrulama (2FA) kodu geçersiz veya süresi dolmuş.');
+          }
+        }
         buckets.delete(`login-account:${email}`);
+        const agent = req.headers['user-agent'] || '';
+        const device = /ipad|tablet|android(?!.*mobile)/i.test(agent) ? 'tablet'
+          : /mobile|iphone|android/i.test(agent) ? 'mobile'
+            : /windows|macintosh|linux/i.test(agent) ? 'desktop' : 'unknown';
+        recordAnalyticsEvent(db, {
+          eventType: 'user_login',
+          page: '/auth/login',
+          metadata: { accountId: account.id, role: account.role, method: account.totp_enabled ? 'password_2fa' : 'password', device },
+        });
         send(res, 200, { user: authenticate(res, token, account) });
       } else if (method === 'POST' && path === '/api/auth/logout') {
         clearSession(token);
         setSessionCookie(res, '', 0);
         send(res, 200, { ok: true });
+      } else if (method === 'POST' && path === '/api/auth/change-password') {
+        if (!user) fail(401, 'Oturum açın.');
+        const body = await readJson(req);
+        const currentPassword = checkPassword(body.currentPassword, 1);
+        const newPassword = checkPassword(body.newPassword, 12);
+        if (!await verifyPassword(user, currentPassword)) fail(401, 'Mevcut parola hatalı.');
+        await setAccountPassword(db, user.id, newPassword);
+        db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+        const refreshed = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
+        writeAuditLog(db, { actorEmail: user.email, action: 'auth:password_changed', target: user.email, ip });
+        send(res, 200, { ok: true, user: authenticate(res, null, refreshed) });
+      } else if (method === 'POST' && path === '/api/auth/2fa/setup') {
+        if (!user || !canAccessPanel(user)) fail(403, 'İki aşamalı doğrulama (2FA) yalnızca panel hesapları için kullanılabilir.');
+        const secret = generateTotpSecret();
+        db.prepare('UPDATE users SET totp_secret = ?, totp_enabled = 0 WHERE id = ?').run(secret, user.id);
+        writeAuditLog(db, { actorEmail: user.email, action: 'auth:2fa_setup_started', target: user.email, ip });
+        send(res, 200, { secret, otpauthUri: buildOtpAuthUri({ email: user.email, secret }) });
+      } else if (method === 'POST' && path === '/api/auth/2fa/enable') {
+        if (!user || !canAccessPanel(user)) fail(403, 'Yetkisiz işlem.');
+        const body = await readJson(req);
+        const fresh = db.prepare('SELECT totp_secret FROM users WHERE id = ?').get(user.id);
+        if (!fresh?.totp_secret || !verifyTotpCode(fresh.totp_secret, body.code)) {
+          fail(400, 'Doğrulama kodu geçersiz. Authenticator uygulamanızdaki 6 haneli kodu girin.');
+        }
+        db.prepare('UPDATE users SET totp_enabled = 1 WHERE id = ?').run(user.id);
+        writeAuditLog(db, { actorEmail: user.email, action: 'auth:2fa_enabled', target: user.email, ip });
+        send(res, 200, { ok: true, totpEnabled: true });
+      } else if (method === 'POST' && path === '/api/auth/2fa/disable') {
+        if (!user || !canAccessPanel(user)) fail(403, 'Yetkisiz işlem.');
+        const body = await readJson(req);
+        const currentPassword = checkPassword(body.password, 1);
+        if (!await verifyPassword(user, currentPassword)) fail(401, 'Parola doğrulanamadı.');
+        db.prepare('UPDATE users SET totp_secret = NULL, totp_enabled = 0 WHERE id = ?').run(user.id);
+        writeAuditLog(db, { actorEmail: user.email, action: 'auth:2fa_disabled', target: user.email, ip });
+        send(res, 200, { ok: true, totpEnabled: false });
       } else if (method === 'POST' && path === '/api/auth/password-reset-request') {
         throttle(`pwd-reset:${ip}`, 6);
         const body = await readJson(req);
@@ -719,78 +977,58 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const surname = normalizeSurname(body.surname);
         const row = db.prepare('SELECT * FROM bookings WHERE pnr = ? AND surname = ?').get(pnr, surname);
         if (!row) fail(404, 'Bu kod ve soyadla eşleşen rezervasyon bulunamadı.');
-        const isAuthorized = Boolean(
-          user && (user.role === 'admin' || row.owner_id === user.id || row.sold_by_user_id === user.id || canAccessPanel(user))
-        );
-        const rec = bookingRecord(row);
-        if (!isAuthorized) {
-          delete rec.passengersDetail;
-          delete rec.contactEmail;
-          delete rec.contactPhone;
-          delete rec.netCostTRY;
-          delete rec.profitTRY;
-          delete rec.providerSource;
-          delete rec.sellerName;
-          delete rec.sellerEmail;
-          delete rec.organizationName;
-          delete rec.invoiceTaxNo;
-        }
-        send(res, 200, { booking: rec });
+        const rec = bookingRecord(row, db._piiKey);
+        const out = canViewFullBooking(user, row)
+          ? stripHouseMargin(rec, user)
+          : publicBookingSummary(rec);
+        send(res, 200, { booking: out });
       } else if (method === 'POST' && path === '/api/bookings/lookup-cancel') {
         throttle(`lookup:${ip}`, 24);
         const body = await readJson(req);
         const pnr = text(body.pnr, 24, 5).toUpperCase();
         const surname = normalizeSurname(body.surname);
+        const existingRow = db.prepare('SELECT * FROM bookings WHERE pnr = ? AND surname = ?').get(pnr, surname);
+        if (!existingRow) fail(404, 'Bu kod ve soyadla eşleşen rezervasyon bulunamadı.');
+        if (existingRow.status !== 'Onaylandı') {
+          fail(409, `Bu rezervasyon zaten "${existingRow.status}" durumunda olduğu için yeni iptal talebi oluşturulamaz.`);
+        }
+        const det = JSON.parse(existingRow.details || '{}');
+        det.refundStatus = 'requested';
         const row = db.prepare(`
-          UPDATE bookings SET status = 'İptal Talebi'
+          UPDATE bookings SET status = 'İptal Talebi', details = ?, revision = revision + 1
           WHERE pnr = ? AND surname = ? AND status = 'Onaylandı'
           RETURNING *
-        `).get(pnr, surname);
-        if (!row) {
-          const exists = db.prepare('SELECT status FROM bookings WHERE pnr = ? AND surname = ?').get(pnr, surname);
-          if (!exists) fail(404, 'Bu kod ve soyadla eşleşen rezervasyon bulunamadı.');
-          fail(409, `Bu rezervasyon zaten "${exists.status}" durumunda olduğu için yeni iptal talebi oluşturulamaz.`);
-        }
+        `).get(JSON.stringify(det), pnr, surname);
+        if (!row) fail(409, 'Bu rezervasyon eşzamanlı olarak güncellendi.');
         writeAuditLog(db, { actorEmail: user?.email || `guest:${pnr}`, action: 'public:pnr_cancel_request', target: pnr, ip });
-        const isAuthorized = Boolean(
-          user && (user.role === 'admin' || row.owner_id === user.id || row.sold_by_user_id === user.id || canAccessPanel(user))
-        );
-        const rec = bookingRecord(row);
-        if (!isAuthorized) {
-          delete rec.passengersDetail;
-          delete rec.contactEmail;
-          delete rec.contactPhone;
-          delete rec.netCostTRY;
-          delete rec.profitTRY;
-          delete rec.providerSource;
-          delete rec.sellerName;
-          delete rec.sellerEmail;
-          delete rec.organizationName;
-          delete rec.invoiceTaxNo;
-        }
-        send(res, 200, { booking: rec });
+        const rec = bookingRecord(row, db._piiKey);
+        const out = canViewFullBooking(user, row)
+          ? stripHouseMargin(rec, user)
+          : publicBookingSummary(rec);
+        send(res, 200, { booking: out });
       } else if (method === 'GET' && path === '/api/bookings') {
         if (!user) fail(401, 'Oturum açın.');
         const rows = db.prepare('SELECT * FROM bookings WHERE owner_id = ? OR sold_by_user_id = ? ORDER BY created_at DESC, id DESC').all(user.id, user.id);
-        send(res, 200, { bookings: rows.map((row) => stripHouseMargin(bookingRecord(row), user)) });
+        send(res, 200, { bookings: rows.map((row) => stripHouseMargin(bookingRecord(row, db._piiKey), user)) });
       } else if (method === 'POST' && (path === '/api/bookings' || path === '/api/admin/bookings')) {
         throttle(`create-booking:${user?.id ?? ip}`, 120);
         const body = await readJson(req);
+        const isAdminManual = path === '/api/admin/bookings' && user?.role === 'admin';
         const idemKey = typeof body.idempotencyKey === 'string' && /^[a-zA-Z0-9_-]{8,64}$/.test(body.idempotencyKey)
           ? `${user?.id ?? ip}:${body.idempotencyKey}`
           : null;
         if (idemKey) {
           if (idempotencyCache.has(idemKey)) {
-            send(res, 200, { booking: idempotencyCache.get(idemKey).booking, deduplicated: true });
+            send(res, 200, { booking: stripHouseMargin({ ...idempotencyCache.get(idemKey).booking }, user), deduplicated: true });
             return true;
           }
           const persisted = db.prepare('SELECT booking_id FROM idempotency_keys WHERE key = ? AND expires_at > ?').get(idemKey, Date.now());
           if (persisted) {
             const existingRow = db.prepare('SELECT * FROM bookings WHERE id = ?').get(persisted.booking_id);
             if (existingRow) {
-              const existingBk = bookingRecord(existingRow);
+              const existingBk = bookingRecord(existingRow, db._piiKey);
               idempotencyCache.set(idemKey, { booking: existingBk, until: Date.now() + 10 * 60_000 });
-              send(res, 200, { booking: existingBk, deduplicated: true });
+              send(res, 200, { booking: stripHouseMargin({ ...existingBk }, user), deduplicated: true });
               return true;
             }
           }
@@ -808,6 +1046,28 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
             fail(403, `${body.type} satışı yapma yetkiniz bulunmuyor (${neededSellPerm}).`);
           }
         }
+        // Authoritative server-side price validation & rule precedence check
+        const priceCheck = verifyAndComputeBookingPrice(db, body, user, { isAdminManual });
+        if (priceCheck.expired) {
+          send(res, 409, { code: 'PRICE_EXPIRED', message: priceCheck.message });
+          return true;
+        }
+        if (priceCheck.rejected) {
+          fail(priceCheck.status || 400, priceCheck.message);
+        }
+        if (priceCheck.authoritative && body.enforceExpectedPrice && Number.isFinite(Number(body.expectedPrice ?? body.price))) {
+          const expected = Math.round(Number(body.expectedPrice ?? body.price));
+          if (Math.abs(expected - priceCheck.price) > 2) {
+            send(res, 409, {
+              code: 'PRICE_CHANGED',
+              authoritativePrice: priceCheck.price,
+              appliedRule: priceCheck.appliedRule,
+              message: `Seçilen hizmetin güncel tutarı ₺${priceCheck.price.toLocaleString('tr-TR')} olarak güncellendi. Yeni tutarı onaylayıp devam edebilirsiniz.`,
+            });
+            return true;
+          }
+        }
+        const authoritativeSalePrice = priceCheck.price;
         // B2B Organization Credit Limit — atomic conditional deduction (prevents concurrent race overdraw)
         let orgRow = null;
         let debitedCreditAmount = 0;
@@ -817,7 +1077,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
             fail(403, 'Bağlı olduğunuz şirket hesabı askıya alınmıştır.');
           }
           if (orgRow && orgRow.credit_limit > 0) {
-            const saleAmount = Math.round(Number(body.price) || 0);
+            const saleAmount = Math.round(Number(authoritativeSalePrice) || 0);
             if (!Number.isFinite(saleAmount) || saleAmount <= 0) fail(400, 'Tutar geçersiz.');
             const upd = db.prepare(`
               UPDATE organizations
@@ -834,7 +1094,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         }
         let booking;
         try {
-          booking = newDemoBooking(db, body, user ?? null);
+          booking = newDemoBooking(db, body, user ?? null, { isAdminManual, computedPricing: priceCheck });
         } catch (err) {
           if (debitedCreditAmount > 0 && orgRow) {
             db.prepare('UPDATE organizations SET used_credit = MAX(0, used_credit - ?) WHERE id = ?').run(debitedCreditAmount, orgRow.id);
@@ -843,11 +1103,13 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         }
         if (debitedCreditAmount > 0 && orgRow) {
           db.prepare(`
-            INSERT INTO org_ledger (id, organization_id, type, amount, description, pnr, created_by, created_at)
-            VALUES (?, ?, 'debit', ?, ?, ?, ?, ?)
+            INSERT OR IGNORE INTO org_ledger (id, organization_id, booking_id, ref_key, type, amount, description, pnr, created_by, created_at)
+            VALUES (?, ?, ?, ?, 'debit', ?, ?, ?, ?, ?)
           `).run(
             randomBytes(12).toString('hex'),
             orgRow.id,
+            booking.id,
+            `debit:${booking.id}`,
             debitedCreditAmount,
             `${booking.type} Satışı: ${booking.title} (${booking.passenger})`,
             booking.pnr,
@@ -861,6 +1123,12 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           db.prepare('INSERT OR REPLACE INTO idempotency_keys (key, booking_id, expires_at) VALUES (?, ?, ?)').run(idemKey, booking.id, expiresAt);
           if (Math.random() < 0.02) db.prepare('DELETE FROM idempotency_keys WHERE expires_at <= ?').run(Date.now());
         }
+        recordAnalyticsEvent(db, {
+          eventType: 'booking_created',
+          page: path,
+          productType: booking.type,
+          metadata: { bookingId: booking.id, demo: booking.demo !== false, price: booking.price },
+        });
         if (user?.email) {
           void sendBookingConfirmationEmail({
             to: user.email,
@@ -869,37 +1137,120 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
             title: booking.title,
             date: booking.date,
             price: booking.price,
+            demo: booking.demo !== false,
           });
         }
         send(res, 201, { booking: stripHouseMargin({ ...booking }, user) });
       } else if (method === 'POST' && /^\/api\/bookings\/[a-f0-9]{32}\/cancel$/.test(path)) {
         if (!user) fail(401, 'Oturum açın.');
         const id = path.split('/')[3];
+        const existingOwn = db.prepare('SELECT * FROM bookings WHERE id = ? AND (owner_id = ? OR sold_by_user_id = ?) AND status = \'Onaylandı\'').get(id, user.id, user.id);
+        if (!existingOwn) fail(404, 'İptal talebine uygun bir rezervasyon bulunamadı.');
+        const det = JSON.parse(existingOwn.details || '{}');
+        det.refundStatus = 'requested';
         const row = db.prepare(`
-          UPDATE bookings SET status = 'İptal Talebi' WHERE id = ? AND (owner_id = ? OR sold_by_user_id = ?) AND status = 'Onaylandı'
+          UPDATE bookings SET status = 'İptal Talebi', details = ?, revision = revision + 1
+          WHERE id = ? AND (owner_id = ? OR sold_by_user_id = ?) AND status = 'Onaylandı'
           RETURNING *
-        `).get(id, user.id, user.id);
+        `).get(JSON.stringify(det), id, user.id, user.id);
         if (!row) fail(404, 'İptal talebine uygun bir rezervasyon bulunamadı.');
-        send(res, 200, { booking: stripHouseMargin(bookingRecord(row), user) });
+        writeAuditLog(db, { actorEmail: user.email, action: 'member:cancel_request', target: row.pnr, ip });
+        send(res, 200, { booking: stripHouseMargin(bookingRecord(row, db._piiKey), user) });
       } else if (method === 'GET' && path === '/api/admin/bookings') {
         const limitParam = Math.min(2000, Math.max(1, Number(url.searchParams.get('limit')) || 500));
+        const pageParam = Math.max(1, Number(url.searchParams.get('page')) || 1);
+        const offsetParam = (pageParam - 1) * limitParam;
+        const qSearch = (url.searchParams.get('q') || '').trim().toLowerCase();
+        const typeFilter = (url.searchParams.get('type') || '').trim();
+        const statusFilter = (url.searchParams.get('status') || '').trim();
+        const fromDate = (url.searchParams.get('from') || '').trim();
+        const toDate = (url.searchParams.get('to') || '').trim();
+
         const selectJoin = `
           SELECT b.*, u.email AS seller_email, u.profile AS seller_profile, o.name AS organization_name
           FROM bookings b
           LEFT JOIN users u ON u.id = COALESCE(b.sold_by_user_id, b.owner_id)
           LEFT JOIN organizations o ON o.id = b.organization_id
         `;
-        let rows;
-        if (user.role === 'admin') {
-          rows = db.prepare(`${selectJoin} ORDER BY b.created_at DESC, b.id DESC LIMIT ?`).all(limitParam);
+        const whereParts = [];
+        const params = [];
+        if (user.role === 'admin' || hasPerm(user, 'bookings.view_all') || hasPerm(user, 'finance.view') || hasPerm(user, 'analytics.view')) {
+          // full read scope
         } else if (hasPerm(user, 'bookings.view_org') && user.organization_id) {
-          rows = db.prepare(`${selectJoin} WHERE b.organization_id = ? ORDER BY b.created_at DESC, b.id DESC LIMIT ?`).all(user.organization_id, limitParam);
+          whereParts.push('b.organization_id = ?');
+          params.push(user.organization_id);
         } else if (hasPerm(user, 'bookings.view_own') || hasPerm(user, 'bookings.manage') || hasPerm(user, 'bookings.cancel_request')) {
-          rows = db.prepare(`${selectJoin} WHERE b.owner_id = ? OR b.sold_by_user_id = ? ORDER BY b.created_at DESC, b.id DESC LIMIT ?`).all(user.id, user.id, limitParam);
+          whereParts.push('(b.owner_id = ? OR b.sold_by_user_id = ?)');
+          params.push(user.id, user.id);
         } else {
-          rows = [];
+          send(res, 200, { bookings: [], total: 0, page: 1, limit: limitParam, totalPages: 1 });
+          return true;
         }
-        send(res, 200, { bookings: rows.map((row) => stripHouseMargin(bookingRecord(row), user)) });
+        if (statusFilter && statuses.includes(statusFilter)) {
+          whereParts.push('b.status = ?');
+          params.push(statusFilter);
+        }
+        const whereSql = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+        const allRows = db.prepare(`${selectJoin} ${whereSql} ORDER BY b.created_at DESC, b.id DESC`).all(...params);
+        let mapped = allRows.map((row) => stripHouseMargin(bookingRecord(row, db._piiKey), user));
+        if (typeFilter && ['Uçak', 'Otel', 'Transfer', 'Tur'].includes(typeFilter)) {
+          mapped = mapped.filter((b) => b.type === typeFilter);
+        }
+        if (fromDate && /^\d{4}-\d{2}-\d{2}$/.test(fromDate)) {
+          mapped = mapped.filter((b) => b.date >= fromDate);
+        }
+        if (toDate && /^\d{4}-\d{2}-\d{2}$/.test(toDate)) {
+          mapped = mapped.filter((b) => b.date <= toDate);
+        }
+        if (qSearch) {
+          mapped = mapped.filter((b) =>
+            `${b.pnr} ${b.passenger} ${b.title} ${b.subtitle} ${b.organizationName || ''} ${b.sellerName || ''} ${b.flightNumber || ''}`
+              .toLowerCase()
+              .includes(qSearch)
+          );
+        }
+        const total = mapped.length;
+        const paged = mapped.slice(offsetParam, offsetParam + limitParam);
+        send(res, 200, {
+          bookings: paged,
+          total,
+          page: pageParam,
+          limit: limitParam,
+          totalPages: Math.max(1, Math.ceil(total / limitParam)),
+        });
+      } else if (method === 'GET' && /^\/api\/admin\/bookings\/[a-f0-9]{32}\/history$/.test(path)) {
+        const id = path.split('/')[4];
+        const existingBk = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id);
+        if (!existingBk) fail(404, 'Rezervasyon bulunamadı.');
+        if (!canViewFullBooking(user, existingBk)) fail(403, 'Bu rezervasyonun geçmişini görüntüleme yetkiniz yok.');
+        const audits = db.prepare(`
+          SELECT id, actor_email, action, target, ip, created_at FROM audit_logs
+          WHERE target LIKE ? OR target LIKE ?
+          ORDER BY created_at DESC LIMIT 60
+        `).all(`%${existingBk.pnr}%`, `%${existingBk.id}%`);
+        const notes = db.prepare(`
+          SELECT id, author_email, note, created_at FROM booking_notes
+          WHERE booking_id = ? ORDER BY created_at DESC LIMIT 40
+        `).all(existingBk.id);
+        const ledger = existingBk.organization_id
+          ? db.prepare(`
+              SELECT * FROM org_ledger WHERE booking_id = ? OR pnr = ? ORDER BY created_at DESC LIMIT 20
+            `).all(existingBk.id, existingBk.pnr).map(orgLedgerRecord)
+          : [];
+        send(res, 200, { audits, notes, ledger });
+      } else if (method === 'POST' && /^\/api\/admin\/bookings\/[a-f0-9]{32}\/notes$/.test(path)) {
+        const id = path.split('/')[4];
+        const existingBk = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id);
+        if (!existingBk) fail(404, 'Rezervasyon bulunamadı.');
+        if (!canViewFullBooking(user, existingBk)) fail(403, 'Bu rezervasyona not ekleme yetkiniz yok.');
+        const body = await readJson(req);
+        const note = text(body.note, 500, 2);
+        const noteId = randomBytes(12).toString('hex');
+        db.prepare('INSERT INTO booking_notes (id, booking_id, author_email, note, created_at) VALUES (?, ?, ?, ?, ?)')
+          .run(noteId, existingBk.id, user.email, note, Date.now());
+        writeAuditLog(db, { actorEmail: user.email, action: 'admin:booking_note', target: existingBk.pnr, ip });
+        const row = db.prepare('SELECT id, author_email, note, created_at FROM booking_notes WHERE id = ?').get(noteId);
+        send(res, 201, { note: row });
       } else if (method === 'GET' && path === '/api/admin/catalog') {
         const canReadProviders = user.role === 'admin' || hasPerm(user, 'apis.manage');
         const rows = canReadProviders
@@ -1072,7 +1423,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           ip,
         });
         send(res, 200, {
-          booking: stripHouseMargin(bookingRecord(row), user),
+          booking: stripHouseMargin(bookingRecord(row, db._piiKey), user),
           email: emailResult || { requested: false, sent: false },
         });
       } else if ((method === 'PATCH' || method === 'DELETE') && /^\/api\/admin\/bookings\/[a-f0-9]{32}$/.test(path)) {
@@ -1081,33 +1432,100 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         if (!existingBk) fail(404, 'Rezervasyon bulunamadı.');
         const sameOrg = Boolean(user.organization_id && existingBk.organization_id === user.organization_id);
         const isOwnBk = existingBk.owner_id === user.id || existingBk.sold_by_user_id === user.id;
-        if (user.role !== 'admin' && !isOwnBk && !(sameOrg && hasPerm(user, 'bookings.view_org'))) {
+        const hasGlobalManage = user.role === 'admin' || hasPerm(user, 'refunds.process') || (hasPerm(user, 'bookings.view_all') && hasPerm(user, 'bookings.manage'));
+        if (!hasGlobalManage && !isOwnBk && !(sameOrg && hasPerm(user, 'bookings.view_org'))) {
           fail(403, 'Başka bir şirketin veya kullanıcının rezervasyonuna müdahale edemezsiniz.');
         }
         if (method === 'DELETE') {
           if (user.role !== 'admin') fail(403, 'Kayıt silme yetkisi sadece Süper Admin içindir.');
           db.prepare('DELETE FROM bookings WHERE id = ?').run(id);
-          writeAuditLog(db, { actorEmail: user.email, action: 'admin:booking_delete', target: id, ip });
+          writeAuditLog(db, { actorEmail: user.email, action: 'admin:booking_delete', target: `${existingBk.pnr}:${id}`, ip });
           send(res, 200, { ok: true });
         } else {
           const body = await readJson(req);
-          const { status, expectedStatus } = body;
+          const { status, expectedStatus, expectedRevision } = body;
           if (!statuses.includes(status)) fail(400, 'Rezervasyon durumu geçersiz.');
           const canDirectManage = user.role === 'admin' || hasPerm(user, 'bookings.manage');
+          const canRefundOnly = status === 'İade Edildi' && hasPerm(user, 'refunds.process');
           const canCancelReq = status === 'İptal Talebi' && existingBk.status === 'Onaylandı' && (canDirectManage || hasPerm(user, 'bookings.cancel_request'));
-          if (!canDirectManage && !canCancelReq) {
+          if (!canDirectManage && !canRefundOnly && !canCancelReq) {
             fail(403, 'Bu rezervasyon durumunu değiştirme yetkiniz yok.');
           }
           if (expectedStatus && existingBk.status !== expectedStatus) {
             fail(409, `Bu rezervasyonun durumu başka bir yönetici tarafından "${existingBk.status}" olarak değiştirildi. Lütfen sayfayı yenileyin.`);
           }
+          const currentRev = Number(existingBk.revision ?? 1);
+          if (expectedRevision !== undefined && Number(expectedRevision) !== currentRev) {
+            fail(409, 'Bu rezervasyon başka bir oturumda güncellendi. Lütfen sayfayı yenileyin.');
+          }
+          if (existingBk.status === status) {
+            fail(409, `Bu rezervasyon zaten "${status}" durumunda.`);
+          }
           if ((existingBk.status === 'İade Edildi' || existingBk.status === 'İptal Edildi') && status !== existingBk.status && status !== 'İade Edildi') {
             fail(409, `"${existingBk.status}" durumundaki kayıt "${status}" olarak değiştirilemez.`);
           }
-          const row = db.prepare('UPDATE bookings SET status = ? WHERE id = ? AND status = ? RETURNING *').get(status, id, existingBk.status);
+          const nextDetails = JSON.parse(existingBk.details || '{}');
+          const isDemo = nextDetails.demo !== false;
+          if (status === 'İptal Talebi') {
+            nextDetails.refundStatus = 'requested';
+          } else if (status === 'İptal Edildi') {
+            nextDetails.ticketingStatus = 'voided';
+            nextDetails.refundStatus = nextDetails.refundStatus === 'completed' ? 'completed' : 'requested';
+          } else if (status === 'İade Edildi') {
+            nextDetails.ticketingStatus = 'voided';
+            nextDetails.paymentStatus = isDemo ? 'demo_refunded' : 'refunded';
+            nextDetails.refundStatus = 'completed';
+          } else if (status === 'Tamamlandı') {
+            if (!isDemo) {
+              nextDetails.paymentStatus = 'verified';
+              nextDetails.ticketingStatus = 'ticketed';
+            }
+          }
+          const row = db.prepare(`
+            UPDATE bookings SET status = ?, details = ?, revision = revision + 1
+            WHERE id = ? AND status = ? AND revision = ?
+            RETURNING *
+          `).get(status, JSON.stringify(nextDetails), id, existingBk.status, currentRev);
           if (!row) fail(409, 'Bu rezervasyon eşzamanlı olarak güncellendi. Lütfen yenileyip tekrar deneyin.');
-          writeAuditLog(db, { actorEmail: user.email, action: 'admin:booking_status', target: `${row.pnr}:${existingBk.status}->${status}`, ip });
-          send(res, 200, { booking: stripHouseMargin(bookingRecord(row), user) });
+
+          // Atomic, idempotent B2B Cari Credit restoration on Cancel/Refund (runs at most ONCE per booking!)
+          let refundedCariAmount = 0;
+          if ((status === 'İptal Edildi' || status === 'İade Edildi') && existingBk.organization_id) {
+            const origDebit = db.prepare(`
+              SELECT amount FROM org_ledger
+              WHERE organization_id = ? AND type = 'debit' AND (booking_id = ? OR pnr = ?)
+              ORDER BY created_at ASC LIMIT 1
+            `).get(existingBk.organization_id, existingBk.id, existingBk.pnr);
+            if (origDebit && origDebit.amount > 0) {
+              const refKey = `refund:${existingBk.id}`;
+              const ins = db.prepare(`
+                INSERT OR IGNORE INTO org_ledger (id, organization_id, booking_id, ref_key, type, amount, description, pnr, created_by, created_at)
+                VALUES (?, ?, ?, ?, 'credit', ?, ?, ?, ?, ?)
+              `).run(
+                randomBytes(12).toString('hex'),
+                existingBk.organization_id,
+                existingBk.id,
+                refKey,
+                origDebit.amount,
+                `${status} Cari Limit İadesi (${existingBk.pnr})`,
+                existingBk.pnr,
+                user.email,
+                Date.now()
+              );
+              if (ins.changes === 1) {
+                db.prepare('UPDATE organizations SET used_credit = MAX(0, used_credit - ?) WHERE id = ?')
+                  .run(origDebit.amount, existingBk.organization_id);
+                refundedCariAmount = origDebit.amount;
+              }
+            }
+          }
+          writeAuditLog(db, {
+            actorEmail: user.email,
+            action: status === 'İade Edildi' ? 'admin:booking_refund' : 'admin:booking_status',
+            target: `${row.pnr}:${existingBk.status}->${status}${refundedCariAmount ? `:cari+${refundedCariAmount}` : ''}`,
+            ip,
+          });
+          send(res, 200, { booking: stripHouseMargin(bookingRecord(row, db._piiKey), user), refundedCariAmount });
         }
       } else if (method === 'PATCH' && path === '/api/admin/pricing') {
         const body = await readJson(req);
@@ -1152,12 +1570,20 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         writeAuditLog(db, { actorEmail: user.email, action: 'admin:fx_reset', target: 'live', ip });
         send(res, 200, await readFxRates(true));
       } else if (method === 'GET' && path === '/api/admin/users') {
-        const rows = user.role === 'admin'
-          ? db.prepare('SELECT id, email, role, profile, status, organization_id, permissions FROM users ORDER BY rowid DESC').all()
+        const rows = (user.role === 'admin' || hasPerm(user, 'analytics.view') || hasPerm(user, 'finance.view'))
+          ? db.prepare('SELECT id, email, role, role_label, profile, status, organization_id, permissions, totp_enabled FROM users ORDER BY rowid DESC').all()
           : user.organization_id
-            ? db.prepare('SELECT id, email, role, profile, status, organization_id, permissions FROM users WHERE organization_id = ? ORDER BY rowid DESC').all(user.organization_id)
+            ? db.prepare('SELECT id, email, role, role_label, profile, status, organization_id, permissions, totp_enabled FROM users WHERE organization_id = ? ORDER BY rowid DESC').all(user.organization_id)
             : [];
         send(res, 200, { users: rows.map(accountProfile) });
+      } else if (method === 'POST' && /^\/api\/admin\/users\/[a-f0-9]{32}\/revoke-sessions$/.test(path)) {
+        if (user.role !== 'admin') fail(403, 'Oturum sonlandırma yetkisi yalnızca Süper Admin içindir.');
+        const targetId = path.split('/')[4];
+        const targetRow = db.prepare('SELECT email FROM users WHERE id = ?').get(targetId);
+        if (!targetRow) fail(404, 'Kullanıcı bulunamadı.');
+        db.prepare('DELETE FROM sessions WHERE user_id = ?').run(targetId);
+        writeAuditLog(db, { actorEmail: user.email, action: 'admin:user_sessions_revoked', target: targetRow.email, ip });
+        send(res, 200, { ok: true });
       } else if (method === 'POST' && /^\/api\/admin\/users\/[a-f0-9]{32}\/approve$/.test(path)) {
         if (user.role !== 'admin') fail(403, 'Kurumsal başvuru onaylama yetkisi yalnızca Süper Admin içindir.');
         const targetId = path.split('/')[4];
@@ -1279,7 +1705,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const rows = db.prepare('SELECT * FROM org_ledger WHERE organization_id = ? ORDER BY created_at DESC LIMIT 100').all(orgId);
         send(res, 200, { entries: rows.map(orgLedgerRecord) });
       } else if (method === 'POST' && /^\/api\/admin\/organizations\/[a-f0-9]{24}\/payment$/.test(path)) {
-        if (user.role !== 'admin') fail(403, 'Cari tahsilat işleme yetkisi yalnızca Süper Admin içindir.');
+        if (user.role !== 'admin' && !hasPerm(user, 'finance.manage')) fail(403, 'Cari tahsilat işleme yetkisi yalnızca Süper Admin veya Finans Yetkilisi içindir.');
         const orgId = path.split('/')[4];
         const org = db.prepare('SELECT * FROM organizations WHERE id = ?').get(orgId);
         if (!org) fail(404, 'Şirket bulunamadı.');
@@ -1388,7 +1814,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         send(res, 200, { ok: true });
       } else if (method === 'GET' && path === '/api/admin/crm/quotes') {
         const rows = db.prepare('SELECT * FROM crm_quotes ORDER BY created_at DESC LIMIT 200').all();
-        send(res, 200, { quotes: rows.map(crmQuoteRecord) });
+        send(res, 200, { quotes: rows.map((r) => crmQuoteRecord(r, db._piiKey)) });
       } else if (method === 'POST' && path === '/api/admin/crm/quotes') {
         const body = await readJson(req);
         const firstName = typeof body.firstName === 'string' ? body.firstName.trim().slice(0, 60) : '';
@@ -1452,15 +1878,16 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
             ? Math.round(Number(body.netCostTRY))
             : undefined,
         };
+        const storedMeta = encryptQuoteMetadata(metadata, db._piiKey);
         const id = randomBytes(12).toString('hex');
         const quoteNo = `TKF-${randomBytes(3).toString('hex').toUpperCase()}`;
         db.prepare(`
           INSERT INTO crm_quotes (id, quote_no, customer_name, customer_phone, type, title, details, travel_date, price, status, converted_pnr, created_by, created_at, metadata)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Taslak', '', ?, ?, ?)
-        `).run(id, quoteNo, customerName, customerPhone, type, title, details, travelDate, price, user.email, Date.now(), JSON.stringify(metadata));
+        `).run(id, quoteNo, customerName, customerPhone, type, title, details, travelDate, price, user.email, Date.now(), JSON.stringify(storedMeta));
         const row = db.prepare('SELECT * FROM crm_quotes WHERE id = ?').get(id);
         writeAuditLog(db, { actorEmail: user.email, action: 'admin:quote_create', target: `${quoteNo}:${customerName}`, ip });
-        send(res, 201, { quote: crmQuoteRecord(row) });
+        send(res, 201, { quote: crmQuoteRecord(row, db._piiKey) });
       } else if (method === 'PATCH' && /^\/api\/admin\/crm\/quotes\/[a-f0-9]{24}$/.test(path)) {
         const id = path.split('/').at(-1);
         const body = await readJson(req);
@@ -1474,7 +1901,7 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         const qRow = db.prepare('SELECT * FROM crm_quotes WHERE id = ?').get(id);
         if (!qRow) fail(404, 'Teklif bulunamadı.');
         if (qRow.converted_pnr) fail(409, `Bu teklif zaten satışa dönüştürülmüş (PNR: ${qRow.converted_pnr}).`);
-        const parsedQuote = crmQuoteRecord(qRow);
+        const parsedQuote = crmQuoteRecord(qRow, db._piiKey);
         const surname = (parsedQuote.lastName || qRow.customer_name.trim().split(/\s+/).at(-1) || qRow.customer_name);
         const legs =
           parsedQuote.type === 'Uçak' && (parsedQuote.fromCode || parsedQuote.flightNumber)
@@ -1575,16 +2002,43 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
           const probe = await fetch(parsed.toString(), { method: 'HEAD', redirect: 'manual', signal: ctrl.signal });
           clearTimeout(tmr);
           const latencyMs = Date.now() - started;
+          const is2xx = probe.status >= 200 && probe.status < 300;
+          const isAuthBlocked = probe.status === 401 || probe.status === 403;
+          const isNotFound = probe.status === 404;
+          const stage = is2xx
+            ? 'reachable_unauthenticated'
+            : isAuthBlocked
+              ? 'auth_required'
+              : isNotFound
+                ? 'endpoint_not_found'
+                : probe.status >= 500
+                  ? 'upstream_error'
+                  : 'redirect_or_other';
+          const message = is2xx
+            ? `Uç nokta erişilebilir (HTTP ${probe.status} · ${latencyMs} ms). Not: Kimlik doğrulama ve canlı biletleme tedarikçi testi ayrı doğrulanmalıdır.`
+            : isAuthBlocked
+              ? `Uç nokta erişilebilir ancak kimlik doğrulama reddedildi (HTTP ${probe.status} · ${latencyMs} ms). API anahtarı / IP Whitelist doğrulanmadı.`
+              : isNotFound
+                ? `Uç nokta bulunamadı (HTTP 404 · ${latencyMs} ms). Sağlayıcı URL adresini kontrol edin.`
+                : `Sunucu beklenen başarı kodunu dönmedi (HTTP ${probe.status} · ${latencyMs} ms).`;
           send(res, 200, {
-            ok: probe.status < 500,
+            ok: is2xx,
+            reachable: probe.status > 0 && probe.status < 500,
+            authVerified: false,
+            liveTransactionVerified: false,
+            stage,
             status: probe.status,
             latencyMs,
-            message: `Sunucu yanıt verdi (HTTP ${probe.status} · ${latencyMs} ms).`,
+            message,
           });
         } catch (err) {
           const latencyMs = Date.now() - started;
           send(res, 200, {
             ok: false,
+            reachable: false,
+            authVerified: false,
+            liveTransactionVerified: false,
+            stage: 'network_error',
             status: 0,
             latencyMs,
             message: err?.name === 'AbortError'
@@ -1592,6 +2046,178 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
               : 'Bağlantı kurulamadı — URL veya IP Whitelist ayarını kontrol edin.',
           });
         }
+      } else if (method === 'GET' && path === '/api/admin/analytics') {
+        const range = (url.searchParams.get('range') || '7d').toLowerCase();
+        const now = Date.now();
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        let sinceMs = startOfToday.getTime() - 6 * 86_400_000;
+        let untilMs = now;
+        if (range === 'today') {
+          sinceMs = startOfToday.getTime();
+        } else if (range === '30d' || range === 'month') {
+          sinceMs = startOfToday.getTime() - 29 * 86_400_000;
+        } else if (range === 'custom') {
+          const fromStr = url.searchParams.get('from');
+          const toStr = url.searchParams.get('to');
+          if (fromStr && /^\d{4}-\d{2}-\d{2}$/.test(fromStr)) sinceMs = new Date(`${fromStr}T00:00:00`).getTime();
+          if (toStr && /^\d{4}-\d{2}-\d{2}$/.test(toStr)) untilMs = new Date(`${toStr}T23:59:59.999`).getTime();
+        }
+
+        const totalUsers = db.prepare('SELECT COUNT(*) AS c FROM users').get()?.c ?? 0;
+        const activeOrgs = db.prepare("SELECT COUNT(*) AS c FROM organizations WHERE status = 'active'").get()?.c ?? 0;
+        const events = db.prepare('SELECT event_type, page, product_type, metadata, created_at FROM analytics_events WHERE created_at >= ? AND created_at <= ? ORDER BY created_at DESC LIMIT 5000').all(sinceMs, untilMs);
+        const bkRows = db.prepare('SELECT id, pnr, status, details, created_at FROM bookings WHERE created_at >= ? AND created_at <= ? ORDER BY created_at DESC').all(sinceMs, untilMs);
+
+        const countEv = (t) => events.filter((e) => e.event_type === t).length;
+        const seenBookingIds = new Set();
+        const salesSummary = {
+          demoCount: 0,
+          demoVolumeTRY: 0,
+          verifiedLiveCount: 0,
+          verifiedLiveVolumeTRY: 0,
+          refundedCount: 0,
+          refundedVolumeTRY: 0,
+          byProduct: { Uçak: 0, Otel: 0, Transfer: 0, Tur: 0 },
+        };
+        for (const r of bkRows) {
+          if (seenBookingIds.has(r.id)) continue;
+          seenBookingIds.add(r.id);
+          const det = JSON.parse(r.details || '{}');
+          const price = Number(det.price || 0);
+          const isDemo = det.demo !== false;
+          if (r.status === 'İade Edildi' || r.status === 'İptal Edildi') {
+            salesSummary.refundedCount++;
+            salesSummary.refundedVolumeTRY += price;
+            continue;
+          }
+          if (isDemo) {
+            salesSummary.demoCount++;
+            salesSummary.demoVolumeTRY += price;
+          } else {
+            salesSummary.verifiedLiveCount++;
+            salesSummary.verifiedLiveVolumeTRY += price;
+          }
+          if (det.type && det.type in salesSummary.byProduct) {
+            salesSummary.byProduct[det.type] += price;
+          }
+        }
+
+        const authFailures = countEv('auth_failure');
+        const rateLimited = countEv('rate_limited');
+        const clientErrors = countEv('client_error');
+        const serverErrors = countEv('server_error');
+        const pageCounts = new Map();
+        for (const e of events) {
+          if (e.page) pageCounts.set(e.page, (pageCounts.get(e.page) || 0) + 1);
+        }
+        const topPage = [...pageCounts.entries()].sort((a, b) => b[1] - a[1])[0] || null;
+        const suspiciousAlerts = [];
+        if (authFailures >= 5) {
+          suspiciousAlerts.push({
+            level: authFailures >= 15 ? 'high' : 'medium',
+            code: 'AUTH_FAILURE_SPIKE',
+            reason: `Seçilen aralıkta ${authFailures} başarısız giriş denemesi tespit edildi (olası parola denemesi / brute-force).`,
+            count: authFailures,
+          });
+        }
+        if (rateLimited >= 3) {
+          suspiciousAlerts.push({
+            level: 'high',
+            code: 'RATE_LIMIT_BURST',
+            reason: `${rateLimited} istek hız sınırı (HTTP 429) tarafından engellendi.`,
+            count: rateLimited,
+          });
+        }
+        if (topPage && topPage[1] >= 120) {
+          suspiciousAlerts.push({
+            level: 'medium',
+            code: 'PAGE_LOAD_ANOMALY',
+            reason: `"${topPage[0]}" sayfasında olağandışı trafik yoğunluğu (${topPage[1]} olay).`,
+            count: topPage[1],
+          });
+        }
+
+        // Daily trend buckets (up to last 7 days in range)
+        const dailyMap = new Map();
+        const dayCount = Math.min(14, Math.max(1, Math.ceil((untilMs - sinceMs) / 86_400_000)));
+        for (let i = dayCount - 1; i >= 0; i--) {
+          const d = new Date(untilMs - i * 86_400_000).toISOString().slice(0, 10);
+          dailyMap.set(d, { date: d, visits: 0, bookings: 0, errors: 0 });
+        }
+        for (const e of events) {
+          const d = new Date(e.created_at).toISOString().slice(0, 10);
+          const slot = dailyMap.get(d);
+          if (!slot) continue;
+          if (e.event_type === 'page_view' || e.event_type === 'search') slot.visits++;
+          if (e.event_type === 'client_error' || e.event_type === 'server_error') slot.errors++;
+        }
+        for (const r of bkRows) {
+          const d = new Date(r.created_at).toISOString().slice(0, 10);
+          const slot = dailyMap.get(d);
+          if (slot) slot.bookings++;
+        }
+
+        const includeActivity = url.searchParams.get('activity') === '1';
+        if (includeActivity && user.role !== 'admin' && !(hasPerm(user, 'bookings.view_all') && hasPerm(user, 'analytics.view'))) {
+          fail(403, 'Hesap hareketlerini görme yetkiniz yok.');
+        }
+        const activity = includeActivity ? {
+          accounts: db.prepare(`
+            SELECT e.id, e.event_type AS event, e.created_at AS occurredAt,
+              json_extract(e.metadata, '$.method') AS method,
+              json_extract(e.metadata, '$.device') AS device, u.email
+            FROM analytics_events e
+            JOIN users u ON u.id = json_extract(e.metadata, '$.accountId')
+            WHERE e.event_type IN ('user_login', 'user_register') AND e.created_at BETWEEN ? AND ?
+            ORDER BY e.created_at DESC LIMIT 60
+          `).all(sinceMs, untilMs),
+          journeys: db.prepare(`
+            WITH steps AS (
+              SELECT substr(session_hash, 1, 10) AS session, created_at AS occurredAt,
+                event_type AS step, CASE WHEN product_type IN ('Uçak', 'Otel', 'Transfer', 'Tur') THEN product_type ELSE '' END AS product,
+                ROW_NUMBER() OVER (PARTITION BY session_hash ORDER BY created_at DESC, rowid DESC) AS position
+              FROM analytics_events
+              WHERE session_hash <> '' AND created_at BETWEEN ? AND ?
+                AND event_type IN ('search', 'select', 'passenger_form', 'checkout_submit', 'checkout_error', 'booking_complete')
+            )
+            SELECT session, occurredAt, step, product FROM steps
+            WHERE position = 1 ORDER BY occurredAt DESC LIMIT 60
+          `).all(sinceMs, untilMs),
+        } : undefined;
+        send(res, 200, {
+          range,
+          since: new Date(sinceMs).toISOString(),
+          until: new Date(untilMs).toISOString(),
+          members: {
+            totalUsers,
+            activeOrganizations: activeOrgs,
+            loginsInPeriod: countEv('user_login'),
+          },
+          funnel: {
+            pageViews: countEv('page_view'),
+            searches: countEv('search'),
+            selections: countEv('select'),
+            passengerForms: countEv('passenger_form'),
+            checkoutSubmits: countEv('checkout_submit'),
+            bookingsCreated: seenBookingIds.size,
+          },
+          sales: salesSummary,
+          health: {
+            clientErrors,
+            serverErrors,
+            authFailures,
+            rateLimited,
+            suspiciousAlerts,
+          },
+          dailyTrend: [...dailyMap.values()],
+          activity,
+          integrations: {
+            posthog: { configured: Boolean(process.env.POSTHOG_KEY?.trim()), host: process.env.POSTHOG_HOST || 'https://eu.i.posthog.com', piiBlocked: true },
+            cloudflare: { configured: Boolean(process.env.CLOUDFLARE_ZONE_ID?.trim()), trustProxy: process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true' },
+            sentry: { configured: Boolean(process.env.SENTRY_DSN?.trim()), piiScrubbed: true },
+          },
+        });
       } else if (method === 'GET' && path === '/api/admin/xml-showcase/status') {
         let status = readXmlShowcaseStatus(db);
         if (!status) {
@@ -1614,7 +2240,11 @@ export function createApi({ db = openDatabase(), publicOrigin = process.env.FLYT
         fail(404, 'İşlem bulunamadı.');
       }
     } catch (error) {
+      if (error instanceof RequestError && error.status === 429) {
+        recordAnalyticsEvent(db, { eventType: 'rate_limited', page: path, metadata: { method } });
+      }
       if (!(error instanceof RequestError)) {
+        recordAnalyticsEvent(db, { eventType: 'server_error', page: path, metadata: { method, name: error?.name || 'Error' } });
         console.error('API error:', method, path, error.name, error.code ?? '');
       }
       if (!res.headersSent && !res.destroyed) {

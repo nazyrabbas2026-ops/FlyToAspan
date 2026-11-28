@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Lock, ShieldCheck, ArrowLeft, LogOut } from 'lucide-react';
-import { api, apiMessage } from '../data/api';
+import { api, ApiError, apiMessage } from '../data/api';
 import { useAdminDomI18n } from '../hooks/useAdminDomI18n';
 import type { LangCode, UserProfile } from '../types';
 
@@ -10,6 +10,7 @@ interface AdminLoginGateProps {
   sessionLoading: boolean;
   currentUser: UserProfile | null;
   isDedicatedSubdomain: boolean;
+  developerWorkspace?: boolean;
   onLoginSuccess: (user: UserProfile) => void;
   onLogout: () => void;
   onBackToSite: () => void;
@@ -21,6 +22,7 @@ export const AdminLoginGate: React.FC<AdminLoginGateProps> = ({
   sessionLoading,
   currentUser,
   isDedicatedSubdomain,
+  developerWorkspace = false,
   onLoginSuccess,
   onLogout,
   onBackToSite,
@@ -35,6 +37,8 @@ export const AdminLoginGate: React.FC<AdminLoginGateProps> = ({
   useAdminDomI18n(gateRef, activeLang);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [needs2fa, setNeeds2fa] = useState(false);
+  const [totpCode, setTotpCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -44,14 +48,13 @@ export const AdminLoginGate: React.FC<AdminLoginGateProps> = ({
     setBusy(true);
     setError('');
     try {
-      const { user } = await api.login(email, password);
-      const allowed = user.role === 'admin' || Boolean(user.permissions && user.permissions.length > 0);
-      if (!allowed) {
-        setError('Bu hesap bireysel müşteri hesabıdır. Yalnızca yönetici veya onaylı B2B ekip hesapları giriş yapabilir.');
-        return;
-      }
+      const { user } = await api.login(email, password, needs2fa ? totpCode : undefined);
       onLoginSuccess(user);
     } catch (err) {
+      if (err instanceof ApiError && err.data?.requires2fa === true) {
+        setNeeds2fa(true);
+        return;
+      }
       setError(apiMessage(err));
     } finally {
       setBusy(false);
@@ -117,10 +120,10 @@ export const AdminLoginGate: React.FC<AdminLoginGateProps> = ({
             <ShieldCheck size={13} /> MERKEZ YÖNETİM &amp; B2B EKİP PORTALI
           </span>
           <h1 style={{ margin: '12px 0 4px', fontSize: 22, fontWeight: 800, color: '#0B1E33' }}>
-            Yönetici Portal Girişi
+            {developerWorkspace ? 'Geliştirici Paneli Girişi' : 'Yönetici Portal Girişi'}
           </h1>
           <p style={{ margin: 0, fontSize: 12.5, color: '#64748B' }}>
-            Bağımsız operasyon, finans, CRM ve B2B acente yönetim ekranı
+            {developerWorkspace ? 'FlyToAspan analiz ve teknik çalışma alanı' : 'Bağımsız operasyon, finans, CRM ve B2B acente yönetim ekranı'}
           </p>
         </div>
 
@@ -142,7 +145,7 @@ export const AdminLoginGate: React.FC<AdminLoginGateProps> = ({
                 marginBottom: 16,
               }}
             >
-              <strong>{currentUser.email}</strong> hesabı yönetici veya onaylı ekip yetkisine sahip değil.
+              <strong>{currentUser.email}</strong> hesabının bu panele giriş yetkisi yok.
             </div>
             <button
               type="button"
@@ -172,7 +175,7 @@ export const AdminLoginGate: React.FC<AdminLoginGateProps> = ({
                 className="modal-input"
                 placeholder="admin@flytoaspan.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => { setEmail(e.target.value); setNeeds2fa(false); setTotpCode(''); }}
               />
             </div>
             <div>
@@ -187,9 +190,17 @@ export const AdminLoginGate: React.FC<AdminLoginGateProps> = ({
                 className="modal-input"
                 placeholder="••••••••••••"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => { setPassword(e.target.value); setNeeds2fa(false); setTotpCode(''); }}
               />
             </div>
+            {needs2fa && (
+              <label htmlFor="admin-portal-totp">
+                İki aşamalı doğrulama kodu
+                <input id="admin-portal-totp" className="modal-input" inputMode="numeric" autoComplete="one-time-code"
+                  pattern="[0-9]{6}" required autoFocus value={totpCode}
+                  onChange={(event) => setTotpCode(event.target.value.replace(/\D/g, '').slice(0, 6))} />
+              </label>
+            )}
             <button
               type="submit"
               disabled={busy}

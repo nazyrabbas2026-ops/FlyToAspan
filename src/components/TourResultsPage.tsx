@@ -37,17 +37,17 @@ const TOUR_PAGE_I18N: Record<
     eyebrow: 'FLYTOASPAN · KÜLTÜR & TATİL TURLARI',
     title: 'Seçkin Tur Paketleri',
     subtitle: 'Türkiye, Kazakistan, Mısır, Dubai ve Avrupa rotalarında her gün XML ile güncellenen uçak + otel dahil hazır paket turlar.',
-    confirmedBadge: 'Tur Rezervasyonu Onaylandı',
+    confirmedBadge: 'Deneme Tur Kaydı Oluşturuldu (Ödeme Alınmadı)',
     passengerLbl: 'Yolcu',
-    amountLbl: 'Tutar',
-    downloadPdf: 'PDF Tur Voucher İndir',
-    bookingFormTitle: 'Tur Rezervasyonu',
+    amountLbl: 'Örnek Tutar',
+    downloadPdf: 'Deneme Özeti İndir (PDF)',
+    bookingFormTitle: 'Deneme Tur Kaydı',
     cancel: 'Vazgeç',
     firstNamePh: 'Adınız *',
     lastNamePh: 'Soyadınız *',
     paxLabel: (n) => `${n} Kişi`,
     saving: 'Kaydediliyor...',
-    submitBtn: 'Tur Rezervasyonunu Tamamla',
+    submitBtn: 'Deneme Tur Kaydını Oluştur',
     quotaLeft: 'Kalan Kontenjan',
     perPersonFrom: 'Kişi Başı Başlayan',
     selectBtn: 'Turu Seç',
@@ -208,7 +208,9 @@ export const TourResultsPage: React.FC<TourResultsPageProps> = ({
         duration: localizeXmlText(t.duration, lang),
         includes: localizeXmlText(t.includes, lang),
       }));
+  const todayIso = toCalendarDate(new Date());
   const [selectedTour, setSelectedTour] = useState<TourPackage | null>(null);
+  const [tourIdemKey, setTourIdemKey] = useState<string>(() => crypto.randomUUID());
   const [guestFirst, setGuestFirst] = useState('');
   const [guestLast, setGuestLast] = useState('');
   const [paxCount, setPaxCount] = useState(2);
@@ -220,6 +222,10 @@ export const TourResultsPage: React.FC<TourResultsPageProps> = ({
   const handleBookTour = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTour || busy) return;
+    if (tourDate < todayIso) {
+      setError(lang === 'EN' ? 'Past date cannot be selected.' : lang === 'RU' ? 'Нельзя выбрать прошедшую дату.' : lang === 'KK' ? 'Өткен күнді таңдауға болмайды.' : 'Geçmiş tarihli tur kaydı oluşturulamaz.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -234,10 +240,16 @@ export const TourResultsPage: React.FC<TourResultsPageProps> = ({
         netCostTRY: Math.round(selectedTour.priceTRY * paxCount * 0.9),
         profitTRY: Math.round(selectedTour.priceTRY * paxCount * 0.1),
         providerSource: 'Yerel Tur Envanteri (Deneme)',
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: tourIdemKey,
+        pricingContext: {
+          itemId: selectedTour.id,
+          paxCount,
+          unitPriceTRY: selectedTour.priceTRY,
+        },
       });
       setConfirmed(booking);
       setSelectedTour(null);
+      setTourIdemKey(crypto.randomUUID());
     } catch (err) {
       setError(apiMessage(err));
     } finally {
@@ -290,7 +302,7 @@ export const TourResultsPage: React.FC<TourResultsPageProps> = ({
               <div className="panel-form-grid">
                 <input required className="modal-input" placeholder={ui.firstNamePh} value={guestFirst} onChange={(e) => setGuestFirst(e.target.value)} />
                 <input required className="modal-input" placeholder={ui.lastNamePh} value={guestLast} onChange={(e) => setGuestLast(e.target.value)} />
-                <input required type="date" className="modal-input" value={tourDate} onChange={(e) => setTourDate(e.target.value)} />
+                <input required type="date" min={todayIso} className="modal-input" value={tourDate} onChange={(e) => setTourDate(e.target.value)} />
                 <select className="modal-input" value={paxCount} onChange={(e) => setPaxCount(Number(e.target.value))}>
                   {[1, 2, 3, 4, 5, 6].map((n) => (
                     <option key={n} value={n}>{ui.paxLabel(n)} ({formatPrice(selectedTour.priceTRY * n, currency)})</option>

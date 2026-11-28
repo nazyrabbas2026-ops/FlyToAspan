@@ -210,11 +210,30 @@ export const HotelResultsPage: React.FC<{
     ? liveCoupons.find((c) => c.active && c.category === 'Otel') ?? null
     : { code: 'OTEL30', title: 'Otel Kuponu' };
   const [selectedHotel, setSelectedHotel] = useState<HotelDeal | null>(null);
+  const [hotelIdemKey, setHotelIdemKey] = useState<string>(() => crypto.randomUUID());
   const [couponCode, setCouponCode] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState(0);
   const [confirmedPnr, setConfirmedPnr] = useState<string | null>(null);
   const [bookingError, setBookingError] = useState('');
   const [bookingPending, setBookingPending] = useState(false);
+
+  React.useEffect(() => {
+    if (!selectedHotel) return;
+    const prev = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !bookingPending) setSelectedHotel(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      if (prev && prev.isConnected) prev.focus();
+    };
+  }, [selectedHotel, bookingPending]);
+
+  const hotelNights = Math.max(
+    1,
+    Math.round((new Date(query.checkOut).getTime() - new Date(query.checkIn).getTime()) / 86_400_000) || 2
+  );
 
   const ui = HT_I18N[lang];
   const mu = HT_MODAL_I18N[lang];
@@ -248,6 +267,7 @@ export const HotelResultsPage: React.FC<{
 
   const openHotelModal = (h: HotelDeal) => {
     setSelectedHotel(h);
+    setHotelIdemKey(crypto.randomUUID());
     setConfirmedPnr(null);
     setBookingError('');
     setAppliedDiscount(0);
@@ -413,10 +433,19 @@ export const HotelResultsPage: React.FC<{
                     price: finalHotelPrice,
                     netCostTRY: hotelNetCost,
                     profitTRY: Math.round(finalHotelPrice - hotelNetCost),
-                    providerSource: 'BookingAgora Hotel XML',
+                    providerSource: 'Yerel Demo Otel Envanteri',
                     passenger: firstName + ' ' + lookupSurname,
                     passengersDetail: [{ fullName: firstName + ' ' + lookupSurname, paxType: 'Misafir' }],
                     lookupSurname,
+                    couponCode: couponCode || undefined,
+                    idempotencyKey: hotelIdemKey,
+                    pricingContext: {
+                      itemId: selectedHotel.id,
+                      nights: hotelNights,
+                      rooms: 1,
+                      baseNightPriceTRY: Math.max(650, Math.round(selectedHotel.price / Math.max(1, hotelNights))),
+                      couponCode: couponCode || undefined,
+                    },
                   });
                   setConfirmedPnr(pnr);
                 } catch (error) {
@@ -510,10 +539,24 @@ export const TransferResultsPage: React.FC<{
     ? liveCoupons.find((c) => c.active && c.category === 'Transfer') ?? null
     : { code: 'VIP25', title: 'VIP Transfer' };
   const [selectedTr, setSelectedTr] = useState<TransferDeal | null>(null);
+  const [transferIdemKey, setTransferIdemKey] = useState<string>(() => crypto.randomUUID());
   const [appliedDiscount, setAppliedDiscount] = useState(0);
   const [confirmedPnr, setConfirmedPnr] = useState<string | null>(null);
   const [bookingError, setBookingError] = useState('');
   const [bookingPending, setBookingPending] = useState(false);
+
+  React.useEffect(() => {
+    if (!selectedTr) return;
+    const prev = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !bookingPending) setSelectedTr(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      if (prev && prev.isConnected) prev.focus();
+    };
+  }, [selectedTr, bookingPending]);
 
   const ui = HT_I18N[lang];
   const mu = HT_MODAL_I18N[lang];
@@ -530,6 +573,7 @@ export const TransferResultsPage: React.FC<{
 
   const openTransferModal = (tr: TransferDeal) => {
     setSelectedTr(tr);
+    setTransferIdemKey(crypto.randomUUID());
     setConfirmedPnr(null);
     setBookingError('');
     setAppliedDiscount(0);
@@ -662,10 +706,15 @@ export const TransferResultsPage: React.FC<{
                     price: finalTrPrice,
                     netCostTRY: trNetCost,
                     profitTRY: Math.round(finalTrPrice - trNetCost),
-                    providerSource: 'Buranus VIP Transfer XML',
+                    providerSource: 'Yerel Demo Transfer Envanteri',
                     passenger: firstName + ' ' + lookupSurname,
                     passengersDetail: [{ fullName: firstName + ' ' + lookupSurname, paxType: 'Yolcu' }],
                     lookupSurname,
+                    idempotencyKey: transferIdemKey,
+                    pricingContext: {
+                      itemId: selectedTr.id,
+                      basePriceTRY: selectedTr.price,
+                    },
                   });
                   setConfirmedPnr(pnr);
                 } catch (error) {

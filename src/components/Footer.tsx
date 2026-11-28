@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { PHONE_DISPLAY, PHONE_HREF, PHONE_SHORT, TRANSLATIONS, WA_HREF } from '../i18n/translations';
 import { LangCode, LegalDocKey, PageView, SearchTab } from '../types';
+import { getCookieConsent, isAnalyticsAllowed, saveCookieConsent } from '../utils/analytics';
 
 interface FooterProps {
   lang: LangCode;
@@ -175,14 +176,8 @@ export const Footer: React.FC<FooterProps> = ({ lang, canManage, onNavigate, onJ
   const pf = PREFOOTER_I18N[lang];
   const [showTop, setShowTop] = useState(false);
   const [cookieVisible, setCookieVisible] = useState(false);
-  const [cookiePreference, setCookiePreference] = useState<'accepted' | 'rejected' | null>(() => {
-    try {
-      const saved = localStorage.getItem(cookiePreferenceKey);
-      return saved === 'accepted' || saved === 'rejected' ? saved : null;
-    } catch {
-      return null;
-    }
-  });
+  const [cookiePreference, setCookiePreference] = useState<'accepted' | 'rejected' | null>(() => getCookieConsent());
+  const [analyticsOptIn, setAnalyticsOptIn] = useState<boolean>(() => isAnalyticsAllowed());
   const [preferencesOpen, setPreferencesOpen] = useState(false);
 
   useEffect(() => {
@@ -195,11 +190,10 @@ export const Footer: React.FC<FooterProps> = ({ lang, canManage, onNavigate, onJ
   }, []);
 
   const cookieOpen = preferencesOpen || (cookieVisible && cookiePreference === null);
-  const chooseCookies = (preference: 'accepted' | 'rejected') => {
-    try {
-      localStorage.setItem(cookiePreferenceKey, preference);
-    } catch { /* The choice still applies for this visit. */ }
+  const chooseCookies = (preference: 'accepted' | 'rejected', allowAnalytics = preference === 'accepted') => {
+    saveCookieConsent(preference, allowAnalytics);
     setCookiePreference(preference);
+    setAnalyticsOptIn(preference === 'accepted' && allowAnalytics);
     setPreferencesOpen(false);
   };
 
@@ -385,6 +379,11 @@ export const Footer: React.FC<FooterProps> = ({ lang, canManage, onNavigate, onJ
                   </button>
                 </li>
                 <li>
+                  <button type="button" onClick={() => onJumpToTab('transfer')}>
+                    {lang === 'EN' ? 'VIP Airport Transfers' : lang === 'RU' ? 'VIP-трансфер из аэропорта' : lang === 'KK' ? 'VIP әуежай трансфері' : 'VIP Havalimanı Transferi'}
+                  </button>
+                </li>
+                <li>
                   <button type="button" onClick={() => onNavigate('booking-ops')}>
                     {fl.srvLinks[3]}
                   </button>
@@ -545,18 +544,34 @@ export const Footer: React.FC<FooterProps> = ({ lang, canManage, onNavigate, onJ
             {t.cookieTitle}
           </div>
           <div className="cookie-text">{t.cookieText}</div>
-          <div className="cookie-actions">
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 8, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={analyticsOptIn}
+              onChange={(e) => setAnalyticsOptIn(e.target.checked)}
+            />
+            <span>
+              {lang === 'EN'
+                ? 'Optional analytics cookies (off unless accepted)'
+                : lang === 'RU'
+                  ? 'Необязательные аналитические cookie (отключены без согласия)'
+                  : lang === 'KK'
+                    ? 'Қосымша аналитикалық cookie (келісімсіз өшірулі)'
+                    : 'İsteğe bağlı analitik çerezleri (onay verilmedikçe kapalı)'}
+            </span>
+          </label>
+          <div className="cookie-actions" style={{ marginTop: 10 }}>
             <button
               type="button"
               className="cookie-btn-ghost"
-              onClick={() => chooseCookies('rejected')}
+              onClick={() => chooseCookies('rejected', false)}
             >
               {t.reject}
             </button>
             <button
               type="button"
               className="cookie-btn-accept"
-              onClick={() => chooseCookies('accepted')}
+              onClick={() => chooseCookies('accepted', true)}
             >
               {t.accept}
             </button>

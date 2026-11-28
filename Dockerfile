@@ -1,8 +1,11 @@
 FROM node:24-alpine AS builder
 WORKDIR /app
-COPY package*.json ./
+COPY package.json package-lock.json ./
 RUN npm ci
-COPY . .
+COPY index.html tsconfig.json vite.config.ts ./
+COPY src ./src
+COPY public ./public
+COPY server ./server
 RUN npm run build
 
 FROM node:24-alpine AS runner
@@ -12,7 +15,7 @@ ENV PORT=3000
 ENV TRUST_PROXY=1
 ENV FLYTOASPAN_DB=/app/.data/flytoaspan.sqlite
 
-COPY package*.json ./
+COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY server ./server

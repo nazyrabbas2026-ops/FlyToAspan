@@ -319,9 +319,12 @@ export const CampaignsPage: React.FC<{
     const trMap = CAMPAIGNS_PAGE_I18N[lang];
     const baseMatch = CAMPAIGNS.find((m) => m.id === c.id || m.code === c.code);
     const localized = trMap[c.id] || (baseMatch ? trMap[baseMatch.id] : undefined);
+    const fallbackBadge = c.badge === 'YURT İÇİ & YURT DIŞI'
+      ? (lang === 'EN' ? 'DOMESTIC & INTERNATIONAL' : lang === 'RU' ? 'ВНУТРЕННИЕ И МЕЖДУНАРОДНЫЕ' : 'ІШКІ ЖӘНЕ ХАЛЫҚАРАЛЫҚ')
+      : localizeXmlText(c.badge, lang);
     return {
       ...c,
-      badge: localized?.badge ?? localizeXmlText(c.badge, lang),
+      badge: localized?.badge ?? fallbackBadge,
       title: localized?.title ?? localizeXmlText(c.title, lang),
       subtitle: localized?.subtitle ?? localizeXmlText(c.subtitle, lang),
     };

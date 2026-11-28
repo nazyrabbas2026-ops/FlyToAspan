@@ -91,10 +91,15 @@ export const DEFAULT_MARKUP: AdminMarkupConfig = {
   transferAddTRY: 150,
 };
 
-export function formatPrice(amountTRY: number, currency: CurrencyCode = 'TRY'): string {
+export function formatPrice(amountTRY: number, currency: CurrencyCode = 'TRY', lang?: 'TR' | 'EN' | 'RU' | 'KK'): string {
   const rate = liveRatesMap[currency] ?? (CURRENCIES.find((c) => c.code === currency)?.rateFromTRY || 1);
   const converted = Math.round(amountTRY * rate);
-  const formatted = new Intl.NumberFormat('tr-TR').format(converted);
+  const activeLang =
+    lang ||
+    (typeof document !== 'undefined' ? (document.documentElement.lang || 'tr').toUpperCase() : 'TR');
+  const locale =
+    activeLang === 'EN' ? 'en-US' : activeLang === 'RU' ? 'ru-RU' : activeLang === 'KK' ? 'kk-KZ' : 'tr-TR';
+  const formatted = new Intl.NumberFormat(locale).format(converted);
   if (currency === 'TRY') return `₺${formatted}`;
   if (currency === 'USD') return `$${formatted}`;
   if (currency === 'EUR') return `€${formatted}`;
@@ -1195,6 +1200,28 @@ const BUSINESS_PACKAGES_I18N: Record<'TR' | 'EN' | 'RU' | 'KK', FarePackage[]> =
 
 const LCC_CODES = new Set(['PC', 'VF', 'XQ']);
 
+function parseAirlineRuleExpr(ruleText: string): { mode: 'NET' | 'TRY' | 'EUR' | 'PERCENT'; value: number } | null {
+  const s = String(ruleText || '').trim();
+  if (!s) return null;
+  if (/^net\b/i.test(s)) return { mode: 'NET', value: 0 };
+  const pct = s.match(/([+-]?)\s*%?\s*(\d+(?:[.,]\d+)?)\s*%|%\s*(\d+(?:[.,]\d+)?)/);
+  if (pct) {
+    const raw = Number((pct[2] || pct[3] || '0').replace(',', '.'));
+    return Number.isFinite(raw) ? { mode: 'PERCENT', value: (pct[1] === '-' ? -1 : 1) * raw } : null;
+  }
+  const tl = s.match(/([+-]?)\s*(?:₺|TL|TRY)\s*(\d+(?:[.,]\d+)?)|([+-]?)\s*(\d+(?:[.,]\d+)?)\s*(?:₺|TL|TRY)/i);
+  if (tl) {
+    const raw = Number((tl[2] || tl[4] || '0').replace(',', '.'));
+    return Number.isFinite(raw) ? { mode: 'TRY', value: ((tl[1] || tl[3]) === '-' ? -1 : 1) * raw } : null;
+  }
+  const eur = s.match(/([+-]?)\s*(?:€|EUR)\s*(\d+(?:[.,]\d+)?)|([+-]?)\s*(\d+(?:[.,]\d+)?)\s*(?:€|EUR)/i);
+  if (eur) {
+    const raw = Number((eur[2] || eur[4] || '0').replace(',', '.'));
+    return Number.isFinite(raw) ? { mode: 'EUR', value: ((eur[1] || eur[3]) === '-' ? -1 : 1) * raw } : null;
+  }
+  return null;
+}
+
 export function generateFlights(
   fromCode: string,
   toCode: string,
@@ -1202,7 +1229,8 @@ export function generateFlights(
   cabin: 'Ekonomi' | 'Business',
   lang: 'TR' | 'EN' | 'RU' | 'KK' = 'TR',
   markup: AdminMarkupConfig = DEFAULT_MARKUP,
-  currency: CurrencyCode = 'TRY'
+  currency: CurrencyCode = 'TRY',
+  airlineRules: Array<{ id: string; carrier: string; route: string; rule: string }> = []
 ): FlightResult[] {
   const fromObj = AIRPORTS.find((a) => a.code === fromCode) || AIRPORTS[0];
   const toObj = AIRPORTS.find((a) => a.code === toCode) || AIRPORTS[4];
@@ -1210,11 +1238,35 @@ export function generateFlights(
   const isCentralAsia = ['ALA', 'NQZ', 'TAS', 'GYD'].includes(toCode) || ['ALA', 'NQZ', 'TAS', 'GYD'].includes(fromCode);
 
   const rawNetFare = isDomestic ? 1460 : isCentralAsia ? 6345 : 5220;
-  const baseFare = isDomestic
+  const globalBaseFare = isDomestic
     ? rawNetFare + markup.domesticAddTRY
     : isCentralAsia
       ? Math.round(rawNetFare * (1 + markup.centralAsiaPercent / 100))
       : Math.round(rawNetFare * (1 + markup.intlPercent / 100));
+  const eurToTry = 1 / (liveRatesMap.EUR || 0.018109);
+  const resolveCarrierBaseFare = (airlineName: string, airlineCode: string): number => {
+    if (!airlineRules.length) return globalBaseFare;
+    const hay = `${airlineName} ${airlineCode}`.toLowerCase();
+    const rk = `${fromCode}-${toCode}`.toLowerCase();
+    const rrev = `${toCode}-${fromCode}`.toLowerCase();
+    for (const r of airlineRules) {
+      const c = String(r.carrier || '').toLowerCase();
+      const rt = String(r.route || '').toLowerCase();
+      const cOk = !c || c.includes('tüm') || c.includes('all') || c.includes(airlineCode.toLowerCase()) || hay.includes(c) || c.includes(airlineName.toLowerCase());
+      const rOk = !rt || rt.includes('tüm') || rt.includes('all') || rt.includes(rk) || rt.includes(rrev) ||
+        (rt.includes(fromCode.toLowerCase()) && rt.includes(toCode.toLowerCase())) ||
+        (rt.includes('yurt içi') && isDomestic) ||
+        (rt.includes('orta asya') && isCentralAsia);
+      if (!cOk || !rOk) continue;
+      const expr = parseAirlineRuleExpr(r.rule);
+      if (!expr) continue;
+      if (expr.mode === 'NET') return rawNetFare;
+      if (expr.mode === 'TRY') return Math.max(500, rawNetFare + expr.value);
+      if (expr.mode === 'EUR') return Math.max(500, Math.round(rawNetFare + expr.value * eurToTry));
+      return Math.max(500, Math.round(rawNetFare * (1 + expr.value / 100)));
+    }
+    return globalBaseFare;
+  };
   const cabinMult = cabin === 'Business' ? 2.4 : 1;
   const isReverseDirection = fromCode.localeCompare(toCode) > 0;
   const routeShiftMinutes = isReverseDirection ? 35 : 0;
@@ -1290,16 +1342,13 @@ export function generateFlights(
     const durH = Math.floor(dur / 60);
     const durM = dur % 60;
     const priceFactor = isReverseDirection ? t.mult * 1.02 : t.mult;
-    const price = Math.round((baseFare * priceFactor * cabinMult) / 10) * 10;
+    const carrierBaseFare = resolveCarrierBaseFare(t.airline, t.code);
+    const price = Math.round((carrierBaseFare * priceFactor * cabinMult) / 10) * 10;
     const netCost = Math.round((rawNetFare * priceFactor * cabinMult) / 10) * 10;
     const isCharter = Boolean(t.charter);
     const providerSource = isCharter
-      ? 'Kompas / SAMO Charter XML'
-      : isDomestic
-        ? 'BookingAgora / BiletBank B2B XML'
-        : isCentralAsia
-          ? 'Air Astana / Amadeus GDS XML'
-          : 'Amadeus GDS (XML)';
+      ? 'Yerel Demo Charter Envanteri'
+      : 'Yerel Demo Uçuş Tarifesi';
     const flightNum = `${t.code}${String(t.numBase + (isReverseDirection ? 1 : 0)).padStart(t.numBase < 100 ? 3 : 0, '0')}`;
 
     const packages = cabin === 'Business' || !LCC_CODES.has(t.code)

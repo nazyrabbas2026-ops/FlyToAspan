@@ -103,21 +103,36 @@ export async function sendMail({ to, subject, html, attachments }) {
   }
 }
 
-export function sendBookingConfirmationEmail({ to, passenger, pnr, title, date, price }) {
+export function sendBookingConfirmationEmail({ to, passenger, pnr, title, date, price, demo = true }) {
+  const isDemo = demo !== false;
+  const subject = isDemo
+    ? `FlyToAspan Deneme Rezervasyon Özeti (Gerçek Bilet Değildir) · PNR: ${pnr}`
+    : `FlyToAspan Rezervasyon & Biletleme Özeti · PNR: ${pnr}`;
+  const headerTitle = isDemo
+    ? 'Deneme Rezervasyon Kaydı Oluşturuldu (Ödeme Alınmadı)'
+    : 'Rezervasyonunuz ve Ödemeniz Doğrulandı';
+  const demoBanner = isDemo
+    ? `<div style="background:#FFFBEB;border:1.5px solid #F59E0B;border-radius:10px;padding:12px 14px;margin:0 0 16px;font-size:13px;color:#92400E;">
+         <strong>DENEME KAYDI BİLGİLENDİRMESİ:</strong> Bu kayıt yerel deneme/önizleme modunda oluşturulmuştur. Kart tahsilatı yapılmamıştır ve gerçek bir havayolu/otel e-bileti değildir.
+       </div>`
+    : '';
+  const priceLabel = isDemo ? 'Örnek Tutar (Tahsilat Yapılmadı)' : 'Doğrulanmış Tutar';
+
   return sendMail({
     to,
-    subject: `FlyToAspan E-Bilet Onayı · PNR: ${pnr}`,
+    subject,
     html: wrapBrandedEmail(
-      'Rezervasyonunuz Onaylandı',
-      `<p>Sayın <strong>${escapeHtml(passenger)}</strong>,</p>
-       <p>Rezervasyonunuz başarıyla oluşturuldu. Detaylarınız aşağıdadır:</p>
+      headerTitle,
+      `${demoBanner}
+       <p>Sayın <strong>${escapeHtml(passenger)}</strong>,</p>
+       <p>${isDemo ? 'Deneme rezervasyon kaydınız oluşturuldu. Özet bilgileriniz aşağıdadır:' : 'Rezervasyonunuz başarıyla oluşturuldu. Detaylarınız aşağıdadır:'}</p>
        <div style="background:#F8FAFC;border:1px solid #CBD5E1;border-radius:12px;padding:16px;margin:16px 0;">
-         <div><strong>PNR Kodu:</strong> <span style="font-size:18px;letter-spacing:1.5px;color:#0B1E33;">${escapeHtml(pnr)}</span></div>
+         <div><strong>Referans / PNR Kodu:</strong> <span style="font-size:18px;letter-spacing:1.5px;color:#0B1E33;">${escapeHtml(pnr)}</span></div>
          <div style="margin-top:6px;"><strong>Hizmet / Güzergâh:</strong> ${escapeHtml(title)}</div>
          <div style="margin-top:6px;"><strong>Tarih:</strong> ${escapeHtml(date)}</div>
-         <div style="margin-top:6px;"><strong>Toplam Tutar:</strong> ₺${Number(price || 0).toLocaleString('tr-TR')}</div>
+         <div style="margin-top:6px;"><strong>${priceLabel}:</strong> ₺${Number(price || 0).toLocaleString('tr-TR')}</div>
        </div>
-       <p>Biletinizi PDF olarak indirmek veya sorgulamak için <strong>flytoaspan.com/bilet-islemleri</strong> sayfasını kullanabilirsiniz.</p>`
+       <p>Kaydınızı sorgulamak için <strong>flytoaspan.com/bilet-islemleri</strong> sayfasını kullanabilirsiniz.</p>`
     ),
   });
 }

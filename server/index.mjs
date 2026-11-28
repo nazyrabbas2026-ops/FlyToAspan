@@ -11,7 +11,7 @@ const db = openDatabase();
 const api = createApi({ db });
 startDailyXmlShowcaseScheduler(db);
 
-// Optional zero-shell initial admin bootstrap for Docker / Render Free Tier
+// Optional zero-shell initial Super Admin bootstrap for Docker / Render
 if (process.env.FLYTOASPAN_ADMIN_EMAIL && process.env.FLYTOASPAN_ADMIN_PASSWORD) {
   try {
     const email = normalizeEmail(process.env.FLYTOASPAN_ADMIN_EMAIL);
@@ -20,16 +20,64 @@ if (process.env.FLYTOASPAN_ADMIN_EMAIL && process.env.FLYTOASPAN_ADMIN_PASSWORD)
       email,
       password,
       role: 'admin',
+      roleLabel: 'Süper Admin',
       firstName: 'FlyToAspan',
       lastName: 'Yönetici',
       phone: '',
       accountType: 'individual',
     });
-    if (created) console.log(`FlyToAspan: Initial admin created (${email})`);
+    if (created) console.log(`FlyToAspan: Initial Super Admin created (${email})`);
   } catch (err) {
     console.error('Admin bootstrap skipped:', err.message);
   }
 }
+
+// Optional personal Developer + Analyst account bootstrap (e.g. Nazyr — read-only analytics/ops/finance, no delete/refund/role-grant)
+if (process.env.FLYTOASPAN_DEV_ANALYST_EMAIL && process.env.FLYTOASPAN_DEV_ANALYST_PASSWORD) {
+  try {
+    const email = normalizeEmail(process.env.FLYTOASPAN_DEV_ANALYST_EMAIL);
+    const password = checkPassword(process.env.FLYTOASPAN_DEV_ANALYST_PASSWORD, 12);
+    const created = await createAccount(db, {
+      email,
+      password,
+      role: 'member',
+      roleLabel: 'Geliştirici + Analist',
+      status: 'active',
+      permissions: ['bookings.view_all', 'analytics.view', 'finance.view'],
+      firstName: process.env.FLYTOASPAN_DEV_ANALYST_NAME || 'Nazyr',
+      lastName: 'Geliştirici-Analist',
+      phone: '',
+      accountType: 'individual',
+    });
+    if (created) console.log(`FlyToAspan: Developer + Analyst account created (${email})`);
+  } catch (err) {
+    console.error('Dev/Analyst bootstrap skipped:', err.message);
+  }
+}
+
+const KNOWN_SPA_PATHS = new Set([
+  '/',
+  '/ucus-ara',
+  '/otel-ara',
+  '/transfer-ara',
+  '/turlar',
+  '/kampanyalar',
+  '/online-check-in',
+  '/yardim',
+  '/bilet-islemleri',
+  '/hesabim',
+  '/yonetim',
+  '/gelistirici',
+  '/yasal/kullanim-kosullari',
+  '/yasal/kvkk',
+  '/yasal/iptal-ve-iade',
+  '/yasal/ticari-iletisim',
+  '/yasal/cerezler',
+  '/kvkk',
+  '/gizlilik',
+  '/kullanim-kosullari',
+  '/cerez-politikasi',
+]);
 
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -48,18 +96,21 @@ const mimeTypes = {
 const server = createServer({ requestTimeout: 20_000, headersTimeout: 10_000 }, async (req, res) => {
   try {
     if (await api(req, res)) return;
-    const path = new URL(req.url ?? '/', 'http://localhost').pathname;
+    const rawPath = new URL(req.url ?? '/', 'http://localhost').pathname;
+    const normalizedPath = rawPath.replace(/\/+$/, '') || '/';
     if (!['GET', 'HEAD'].includes(req.method)) {
       res.writeHead(405, { Allow: 'GET, HEAD' }).end();
       return;
     }
-    const isAsset = (/^\/(?:assets|images)\/[A-Za-z0-9._-]+$/.test(path) || ['/manifest.json', '/robots.txt', '/sitemap.xml'].includes(path)) && !path.endsWith('/..');
-    const isPage = /^\/(?:[a-z0-9-]+\/?)*$/.test(path) && !/^\/(api|assets|images)(\/|$)/.test(path);
+    const isAsset = (/^\/(?:assets|images)\/[A-Za-z0-9._-]+$/.test(rawPath) || ['/manifest.json', '/robots.txt', '/sitemap.xml'].includes(rawPath)) && !rawPath.endsWith('/..');
+    const isPage = !isAsset && /^\/(?:[a-z0-9-]+\/)*[a-z0-9-]*$/i.test(rawPath)
+      && !/^\/(api|assets|images)(\/|$)/i.test(rawPath);
     if (!isAsset && !isPage) {
       res.writeHead(404).end();
       return;
     }
-    const file = resolve(buildDirectory, isAsset ? '.' + path : 'index.html');
+    const isKnownRoute = isAsset || KNOWN_SPA_PATHS.has(normalizedPath.toLowerCase());
+    const file = resolve(buildDirectory, isAsset ? '.' + rawPath : 'index.html');
     const info = await stat(file);
     if (!info.isFile()) {
       res.writeHead(404).end();
@@ -72,13 +123,14 @@ const server = createServer({ requestTimeout: 20_000, headersTimeout: 10_000 }, 
       'X-Frame-Options': 'DENY',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
       'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src 'self' https://open.er-api.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
-      'Cache-Control': path.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
+      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src 'self' https://open.er-api.com https://eu.i.posthog.com https://us.i.posthog.com https://*.ingest.sentry.io; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+      'Cache-Control': rawPath.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
     };
     if (process.env.NODE_ENV === 'production') {
       headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains';
     }
-    res.writeHead(200, headers);
+    // Serve index.html with genuine HTTP 404 status for unknown routes so browsers, SEO, and clients see 404 + friendly 404 page
+    res.writeHead(isKnownRoute ? 200 : 404, headers);
     if (req.method === 'HEAD') res.end();
     else createReadStream(file).on('error', () => res.destroy()).pipe(res);
   } catch (error) {

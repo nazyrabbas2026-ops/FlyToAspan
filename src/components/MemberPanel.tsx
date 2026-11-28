@@ -10,7 +10,6 @@ import {
   Plus,
   Trash2,
   CheckCircle2,
-  XCircle,
   Plane,
   Award,
   Download,
@@ -26,7 +25,6 @@ import { toCalendarDate } from '../data/calendarDates';
 import { PanelNavigation } from './PanelNavigation';
 import {
   BookingRecord,
-  CorpApproval,
   LangCode,
   PriceAlertRecord,
   SavedPassengerRecord,
@@ -221,6 +219,13 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
   const [newAlertRoute, setNewAlertRoute] = useState('İstanbul (IST) → Astana (NQZ)');
   const [newAlertTarget, setNewAlertTarget] = useState('6500');
 
+  const [realOrg, setRealOrg] = useState<{
+    organization: import('../types').Organization | null;
+    ledger: import('../types').OrgLedgerEntry[];
+    team: Array<{ id: string; email: string; name: string; status: string; roleLabel: string }>;
+  }>({ organization: null, ledger: [], team: [] });
+  const [orgLoading, setOrgLoading] = useState(false);
+
   useEffect(() => {
     const controller = new AbortController();
     api.savedPassengers(controller.signal)
@@ -229,39 +234,15 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
     api.priceAlerts(controller.signal)
       .then(({ alerts: list }) => { if (!controller.signal.aborted) setAlerts(list); })
       .catch(() => { /* ignore */ });
+    if (user.organizationId || user.accountType === 'corporate') {
+      setOrgLoading(true);
+      api.myOrganization(controller.signal)
+        .then((res) => { if (!controller.signal.aborted) setRealOrg(res); })
+        .catch(() => { /* ignore */ })
+        .finally(() => { if (!controller.signal.aborted) setOrgLoading(false); });
+    }
     return () => controller.abort();
-  }, [user.id]);
-
-  // Corporate Approval Queue state (UygunFly Corporate Portal style!)
-  const [approvals, setApprovals] = useState<CorpApproval[]>([
-    {
-      id: 'crp-1',
-      employee: 'Emre Demir',
-      department: 'Satış & İş Geliştirme',
-      route: 'IST → ALA (Air Astana · Business)',
-      date: '14 Ara 2026',
-      amount: 14850,
-      status: 'Bekliyor',
-    },
-    {
-      id: 'crp-2',
-      employee: 'Aida Nurlanova',
-      department: 'Operasyon',
-      route: 'ALA → IST (Turkish Airlines · Extra Fly)',
-      date: '19 Ara 2026',
-      amount: 7620,
-      status: 'Bekliyor',
-    },
-    {
-      id: 'crp-3',
-      employee: 'Kerem Aydın',
-      department: 'Finans',
-      route: 'IST → LHR + 2 Gece Otel',
-      date: '22 Ara 2026',
-      amount: 18400,
-      status: 'Onaylandı',
-    },
-  ]);
+  }, [user.id, user.organizationId, user.accountType]);
 
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const noticeTimerRef = useRef<number | null>(null);
@@ -588,7 +569,9 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
                           onClick={() => openBrandedEticketPdf(b, { lang })}
                         >
                           <Download size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-                          PDF E-Bilet
+                          {b.demo !== false
+                            ? (lang === 'EN' ? 'Demo Summary (PDF)' : lang === 'RU' ? 'Демо-резюме (PDF)' : lang === 'KK' ? 'Демо түйіндеме (PDF)' : 'Deneme Özeti (PDF)')
+                            : 'PDF E-Bilet'}
                         </button>
                         {b.status === 'Onaylandı' && (
                           <button
@@ -747,120 +730,78 @@ export const MemberPanel: React.FC<MemberPanelProps> = ({
                 </>
               )}
 
-              {/* 4. CORPORATE PORTAL (B2B Budget + Manager Approval Queue) */}
+              {/* 4. CORPORATE PORTAL (Real B2B Organization Limit & Ledger) */}
               {tab === 'corporate' && (
                 <>
-                  <div className="panel-card">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-                      <div>
-                        <span className="pkg-pill">B2B KURUMSAL SEYAHAT</span>
-                        <h3 style={{ margin: '8px 0 4px', fontSize: 20 }}>
-                          {user.companyName || 'Infinitive Kurumsal Hesap (Demo)'}
-                        </h3>
-                        <div style={{ fontSize: 13, color: 'var(--aspan-text-muted)' }}>
-                          Aylık Seyahat Bütçesi: ₺250.000 · Kullanılan: ₺94.200 (%38)
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        className="uf-quick-pill"
-                        onClick={() => flash('Kurumsal rapor indirme, sunucu bağlantısı ile açılacak.')}
-                      >
-                        <Download size={14} style={{ verticalAlign: 'middle', marginRight: 5 }} />
-                        Aylık E-Fatura &amp; Rapor
-                      </button>
+                  {orgLoading ? (
+                    <div className="panel-card" role="status">
+                      {lang === 'EN' ? 'Loading corporate details…' : lang === 'RU' ? 'Загрузка корпоративных данных…' : lang === 'KK' ? 'Корпоративтік деректер жүктелуде…' : 'Kurumsal hesap bilgileri yükleniyor…'}
                     </div>
-                    <div
-                      style={{
-                        height: 10,
-                        borderRadius: 99,
-                        background: 'var(--aspan-bg-pill)',
-                        marginTop: 14,
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: '38%',
-                          height: '100%',
-                          background: 'linear-gradient(90deg, #00A8B5, #38BDF8, #F5CD5E)',
-                          borderRadius: 99,
-                        }}
-                      />
+                  ) : !realOrg.organization ? (
+                    <div className="panel-card">
+                      <span className="pkg-pill">B2B KURUMSAL SEYAHAT</span>
+                      <h3 style={{ margin: '10px 0 6px', fontSize: 19 }}>
+                        {lang === 'EN' ? 'No Corporate Organization Linked Yet' : lang === 'RU' ? 'Корпоративная организация ещё не привязана' : lang === 'KK' ? 'Корпоративтік ұйым әлі байланыстырылмаған' : 'Hesabınıza Tanımlı Kurumsal Şirket Bulunmuyor'}
+                      </h3>
+                      <p style={{ fontSize: 13.5, color: 'var(--aspan-text-muted)', margin: 0 }}>
+                        {lang === 'EN'
+                          ? 'Once your corporate/agency application is approved by an administrator, your real credit limit, discount rate, and account ledger will appear here.'
+                          : lang === 'RU'
+                            ? 'После одобрения корпоративной заявки администратором здесь появятся ваш реальный лимит, скидка и выписка.'
+                            : lang === 'KK'
+                              ? 'Корпоративтік өтініміңіз әкімші растағаннан кейін нақты лимит, жеңілдік және қозғалыстар осында көрінеді.'
+                              : 'Kurumsal / bayi başvurunuz yönetici tarafından onaylandığında gerçek cari limitiniz, indirim oranınız ve hesap hareketleriniz burada görüntülenecektir.'}
+                      </p>
                     </div>
-                  </div>
-
-                  <div className="panel-card">
-                    <strong style={{ fontSize: 17, display: 'block', marginBottom: 14 }}>
-                      Yönetici Onayı Bekleyen Seyahat Talepleri
-                    </strong>
-                    {approvals.map((ap) => (
-                      <div
-                        key={ap.id}
-                        style={{
-                          padding: 14,
-                          borderRadius: 14,
-                          border: '1px solid var(--aspan-border)',
-                          marginBottom: 10,
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          gap: 14,
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        <div>
-                          <strong>{ap.employee}</strong>{' '}
-                          <span style={{ fontSize: 12, color: 'var(--aspan-teal-deep)', fontWeight: 700 }}>
-                            · {ap.department}
-                          </span>
-                          <div style={{ fontSize: 13, color: 'var(--aspan-text-body)', marginTop: 2 }}>
-                            {ap.route} · {ap.date}
+                  ) : (() => {
+                    const org = realOrg.organization;
+                    const pct = org.creditLimitTRY > 0 ? Math.min(100, Math.round((org.usedCreditTRY / org.creditLimitTRY) * 100)) : 0;
+                    return (
+                      <>
+                        <div className="panel-card">
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                            <div>
+                              <span className="pkg-pill">{org.type} · {org.status === 'active' ? 'Aktif' : 'Askıda'}</span>
+                              <h3 style={{ margin: '8px 0 4px', fontSize: 20 }}>{org.name}</h3>
+                              <div style={{ fontSize: 13, color: 'var(--aspan-text-muted)' }}>
+                                Cari Limit: <strong>₺{formatTRY(org.creditLimitTRY)}</strong> · Kullanılan: <strong>₺{formatTRY(org.usedCreditTRY)}</strong> (%{pct}) · Kalan: <strong style={{ color: '#059669' }}>₺{formatTRY(org.remainingCreditTRY)}</strong>
+                                {org.discountPercent > 0 ? ` · Kurumsal İndirim: %${org.discountPercent}` : ''}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ height: 10, borderRadius: 99, background: 'var(--aspan-bg-pill)', marginTop: 14, overflow: 'hidden' }}>
+                            <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, #00A8B5, #38BDF8, #F5CD5E)', borderRadius: 99 }} />
                           </div>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <strong>₺{formatTRY(ap.amount)}</strong>
-                          {ap.status === 'Bekliyor' ? (
-                            <>
-                              <button
-                                type="button"
-                                className="uf-quick-pill"
-                                style={{ background: 'rgba(16,185,129,0.14)', color: '#047857', borderColor: 'transparent' }}
-                                onClick={() => {
-                                  setApprovals((prev) =>
-                                    prev.map((x) => (x.id === ap.id ? { ...x, status: 'Onaylandı' } : x))
-                                  );
-                                  flash(`${ap.employee} deneme seyahat talebi onaylandı.`);
-                                }}
-                              >
-                                <CheckCircle2 size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-                                Onayla
-                              </button>
-                              <button
-                                type="button"
-                                className="uf-quick-pill"
-                                style={{ background: 'rgba(225,29,72,0.1)', color: '#be123c', borderColor: 'transparent' }}
-                                onClick={() => {
-                                  setApprovals((prev) =>
-                                    prev.map((x) => (x.id === ap.id ? { ...x, status: 'Reddedildi' } : x))
-                                  );
-                                  flash(`${ap.employee} talebi reddedildi.`);
-                                }}
-                              >
-                                <XCircle size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-                                Reddet
-                              </button>
-                            </>
+                        <div className="panel-card">
+                          <strong style={{ fontSize: 17, display: 'block', marginBottom: 12 }}>
+                            Cari Hesap Hareketleri ({realOrg.ledger.length})
+                          </strong>
+                          {realOrg.ledger.length === 0 ? (
+                            <p style={{ fontSize: 13, color: 'var(--aspan-text-muted)', margin: 0 }}>
+                              Henüz bu şirket için kayıtlı cari hareket bulunmuyor.
+                            </p>
                           ) : (
-                            <span className={`status-badge ${ap.status === 'Onaylandı' ? 'ok' : 'bad'}`}>
-                              {ap.status}
-                            </span>
+                            realOrg.ledger.map((row) => (
+                              <div key={row.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--aspan-border)', gap: 10, flexWrap: 'wrap' }}>
+                                <div>
+                                  <span className={`status-badge ${row.type === 'credit' ? 'ok' : 'warn'}`}>
+                                    {row.type === 'credit' ? 'İade / Tahsilat (+)' : 'Satış Borcu (−)'}
+                                  </span>{' '}
+                                  {row.pnr && <span className="uf-airport-code">{row.pnr}</span>}{' '}
+                                  <strong>{row.description}</strong>
+                                </div>
+                                <strong style={{ color: row.type === 'credit' ? '#059669' : '#be123c' }}>
+                                  {row.type === 'credit' ? '+' : '−'}₺{formatTRY(row.amount)}
+                                </strong>
+                              </div>
+                            ))
                           )}
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      </>
+                    );
+                  })()}
                 </>
               )}
 

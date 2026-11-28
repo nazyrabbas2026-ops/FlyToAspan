@@ -91,7 +91,7 @@ const LEGAL_UI: Record<
           },
         ],
         closing:
-          'Kimlik ve pasaport verileriniz AES-256 standardıyla korunur. KVKK Madde 11 kapsamındaki veri erişim, düzeltme ve silme taleplerinizi Üye Panelinizdeki "Güvenlik & KVKK" sekmesinden veya info@flytoaspan.com adresinden iletebilirsiniz.',
+          'Kimlik ve pasaport numaralarınız sunucu veritabanında uygulama katmanı AES-256-GCM şifreleme ile saklanır; şifreleme anahtarları koddan ve veritabanından ayrı yönetilir. KVKK Madde 11 kapsamındaki veri erişim, düzeltme ve silme taleplerinizi Üye Panelinizdeki "Güvenlik & KVKK" sekmesinden veya info@flytoaspan.com adresinden iletebilirsiniz. (Not: Bu metin canlı satış öncesi işletmenin güncel veri envanteri ve sözleşmeli tedarikçi listesiyle hukuki son onaya sunulacaktır.)',
       },
       refund: {
         heading: '3. Bilet İptal, İade ve Değişiklik Koşulları',

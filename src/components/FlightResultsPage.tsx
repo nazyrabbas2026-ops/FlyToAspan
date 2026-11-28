@@ -34,7 +34,8 @@ import {
   localizeOperatorText,
 } from '../data/mockData';
 import { addCalendarDays, toCalendarDate } from '../data/calendarDates';
-import { api, apiMessage, type AdminCatalog, type BookingDraft } from '../data/api';
+import { api, ApiError, apiMessage, type AdminCatalog, type BookingDraft } from '../data/api';
+import { trackAnalyticsEvent } from '../utils/analytics';
 import type { SavedPassengerRecord } from '../types';
 import { openBrandedEticketPdf } from '../utils/eticketPdf';
 import { WA_HREF } from '../i18n/translations';
@@ -53,6 +54,7 @@ interface FlightResultsPageProps {
   isLoggedIn?: boolean;
   manualFlights?: AdminCatalog['flights'];
   operatorRules?: AdminCatalog['operators'];
+  liveRules?: AdminCatalog['rules'];
   liveCoupons?: AdminCatalog['coupons'];
   query: FlightSearchQuery;
   onChangeQuery?: (next: FlightSearchQuery) => void;
@@ -611,6 +613,7 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
   isLoggedIn = false,
   manualFlights = [],
   operatorRules = [],
+  liveRules = [],
   liveCoupons,
   query,
   onChangeQuery,
@@ -654,13 +657,21 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
 
   const [showPromoCodeBox, setShowPromoCodeBox] = useState(false);
   const [addonAutoCheckin, setAddonAutoCheckin] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [priceChangedNotice, setPriceChangedNotice] = useState<{ newPrice: number; appliedRule?: string } | null>(null);
 
   const totalPax = query.adults + query.children + query.infants;
   const paxWeight = query.adults + query.children * 0.75 + query.infants * 0.1;
   const calcPaxFare = (unitTRY: number) => Math.round(unitTRY * paxWeight);
   const isRoundTrip = query.tripType === 'roundtrip';
+  const isMultiCity = query.tripType === 'multicity' && Boolean(query.leg2FromCode && query.leg2ToCode);
+  const isTwoLeg = isRoundTrip || isMultiCity;
+  const leg2From = isMultiCity ? (query.leg2FromCode || query.toCode) : query.toCode;
+  const leg2To = isMultiCity ? (query.leg2ToCode || query.fromCode) : query.fromCode;
+  const leg2Date = isMultiCity ? (query.leg2Date || addCalendarDays(query.departDate, 4)) : query.returnDate;
+
   const outboundFlights = useMemo(() => {
-    const generated = generateFlights(query.fromCode, query.toCode, query.departDate, query.cabin, lang, markup, currency);
+    const generated = generateFlights(query.fromCode, query.toCode, query.departDate, query.cabin, lang, markup, currency, liveRules);
     const fromObj = AIRPORTS.find((a) => a.code === query.fromCode);
     const toObj = AIRPORTS.find((a) => a.code === query.toCode);
     const eurRateToTRY = Math.round(1 / (getLiveRatesSnapshot().rates.EUR || 0.0181));
@@ -771,19 +782,19 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
         };
       });
     return [...custom, ...generated];
-  }, [query.fromCode, query.toCode, query.departDate, query.cabin, lang, markup, currency, manualFlights, operatorRules]);
+  }, [query.fromCode, query.toCode, query.departDate, query.cabin, lang, markup, currency, manualFlights, operatorRules, liveRules]);
   const inboundFlights = useMemo(
     () =>
-      isRoundTrip
-        ? generateFlights(query.toCode, query.fromCode, query.returnDate, query.cabin, lang, markup, currency)
+      isTwoLeg
+        ? generateFlights(leg2From, leg2To, leg2Date, query.cabin, lang, markup, currency, liveRules)
         : [],
-    [isRoundTrip, query.toCode, query.fromCode, query.returnDate, query.cabin, lang, markup, currency]
+    [isTwoLeg, leg2From, leg2To, leg2Date, query.cabin, lang, markup, currency, liveRules]
   );
   const allFlights = useMemo(() => {
-    if (!isRoundTrip) return outboundFlights;
+    if (!isTwoLeg) return outboundFlights;
     if (outboundChoice) return inboundFlights.filter((inbound) => canReturnAfter(outboundChoice.flight, inbound));
     return outboundFlights.filter((outbound) => inboundFlights.some((inbound) => canReturnAfter(outbound, inbound)));
-  }, [isRoundTrip, outboundChoice, outboundFlights, inboundFlights]);
+  }, [isTwoLeg, outboundChoice, outboundFlights, inboundFlights]);
 
   const maxAvailablePrice = useMemo(
     () => (allFlights.length > 0 ? Math.ceil(Math.max(...allFlights.map((f) => f.basePrice)) / 50) * 50 : 10000),
@@ -959,7 +970,8 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
   const [checkoutIdemKey, setCheckoutIdemKey] = useState<string>(() => crypto.randomUUID());
 
   const selectFare = (selection: FlightSelection) => {
-    if (isRoundTrip && !outboundChoice) {
+    trackAnalyticsEvent('select', { page: '/ucus-ara', productType: 'Uçak' });
+    if (isTwoLeg && !outboundChoice) {
       changeLeg(selection);
       return;
     }
@@ -967,7 +979,10 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
     setCheckoutIdemKey(crypto.randomUUID());
     setBookingConfirmedPnr(null);
     setBookingError('');
+    setPriceChangedNotice(null);
+    setAcceptedTerms(false);
     setBookingChoice(selection);
+    trackAnalyticsEvent('passenger_form', { page: '/ucus-ara', productType: 'Uçak' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -1150,7 +1165,7 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
         const providerSources = Array.from(
           new Set(bookingLegs.map((l) => l.flight.providerSource).filter((v): v is string => Boolean(v)))
         );
-        const providerSource = providerSources.length > 0 ? providerSources.join(' + ') : 'Amadeus GDS (XML)';
+        const providerSource = providerSources.length > 0 ? providerSources.join(' + ') : 'Yerel Demo Uçuş Tarifesi';
         const unitNetLegTotal = bookingLegs.reduce(
           (total, { flight, pkg }) => total + (flight.netCostTRY ?? Math.round(flight.basePrice * 0.92)) + Math.round(pkg.priceDelta * 0.9),
           0
@@ -1160,12 +1175,13 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
           Math.max(0, Math.round(unitNetLegTotal * paxWeight))
         );
         const profitTRY = Math.round(bookingTotal - totalNetCostTRY);
+        trackAnalyticsEvent('checkout_submit', { page: '/ucus-ara', productType: 'Uçak' });
         const booking = await onAddBooking({
           type: 'Uçak',
           title: bookingTitle,
           subtitle: bookingLegs.map(describeFare).join(' / '),
           date: query.departDate,
-          returnDate: isRoundTrip ? query.returnDate : undefined,
+          returnDate: isTwoLeg ? leg2Date : undefined,
           passenger: paxSlots.length > 1
             ? `${firstName} ${lookupSurname} (+${paxSlots.length - 1})`
             : `${firstName} ${lookupSurname}`,
@@ -1188,8 +1204,26 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
           providerSource,
           netCostTRY: totalNetCostTRY,
           profitTRY,
+          couponCode: appliedCoupon || undefined,
           lookupSurname,
-          price: bookingTotal,
+          price: priceChangedNotice ? priceChangedNotice.newPrice : bookingTotal,
+          expectedPrice: priceChangedNotice ? priceChangedNotice.newPrice : bookingTotal,
+          enforceExpectedPrice: !priceChangedNotice,
+          pricingContext: {
+            adults: query.adults,
+            children: query.children,
+            infants: query.infants,
+            cabin: query.cabin,
+            couponCode: appliedCoupon || undefined,
+            legs: bookingLegs.map((leg) => ({
+              fromCode: leg.flight.fromCode,
+              toCode: leg.flight.toCode,
+              flightNumber: leg.flight.flightNumber,
+              airline: leg.flight.airline,
+              airlineCode: leg.flight.airlineCode,
+              packageId: leg.pkg.id,
+            })),
+          },
           isCharter: isCharterBooking,
           departTime: firstLeg?.flight.departTime,
           arriveTime: firstLeg?.flight.arriveTime,
@@ -1202,11 +1236,19 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
           autoCheckinFeeTRY: addonAutoCheckin ? autoCheckinFeeTRY : undefined,
           idempotencyKey: checkoutIdemKey,
         });
+        setPriceChangedNotice(null);
         setConfirmedBooking(booking);
         setBookingConfirmedPnr(booking.pnr);
         setPnrCopied(false);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } catch (error) {
+        if (error instanceof ApiError && error.status === 409 && error.data?.code === 'PRICE_CHANGED') {
+          const newPrice = Number(error.data.authoritativePrice) || bookingTotal;
+          setPriceChangedNotice({
+            newPrice,
+            appliedRule: typeof error.data.appliedRule === 'string' ? error.data.appliedRule : undefined,
+          });
+        }
         setBookingError(apiMessage(error));
       } finally {
         setBookingPending(false);
@@ -1898,9 +1940,25 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                           <strong>{formatPrice(bookingTotal, currency)}</strong>
                         </div>
                       </div>
+                    {priceChangedNotice && (
+                      <div role="alert" style={{ padding: '10px 12px', borderRadius: 10, background: '#FFFBEB', border: '1.5px solid #F59E0B', fontSize: 12.5, color: '#92400E', marginBottom: 10 }}>
+                        <strong>
+                          {lang === 'EN' ? 'Price Updated:' : lang === 'RU' ? 'Цена обновилась:' : lang === 'KK' ? 'Баға жаңарды:' : 'Fiyat Güncellendi:'}
+                        </strong>{' '}
+                        {formatPrice(priceChangedNotice.newPrice, currency)}
+                        {priceChangedNotice.appliedRule ? ` (${priceChangedNotice.appliedRule})` : ''}.{' '}
+                        {lang === 'EN' ? 'Click save again to confirm.' : lang === 'RU' ? 'Нажмите сохранить ещё раз для подтверждения.' : lang === 'KK' ? 'Растау үшін қайта басыңыз.' : 'Güncel tutarı onaylamak için tekrar gönderin.'}
+                      </div>
+                    )}
                     {bookingError && <p className="form-action-error" role="alert">{bookingError}</p>}
                     <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 12, color: 'var(--aspan-text-muted)', marginBottom: 12, cursor: 'pointer' }}>
-                      <input type="checkbox" required defaultChecked style={{ marginTop: 2 }} />
+                      <input
+                        type="checkbox"
+                        required
+                        checked={acceptedTerms}
+                        onChange={(e) => setAcceptedTerms(e.target.checked)}
+                        style={{ marginTop: 2 }}
+                      />
                       <span>
                         {lang === 'EN'
                           ? 'I agree to the Terms of Use, Airline Carriage Rules, and Privacy Policy.'
@@ -1908,12 +1966,15 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
                             ? 'Я принимаю Условия использования, правила авиаперевозки и Политику конфиденциальности.'
                             : lang === 'KK'
                               ? 'Пайдалану шарттары, әуе тасымалы ережелері және Құпиялылық саясатымен келісемін.'
-                              : 'Kullanım Koşulları, Havayolu Taşıma Kuralları ve KVKK Aydınlatma Metni’ni onaylıyorum.'}
+                              : 'Kullanım Koşulları, Havayolu Taşıma Kuralları ve KVKK Aydınlatma Metni’ni onaylıyorum.'}{' '}
+                        <a href="/yasal/kvkk" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--aspan-teal-deep)', fontWeight: 700 }}>
+                          (KVKK)
+                        </a>
                       </span>
                     </label>
                     <button type="submit" className="uf-cc-pay-btn" disabled={bookingPending}>
                       <Check size={18} />
-                      {bookingPending ? co.saving : ui.completeBtn}
+                      {bookingPending ? co.saving : priceChangedNotice ? `${formatPrice(priceChangedNotice.newPrice, currency)} · ${ui.completeBtn}` : ui.completeBtn}
                     </button>
                   </div>
                 </aside>
@@ -1945,7 +2006,9 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
               {formatDisplayDate(query.departDate, lang)}
               {query.tripType === 'roundtrip' && query.returnDate
                 ? ` → ${formatDisplayDate(query.returnDate, lang)}`
-                : ''}
+                : isMultiCity && query.leg2FromCode && query.leg2ToCode
+                  ? ` + ${query.leg2FromCode}→${query.leg2ToCode} (${formatDisplayDate(leg2Date, lang)})`
+                  : ''}
             </span>
             <span className="route-pill">
               <Users size={14} color="#16CAD6" />
@@ -1953,7 +2016,11 @@ export const FlightResultsPage: React.FC<FlightResultsPageProps> = ({
             </span>
             <span className="route-pill">{query.cabin === 'Business' ? co.business : co.economy}</span>
             <span className="route-pill">
-              {query.tripType === 'oneway' ? ui.oneWay : ui.roundTrip}
+              {query.tripType === 'oneway'
+                ? ui.oneWay
+                : query.tripType === 'multicity'
+                  ? (lang === 'EN' ? 'Multi-City' : lang === 'RU' ? 'Сложный маршрут' : lang === 'KK' ? 'Көп қалалы' : 'Çoklu Uçuş')
+                  : ui.roundTrip}
             </span>
             <span className="route-pill">{ui.sampleFares}</span>
           </div>

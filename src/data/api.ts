@@ -15,7 +15,11 @@ import type {
 } from '../types';
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly data?: Record<string, unknown>
+  ) {
     super(message);
   }
 }
@@ -32,7 +36,7 @@ async function request<T>(path: string, method = 'GET', body?: object, signal?: 
     throw new ApiError(503, 'FlyToAspan sunucusuna ulaşılamadı.');
   }
   const data = await response.json();
-  if (!response.ok) throw new ApiError(response.status, data.message ?? 'İşlem tamamlanamadı.');
+  if (!response.ok) throw new ApiError(response.status, data.message ?? 'İşlem tamamlanamadı.', data);
   return data as T;
 }
 
@@ -96,11 +100,48 @@ export const api = {
   session: (signal?: AbortSignal) => request<{ user: UserProfile | null }>('/session', 'GET', undefined, signal),
   register: (details: Registration) =>
     request<{ user: UserProfile | null; pending?: boolean; message?: string }>('/auth/register', 'POST', details),
-  login: (email: string, password: string) => request<{ user: UserProfile }>('/auth/login', 'POST', { email, password }),
+  login: (email: string, password: string, totpCode?: string) =>
+    request<{ user: UserProfile }>('/auth/login', 'POST', totpCode ? { email, password, totpCode } : { email, password }),
   logout: () => request<{ ok: true }>('/auth/logout', 'POST'),
-  bookings: (admin: boolean, signal?: AbortSignal) => request<{ bookings: BookingRecord[] }>(
-    admin ? '/admin/bookings' : '/bookings', 'GET', undefined, signal
-  ),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: true; user: UserProfile }>('/auth/change-password', 'POST', { currentPassword, newPassword }),
+  setup2fa: () => request<{ secret: string; otpauthUri: string }>('/auth/2fa/setup', 'POST', {}),
+  enable2fa: (code: string) => request<{ ok: true; totpEnabled: boolean }>('/auth/2fa/enable', 'POST', { code }),
+  disable2fa: (password: string) => request<{ ok: true; totpEnabled: boolean }>('/auth/2fa/disable', 'POST', { password }),
+  myOrganization: (signal?: AbortSignal) =>
+    request<{
+      organization: Organization | null;
+      ledger: OrgLedgerEntry[];
+      team: Array<{ id: string; email: string; name: string; status: string; roleLabel: string }>;
+    }>('/organization/me', 'GET', undefined, signal),
+  bookings: (admin: boolean, signal?: AbortSignal, query?: { q?: string; type?: string; status?: string; from?: string; to?: string; page?: number; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (query?.q) qs.set('q', query.q);
+    if (query?.type && query.type !== 'ALL') qs.set('type', query.type);
+    if (query?.status && query.status !== 'ALL') qs.set('status', query.status);
+    if (query?.from) qs.set('from', query.from);
+    if (query?.to) qs.set('to', query.to);
+    if (query?.page) qs.set('page', String(query.page));
+    if (query?.limit) qs.set('limit', String(query.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return request<{ bookings: BookingRecord[]; total?: number; page?: number; limit?: number; totalPages?: number }>(
+      (admin ? '/admin/bookings' : '/bookings') + suffix, 'GET', undefined, signal
+    );
+  },
+  bookingHistory: (id: string) =>
+    request<{
+      audits: AuditLogEntry[];
+      notes: Array<{ id: string; author_email: string; note: string; created_at: number }>;
+      ledger: OrgLedgerEntry[];
+    }>(`/admin/bookings/${encodeURIComponent(id)}/history`, 'GET'),
+  addBookingNote: (id: string, note: string) =>
+    request<{ note: { id: string; author_email: string; note: string; created_at: number } }>(
+      `/admin/bookings/${encodeURIComponent(id)}/notes`, 'POST', { note }
+    ),
+  pricingQuote: (payload: object) =>
+    request<{ price: number; discountTRY: number; couponCode: string | null; appliedRule: string; expiresAt: number }>(
+      '/pricing/quote', 'POST', payload
+    ),
   createBooking: (record: BookingDraft, admin = false) => request<{ booking: BookingRecord }>(
     admin ? '/admin/bookings' : '/bookings', 'POST', record
   ),
@@ -111,8 +152,12 @@ export const api = {
     '/bookings/lookup-cancel', 'POST', { pnr, surname }
   ),
   cancel: (id: string) => request<{ booking: BookingRecord }>(`/bookings/${encodeURIComponent(id)}/cancel`, 'POST'),
-  setStatus: (id: string, status: BookingRecord['status'], expectedStatus?: BookingRecord['status']) => request<{ booking: BookingRecord }>(
-    `/admin/bookings/${encodeURIComponent(id)}`, 'PATCH', expectedStatus ? { status, expectedStatus } : { status }
+  setStatus: (id: string, status: BookingRecord['status'], expectedStatus?: BookingRecord['status'], expectedRevision?: number) => request<{ booking: BookingRecord; refundedCariAmount?: number }>(
+    `/admin/bookings/${encodeURIComponent(id)}`, 'PATCH', {
+      status,
+      ...(expectedStatus ? { expectedStatus } : {}),
+      ...(expectedRevision !== undefined ? { expectedRevision } : {}),
+    }
   ),
   updateBookingCheckin: (
     id: string,
@@ -226,8 +271,49 @@ export const api = {
     request<{ quote: CrmQuote; booking: BookingRecord }>(`/admin/crm/quotes/${encodeURIComponent(id)}/convert`, 'POST'),
   deleteCrmQuote: (id: string) => request<{ ok: true }>(`/admin/crm/quotes/${encodeURIComponent(id)}`, 'DELETE'),
   adminAuditLogs: (signal?: AbortSignal) => request<{ logs: AuditLogEntry[] }>('/admin/audit', 'GET', undefined, signal),
+  adminAnalytics: (params: { range?: string; from?: string; to?: string; activity?: boolean } = {}, signal?: AbortSignal) => {
+    const qs = new URLSearchParams();
+    if (params.range) qs.set('range', params.range);
+    if (params.from) qs.set('from', params.from);
+    if (params.to) qs.set('to', params.to);
+    if (params.activity) qs.set('activity', '1');
+    return request<{
+      range: string;
+      since: string;
+      until: string;
+      members: { totalUsers: number; activeOrganizations: number; loginsInPeriod: number };
+      funnel: { pageViews: number; searches: number; selections: number; passengerForms: number; checkoutSubmits: number; bookingsCreated: number };
+      sales: {
+        demoCount: number;
+        demoVolumeTRY: number;
+        verifiedLiveCount: number;
+        verifiedLiveVolumeTRY: number;
+        refundedCount: number;
+        refundedVolumeTRY: number;
+        byProduct: { Uçak: number; Otel: number; Transfer: number; Tur: number };
+      };
+      health: {
+        clientErrors: number;
+        serverErrors: number;
+        authFailures: number;
+        rateLimited: number;
+        suspiciousAlerts: Array<{ level: 'high' | 'medium'; code: string; reason: string; count: number }>;
+      };
+      dailyTrend: Array<{ date: string; visits: number; bookings: number; errors: number }>;
+      activity?: {
+        accounts: Array<{ id: string; event: 'user_login' | 'user_register'; occurredAt: number; method: string | null; device: string | null; email: string }>;
+        journeys: Array<{ session: string; occurredAt: number; step: string; product: string }>;
+      };
+      integrations: {
+        posthog: { configured: boolean; host: string; piiBlocked: boolean };
+        cloudflare: { configured: boolean; trustProxy: boolean };
+        sentry: { configured: boolean; piiScrubbed: boolean };
+      };
+    }>(`/admin/analytics${qs.toString() ? `?${qs.toString()}` : ''}`, 'GET', undefined, signal);
+  },
+  revokeUserSessions: (id: string) => request<{ ok: true }>(`/admin/users/${encodeURIComponent(id)}/revoke-sessions`, 'POST', {}),
   adminServerInfo: (signal?: AbortSignal) => request<{ outboundIp: string; host: string; protocol: string }>('/admin/server-info', 'GET', undefined, signal),
-  testProviderConnection: (url: string) => request<{ ok: boolean; status: number; latencyMs: number; message: string }>('/admin/providers/test', 'POST', { url }),
+  testProviderConnection: (url: string) => request<{ ok: boolean; reachable?: boolean; authVerified?: boolean; liveTransactionVerified?: boolean; stage?: string; status: number; latencyMs: number; message: string }>('/admin/providers/test', 'POST', { url }),
   xmlShowcaseStatus: (signal?: AbortSignal) =>
     request<{
       status: {
@@ -268,8 +354,11 @@ export const api = {
     }>('/admin/xml-showcase/sync', 'POST', {}),
 };
 
-export type BookingDraft = Pick<BookingRecord, 'type' | 'title' | 'subtitle' | 'date' | 'returnDate' | 'passenger' | 'passengersDetail' | 'legs' | 'contactEmail' | 'contactPhone' | 'providerSource' | 'netCostTRY' | 'profitTRY' | 'price' | 'departTime' | 'arriveTime' | 'flightNumber' | 'airline' | 'baggage' | 'cabin' | 'duration' | 'autoCheckin' | 'autoCheckinFeeTRY'> & {
+export type BookingDraft = Pick<BookingRecord, 'type' | 'title' | 'subtitle' | 'date' | 'returnDate' | 'passenger' | 'passengersDetail' | 'legs' | 'contactEmail' | 'contactPhone' | 'providerSource' | 'netCostTRY' | 'profitTRY' | 'price' | 'departTime' | 'arriveTime' | 'flightNumber' | 'airline' | 'baggage' | 'cabin' | 'duration' | 'autoCheckin' | 'autoCheckinFeeTRY' | 'couponCode'> & {
   lookupSurname: string;
   isCharter?: boolean;
   idempotencyKey?: string;
+  pricingContext?: Record<string, unknown>;
+  expectedPrice?: number;
+  enforceExpectedPrice?: boolean;
 };

@@ -23,6 +23,10 @@ test.describe('4. Eşzamanlı Çoklu Kullanıcı ve Yük Testleri', () => {
       await p.fill('input[name="dob_0"]', '1991-04-10');
       await p.fill('input[name="contactEmail"]', `${firstName.toLowerCase()}@flytoaspan.test`);
       await p.fill('input[name="contactPhone"]', '+905310001122');
+      const cb = p.locator('form.uf-checkout-grid aside input[type="checkbox"][required]');
+      if (!(await cb.isChecked())) {
+        await cb.check();
+      }
       await p.locator('form.uf-checkout-grid button[type="submit"]').click();
       const pnrText = (await p.locator('[role="status"] strong').first().textContent())?.trim() || '';
       return pnrText;

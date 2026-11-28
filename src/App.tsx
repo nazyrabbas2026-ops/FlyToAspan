@@ -13,10 +13,21 @@ import {
 } from './components/SubPages';
 import { AuthModals } from './components/AuthModals';
 import { AdminLoginGate } from './components/AdminLoginGate';
+import { canOpenDeveloperWorkspace } from './data/developerAccess';
 import { DEFAULT_MARKUP, FlightDeal, refreshLiveExchangeRates } from './data/mockData';
 import { addCalendarDays, toCalendarDate } from './data/calendarDates';
 import { api, apiMessage, type AdminCatalog, type BookingDraft } from './data/api';
-import { flightSearchHref, hrefForPage, parseFlightSearch, readSiteRoute } from './data/routes';
+import {
+  flightSearchHref,
+  hotelSearchHref,
+  hrefForPage,
+  parseFlightSearch,
+  parseHotelSearch,
+  parseTransferSearch,
+  readSiteRoute,
+  transferSearchHref,
+} from './data/routes';
+import { trackAnalyticsEvent } from './utils/analytics';
 
 const MemberPanel = lazy(() =>
   import('./components/MemberPanel').then((m) => ({ default: m.MemberPanel }))
@@ -24,6 +35,7 @@ const MemberPanel = lazy(() =>
 const AdminPanelPage = lazy(() =>
   import('./components/AdminPanelPage').then((m) => ({ default: m.AdminPanelPage }))
 );
+const DeveloperWorkspace = lazy(() => import('./components/DeveloperWorkspace'));
 const LegalPages = lazy(() =>
   import('./components/LegalPages').then((m) => ({ default: m.LegalPages }))
 );
@@ -48,7 +60,9 @@ export const App: React.FC = () => {
   const isAdminSubdomain =
     typeof window !== 'undefined' && /^(panel|admin)\./i.test(window.location.hostname);
   const [page, updatePage] = useState<PageView>(() =>
-    isAdminSubdomain ? 'admin' : readSiteRoute(window.location.pathname).page
+    isAdminSubdomain && readSiteRoute(window.location.pathname).page !== 'developer'
+      ? 'admin'
+      : readSiteRoute(window.location.pathname).page
   );
   const [lang, setLangState] = useState<LangCode>(() => {
     try {
@@ -81,7 +95,7 @@ export const App: React.FC = () => {
   const [initialDate] = useState(() => toCalendarDate(new Date()));
   const [splashProgress, setSplashProgress] = useState(0);
   const [splashFloat, setSplashFloat] = useState(0);
-  const isStandaloneAdmin = page === 'admin' || isAdminSubdomain;
+  const isStandaloneAdmin = page === 'admin' || page === 'developer' || isAdminSubdomain;
   const [splashStage, setSplashStage] = useState<'playing' | 'exiting' | 'done'>(() => {
     try {
       if (isStandaloneAdmin) return 'done';
@@ -94,6 +108,12 @@ export const App: React.FC = () => {
   useEffect(() => {
     refreshLiveExchangeRates().then(() => setFxVersion((v) => v + 1));
   }, []);
+
+  useEffect(() => {
+    if (page === 'admin') {
+      void import('./components/AdminPanelPage');
+    }
+  }, [page]);
 
   useEffect(() => {
     if (splashStage === 'done') return;
@@ -175,6 +195,22 @@ export const App: React.FC = () => {
       .catch(() => { /* ignore */ });
   };
 
+  const refreshAdminData = async () => {
+    try {
+      const [bkRes, prRes] = await Promise.all([
+        bookingKey ? api.bookings(page === 'admin') : Promise.resolve(null),
+        api.pricing(),
+      ]);
+      if (bkRes && bookingKey) {
+        setBookingView({ key: bookingKey, records: bkRes.bookings });
+      }
+      if (prRes?.markup) setMarkup(prRes.markup);
+      refreshPublicCatalog();
+    } catch {
+      /* ignore */
+    }
+  };
+
   useEffect(() => {
     if (!bookingKey) return;
     const controller = new AbortController();
@@ -242,22 +278,30 @@ export const App: React.FC = () => {
     })
   );
 
-  const [hotelQuery, setHotelQuery] = useState<HotelSearchQuery>({
-    destination: 'Bodrum',
-    checkIn: addCalendarDays(initialDate, 5),
-    checkOut: addCalendarDays(initialDate, 7),
-    adults: 2,
-    children: 0,
-  });
+  const [hotelQuery, setHotelQuery] = useState<HotelSearchQuery>(() =>
+    parseHotelSearch(window.location.search, {
+      destination: 'Bodrum',
+      checkIn: addCalendarDays(initialDate, 5),
+      checkOut: addCalendarDays(initialDate, 7),
+      adults: 2,
+      children: 0,
+    })
+  );
 
-  const [transferQuery, setTransferQuery] = useState<TransferSearchQuery>({
-    from: 'İstanbul Havalimanı (IST)',
-    to: 'Taksim / Şişli',
-    date: addCalendarDays(initialDate, 15),
-    time: '14:30',
-    adults: 2,
-    children: 0,
-  });
+  const [transferQuery, setTransferQuery] = useState<TransferSearchQuery>(() =>
+    parseTransferSearch(window.location.search, {
+      from: 'İstanbul Havalimanı (IST)',
+      to: 'Taksim / Şişli',
+      date: addCalendarDays(initialDate, 15),
+      time: '14:30',
+      adults: 2,
+      children: 0,
+    })
+  );
+
+  useEffect(() => {
+    trackAnalyticsEvent('page_view', { page: window.location.pathname });
+  }, [page]);
 
   const openFlightSearch = (q: FlightSearchQuery) => {
     setFlightQuery(q);
@@ -265,8 +309,33 @@ export const App: React.FC = () => {
     if (window.location.pathname + window.location.search !== targetHref) {
       window.history.pushState(null, '', targetHref);
     }
+    trackAnalyticsEvent('search', { page: '/ucus-ara', productType: 'Uçak' });
     setNotice('');
     updatePage('flight-results');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const openHotelSearch = (q: HotelSearchQuery) => {
+    setHotelQuery(q);
+    const targetHref = hotelSearchHref(q);
+    if (window.location.pathname + window.location.search !== targetHref) {
+      window.history.pushState(null, '', targetHref);
+    }
+    trackAnalyticsEvent('search', { page: '/otel-ara', productType: 'Otel' });
+    setNotice('');
+    updatePage('hotel-results');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const openTransferSearch = (q: TransferSearchQuery) => {
+    setTransferQuery(q);
+    const targetHref = transferSearchHref(q);
+    if (window.location.pathname + window.location.search !== targetHref) {
+      window.history.pushState(null, '', targetHref);
+    }
+    trackAnalyticsEvent('search', { page: '/transfer-ara', productType: 'Transfer' });
+    setNotice('');
+    updatePage('transfer-results');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -299,9 +368,15 @@ export const App: React.FC = () => {
     setBookingView((view) => view?.key === bookingKey ? { ...view, records: update(view.records) } : view);
 
   const handleAddBooking = async (draft: BookingDraft, admin = false) => {
-    const { booking } = await api.createBooking(draft, admin);
-    if (admin) changeRecords((records) => [booking, ...records]);
-    return booking;
+    try {
+      const { booking } = await api.createBooking(draft, admin);
+      if (admin) changeRecords((records) => [booking, ...records]);
+      else trackAnalyticsEvent('booking_complete', { productType: booking.type });
+      return booking;
+    } catch (error) {
+      if (!admin) trackAnalyticsEvent('checkout_error', { productType: draft.type });
+      throw error;
+    }
   };
 
   const handleCancelBooking = async (id: string) => {
@@ -310,7 +385,8 @@ export const App: React.FC = () => {
   };
 
   const handleUpdateBookingStatus = async (id: string, status: BookingRecord['status']) => {
-    const { booking } = await api.setStatus(id, status);
+    const existing = bookings.find((r) => r.id === id);
+    const { booking } = await api.setStatus(id, status, existing?.status, existing?.revision);
     changeRecords((records) => records.map((record) => record.id === id ? booking : record));
   };
 
@@ -448,8 +524,9 @@ export const App: React.FC = () => {
 
       <main>
         {notice && <p className="site-action-notice" role="alert">{notice}</p>}
-        {page === 'admin' && !canManage && (
+        {((page === 'admin' && !canManage) || (page === 'developer' && !canOpenDeveloperWorkspace(user))) && (
           <AdminLoginGate
+            developerWorkspace={page === 'developer'}
             lang={lang}
             onSelectLang={setLang}
             sessionLoading={sessionLoading}
@@ -458,7 +535,7 @@ export const App: React.FC = () => {
             onLoginSuccess={(u) => {
               setBookingView(null);
               setUser(u);
-              setPage('admin');
+              setPage(page === 'developer' ? 'developer' : 'admin');
             }}
             onLogout={signOut}
             onBackToSite={() => {
@@ -499,16 +576,8 @@ export const App: React.FC = () => {
               flightQuery={flightQuery}
               onFlightQueryChange={setFlightQuery}
               onSearchFlight={openFlightSearch}
-              onSearchHotel={(q) => {
-                setHotelQuery(q);
-                setPage('hotel-results');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              onSearchTransfer={(q) => {
-                setTransferQuery(q);
-                setPage('transfer-results');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
+              onSearchHotel={openHotelSearch}
+              onSearchTransfer={openTransferSearch}
               onSearchTour={() => {
                 setPage('tour-results');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -520,20 +589,14 @@ export const App: React.FC = () => {
               markup={markup}
               liveCatalog={publicCatalog}
               onSelectDeal={handleSelectDeal}
-              onSelectHotelCity={(city) => {
-                setHotelQuery((prev) => ({ ...prev, destination: city }));
-                setPage('hotel-results');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              onSelectTransferCity={(city) => {
-                setTransferQuery((prev) => ({
-                  ...prev,
+              onSelectHotelCity={(city) => openHotelSearch({ ...hotelQuery, destination: city })}
+              onSelectTransferCity={(city) =>
+                openTransferSearch({
+                  ...transferQuery,
                   from: `${city} Havalimanı`,
                   to: `${city} Şehir Merkezi / Otel`,
-                }));
-                setPage('transfer-results');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
+                })
+              }
               onSelectDestinationCode={handleSelectDestinationCode}
               onNavigate={(p) => {
                 setPage(p);
@@ -551,6 +614,42 @@ export const App: React.FC = () => {
           </>
         )}
 
+        {page === 'not-found' && (
+          <section className="inner-hero" style={{ minHeight: '62vh', display: 'flex', alignItems: 'center' }}>
+            <div className="container" style={{ maxWidth: 620, textAlign: 'center' }}>
+              <div style={{ fontSize: 64, fontWeight: 900, color: '#F2C85C', lineHeight: 1 }}>404</div>
+              <h1 className="inner-h1" style={{ marginTop: 10 }}>
+                {lang === 'EN'
+                  ? 'Page Not Found'
+                  : lang === 'RU'
+                    ? 'Страница не найдена'
+                    : lang === 'KK'
+                      ? 'Бет табылмады'
+                      : 'Aradığınız Sayfa Bulunamadı'}
+              </h1>
+              <p style={{ color: 'rgba(255,255,255,0.8)', marginBottom: 22 }}>
+                {lang === 'EN'
+                  ? 'The address you opened does not exist or may have been moved.'
+                  : lang === 'RU'
+                    ? 'Запрошенный адрес не существует или был перемещён.'
+                    : lang === 'KK'
+                      ? 'Сұралған мекенжай табылмады немесе көшірілген болуы мүмкін.'
+                      : 'Açtığınız adres mevcut değil veya taşınmış olabilir.'}
+              </p>
+              <button
+                type="button"
+                className="btn-gold-nav"
+                onClick={() => {
+                  setPage('home');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              >
+                {lang === 'EN' ? 'Return to Homepage' : lang === 'RU' ? 'На главную' : lang === 'KK' ? 'Басты бетке оралу' : 'Ana Sayfaya Dön'}
+              </button>
+            </div>
+          </section>
+        )}
+
         {page === 'flight-results' && (
           <FlightResultsPage
             lang={lang}
@@ -559,6 +658,7 @@ export const App: React.FC = () => {
             isLoggedIn={Boolean(user)}
             manualFlights={publicCatalog.flights}
             operatorRules={publicCatalog.operators}
+            liveRules={publicCatalog.rules}
             liveCoupons={publicCatalog.coupons}
             query={flightQuery}
             onChangeQuery={(next) => {
@@ -633,6 +733,9 @@ export const App: React.FC = () => {
             />
           )}
 
+          {page === 'developer' && user && canOpenDeveloperWorkspace(user) && (
+            <DeveloperWorkspace user={user} onLogout={signOut} />
+          )}
           {page === 'admin' && canManage && (
             <AdminPanelPage
               lang={lang}
@@ -654,6 +757,7 @@ export const App: React.FC = () => {
                 }))
               }
               onCatalogUpdated={refreshPublicCatalog}
+              onRefreshData={refreshAdminData}
               onBackHome={() => {
                 refreshPublicCatalog();
                 setPage('home');

@@ -51,6 +51,10 @@ test.describe('3. Arama, Rezervasyon, Sınır Durumları ve Mükerrer Kayıt Kon
     await page.fill('input[name="dob_1"]', '1992-08-20');
     await page.fill('input[name="contactEmail"]', 'qa.passenger@flytoaspan.test');
     await page.fill('input[name="contactPhone"]', '+905310009988');
+    const consentBox = page.locator('form.uf-checkout-grid aside input[type="checkbox"][required]');
+    if (!(await consentBox.isChecked())) {
+      await consentBox.check();
+    }
 
     // Double-click submit to verify no duplicate booking created
     const submitBtn = page.locator('form.uf-checkout-grid button[type="submit"]');

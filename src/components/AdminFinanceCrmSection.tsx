@@ -44,6 +44,7 @@ interface AdminFinanceCrmSectionProps {
   manualFlights?: ManagedFlightItem[];
   managedHotels?: ManagedHotelItem[];
   managedTours?: ManagedTourItem[];
+  canWriteFinance?: boolean;
   onBookingCreated?: (booking: BookingRecord) => void;
   onJumpToBookings: (status?: BookingRecord['status'] | 'ALL') => void;
   onFlash: (msg: string) => void;
@@ -102,14 +103,15 @@ const AUDIT_LABELS: Record<string, string> = {
   'auth:password_reset_request': 'Parola Sıfırlama Talebi',
 };
 
-function formatTrDateTime(value?: number | string): string {
+function formatTrDateTime(value?: number | string, lang: LangCode = 'TR'): string {
   if (!value) return '-';
   const d = typeof value === 'number' ? new Date(value) : new Date(value);
   if (Number.isNaN(d.getTime())) return String(value);
-  const datePart = d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' });
+  const locale = lang === 'EN' ? 'en-GB' : lang === 'RU' ? 'ru-RU' : lang === 'KK' ? 'kk-KZ' : 'tr-TR';
+  const datePart = d.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
   const hasTime = typeof value === 'number' || (typeof value === 'string' && value.includes('T'));
   if (!hasTime) return datePart;
-  const timePart = d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  const timePart = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
   return `${datePart} · ${timePart}`;
 }
 
@@ -151,17 +153,39 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
   manualFlights = [],
   managedHotels = [],
   managedTours = [],
+  canWriteFinance = true,
   onBookingCreated,
   onJumpToBookings,
   onFlash,
   onError,
 }) => {
   const [subTab, setSubTab] = useState<FinanceTab>('finance');
+  const [finFrom, setFinFrom] = useState('');
+  const [finTo, setFinTo] = useState('');
   const [entries, setEntries] = useState<FinanceEntry[]>([]);
   const [tasks, setTasks] = useState<CrmTask[]>([]);
   const [quotes, setQuotes] = useState<CrmQuote[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [busy, setBusy] = useState(false);
+
+  const applyFinRange = (preset: 'all' | 'today' | '7d' | 'month') => {
+    const today = toCalendarDate(new Date());
+    if (preset === 'all') {
+      setFinFrom('');
+      setFinTo('');
+    } else if (preset === 'today') {
+      setFinFrom(today);
+      setFinTo(today);
+    } else if (preset === '7d') {
+      setFinFrom(addCalendarDays(today, -6));
+      setFinTo(today);
+    } else {
+      const now = new Date();
+      const first = new Date(now.getFullYear(), now.getMonth(), 1);
+      setFinFrom(toCalendarDate(first));
+      setFinTo(today);
+    }
+  };
 
   // Detailed Quote Builder form (separate passenger fields + ID/Passport + automatic XML price list)
   const [qFirstName, setQFirstName] = useState('');
@@ -407,18 +431,41 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
     return Array.from(map.values()).sort((a, b) => b.totalSpendTRY - a.totalSpendTRY || b.bookings.length - a.bookings.length);
   }, [bookings, siteUsers]);
 
+  // Date-range filtered records so KPIs, 4-product bars, Ledger, and CSV reconcile 100%
+  const datedBookings = useMemo(() => {
+    return bookings.filter((b) => {
+      const dayKey = b.createdAt ? new Date(b.createdAt).toISOString().slice(0, 10) : (b.date || '').slice(0, 10);
+      if (finFrom && dayKey && dayKey < finFrom) return false;
+      if (finTo && dayKey && dayKey > finTo) return false;
+      return true;
+    });
+  }, [bookings, finFrom, finTo]);
+
+  const datedEntries = useMemo(() => {
+    return entries.filter((e) => {
+      if (finFrom && e.entryDate < finFrom) return false;
+      if (finTo && e.entryDate > finTo) return false;
+      return true;
+    });
+  }, [entries, finFrom, finTo]);
+
+  const demoBookingCount = useMemo(
+    () => datedBookings.filter((b) => b.demo !== false).length,
+    [datedBookings]
+  );
+
   // Zero-bug accounting metrics (cancelled & refunded excluded from gross/profit)
   const confirmedBookings = useMemo(
-    () => bookings.filter((b) => b.status === 'Onaylandı' || b.status === 'Tamamlandı'),
-    [bookings]
+    () => datedBookings.filter((b) => b.status === 'Onaylandı' || b.status === 'Tamamlandı'),
+    [datedBookings]
   );
   const cancelledOrRefunded = useMemo(
-    () => bookings.filter((b) => b.status === 'İptal Edildi' || b.status === 'İade Edildi'),
-    [bookings]
+    () => datedBookings.filter((b) => b.status === 'İptal Edildi' || b.status === 'İade Edildi'),
+    [datedBookings]
   );
   const pendingCancellations = useMemo(
-    () => bookings.filter((b) => b.status === 'İptal Talebi'),
-    [bookings]
+    () => datedBookings.filter((b) => b.status === 'İptal Talebi'),
+    [datedBookings]
   );
 
   const grossSalesTRY = useMemo(
@@ -434,19 +481,19 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
     [confirmedBookings, markup]
   );
   const manualIncomeTRY = useMemo(
-    () => entries.filter((e) => e.type === 'income').reduce((s, e) => s + e.amount, 0),
-    [entries]
+    () => datedEntries.filter((e) => e.type === 'income').reduce((s, e) => s + e.amount, 0),
+    [datedEntries]
   );
   const totalExpensesTRY = useMemo(
-    () => entries.filter((e) => e.type === 'expense').reduce((s, e) => s + e.amount, 0),
-    [entries]
+    () => datedEntries.filter((e) => e.type === 'expense').reduce((s, e) => s + e.amount, 0),
+    [datedEntries]
   );
   const refundLossTRY = useMemo(
     () => cancelledOrRefunded.reduce((s, b) => s + b.price, 0),
     [cancelledOrRefunded]
   );
-  const cancelRatePct = bookings.length > 0
-    ? Math.round((cancelledOrRefunded.length / bookings.length) * 100)
+  const cancelRatePct = datedBookings.length > 0
+    ? Math.round((cancelledOrRefunded.length / datedBookings.length) * 100)
     : 0;
   const netCashTRY = netCommissionProfitTRY + manualIncomeTRY - totalExpensesTRY;
 
@@ -497,16 +544,16 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
     return days;
   }, [bookings, entries]);
 
-  // 360° Filtered Ledger
+  // 360° Filtered Ledger (reconciles with date range & KPIs)
   const filteredLedger = useMemo(() => {
     const q = ledgerSearch.trim().toLowerCase();
-    return bookings.filter((b) => {
+    return datedBookings.filter((b) => {
       if (ledgerStatus !== 'ALL' && b.status !== ledgerStatus) return false;
       if (!q) return true;
       const hay = `${b.pnr} ${b.passenger} ${b.title} ${b.subtitle} ${b.providerSource ?? ''} ${b.sellerName ?? ''} ${b.sellerEmail ?? ''} ${b.organizationName ?? ''}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [bookings, ledgerSearch, ledgerStatus]);
+  }, [datedBookings, ledgerSearch, ledgerStatus]);
 
   // CRM Agent & Company Leaderboard
   const leaderboard = useMemo(() => {
@@ -618,16 +665,17 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
   };
 
   const handleExportLedgerCsv = () => {
-    const headers = ['Satis_Tarihi', 'Satan', 'Sirket', 'Yolcu', 'PNR', 'Tip', 'XML_Kaynagi', 'Firma', 'Ucus_No', 'Guzergah', 'Ucus_Tarihi', 'XML_Alis_TRY', 'Satis_TRY', 'Net_Kar_TRY', 'Durum'];
+    const headers = ['Satis_Tarihi', 'Satan', 'Sirket', 'Yolcu', 'PNR', 'Tip', 'Deneme_Mi', 'XML_Kaynagi', 'Firma', 'Ucus_No', 'Guzergah', 'Ucus_Tarihi', 'XML_Alis_TRY', 'Satis_TRY', 'Net_Kar_TRY', 'Durum'];
     const rows = filteredLedger.map((b) => {
       const { carrier, flightNo } = parseCarrierAndFlight(b.subtitle);
       return [
-        `"${formatTrDateTime(b.createdAt)}"`,
+        `"${formatTrDateTime(b.createdAt, lang)}"`,
         `"${b.sellerName || b.sellerEmail || 'Web Direkt (B2C)'}"`,
         `"${b.organizationName || 'FlyToAspan.com'}"`,
         `"${b.passenger}"`,
         b.pnr,
         b.type,
+        b.demo !== false ? 'Deneme' : 'Canli',
         `"${resolveProviderSource(b)}"`,
         `"${carrier}"`,
         `"${flightNo}"`,
@@ -655,13 +703,13 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
 
   return (
     <>
-      {/* SUB-TABS NAVIGATION */}
-      <div className="panel-card" style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+      {/* SUB-TABS NAVIGATION + DATE RANGE FILTER */}
+      <div className="panel-card" style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div className="adm-subtab-bar" role="tablist">
           {(
             [
               { id: 'finance', label: '1. Günlük Finans' },
-              { id: 'ledger', label: `2. 360° Satış (${bookings.length})` },
+              { id: 'ledger', label: `2. 360° Satış (${datedBookings.length})` },
               { id: 'crm', label: `3. Ekip Liderlik` },
               { id: 'followup', label: '4. Takip Listesi', badge: followUpBadgeCount },
               { id: 'quotes', label: `5. Teklifler (${quotes.length})` },
@@ -689,6 +737,28 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
             );
           })}
         </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, paddingTop: 8, borderTop: '1px solid var(--aspan-border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, fontWeight: 800, color: '#0369a1' }}>Tarih Aralığı (Finans &amp; CSV):</span>
+            <button type="button" className={`adm-date-chip ${!finFrom && !finTo ? 'active' : ''}`} onClick={() => applyFinRange('all')}>Tümü</button>
+            <button type="button" className="adm-date-chip" onClick={() => applyFinRange('today')}>Bugün</button>
+            <button type="button" className="adm-date-chip" onClick={() => applyFinRange('7d')}>Son 7 Gün</button>
+            <button type="button" className="adm-date-chip" onClick={() => applyFinRange('month')}>Bu Ay</button>
+            <input type="date" aria-label="Finans başlangıç tarihi" className="modal-input" style={{ width: 145, height: 32, fontSize: 12 }} value={finFrom} max={finTo || undefined} onChange={(e) => setFinFrom(e.target.value)} />
+            <input type="date" aria-label="Finans bitiş tarihi" className="modal-input" style={{ width: 145, height: 32, fontSize: 12 }} value={finTo} min={finFrom || undefined} onChange={(e) => setFinTo(e.target.value)} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {demoBookingCount > 0 && (
+              <span className="status-badge warn" style={{ fontSize: 11.5 }}>
+                🧪 Deneme Verisi ({demoBookingCount}/{datedBookings.length})
+              </span>
+            )}
+            {!canWriteFinance && (
+              <span className="pkg-pill" style={{ fontSize: 11.5 }}>Salt Okunur Görünüm</span>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ==================== TAB 1: DAILY FINANCE & P&L CHARTS ==================== */}
@@ -703,7 +773,7 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
             <div className="panel-stat-card" style={{ border: '1.5px solid rgba(2,132,199,0.3)', background: 'rgba(2,132,199,0.04)' }}>
               <div className="filter-label" style={{ color: '#0369A1' }}>Toplam XML Alış Maliyeti</div>
               <div style={{ fontSize: 24, fontWeight: 800, color: '#0369A1' }}>{formatPrice(totalXmlCostTRY, currency)}</div>
-              <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>Tedarikçi net bilet / otel maliyeti</div>
+              <div style={{ fontSize: 12, color: 'var(--aspan-text-muted)' }}>Tahmini Maliyet (Deneme Verisi)</div>
             </div>
             <div className="panel-stat-card" style={{ border: '1.5px solid rgba(16,185,129,0.4)', background: 'rgba(16,185,129,0.05)' }}>
               <div className="filter-label" style={{ color: '#047857' }}>Net Kâr (Satış − XML Alış)</div>
@@ -764,7 +834,7 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
               </div>
             </div>
 
-            {/* Product Revenue Breakdown */}
+            {/* Product Revenue Breakdown (all 4 products always shown) */}
             <div className="panel-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 10 }}>
               <strong style={{ fontSize: 15, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <TrendingUp size={16} color="#00A8B5" /> Ürün Bazlı Ciro Dağılımı
@@ -772,9 +842,7 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
               {[
                 { label: '✈ Uçak Bileti', amount: productTotals.flight, pct: productTotals.flightPct, color: '#10B981' },
                 { label: '🏨 Otel Konaklama', amount: productTotals.hotel, pct: productTotals.hotelPct, color: '#F59E0B' },
-                ...(productTotals.transfer > 0
-                  ? [{ label: '🚐 VIP Transfer', amount: productTotals.transfer, pct: productTotals.transferPct, color: '#0284C7' }]
-                  : []),
+                { label: '🚐 VIP Transfer', amount: productTotals.transfer, pct: productTotals.transferPct, color: '#0284C7' },
                 { label: '🧭 Paket Tur', amount: productTotals.tour, pct: productTotals.tourPct, color: '#7C3AED' },
               ].map((row) => (
                 <div key={row.label}>
@@ -804,31 +872,33 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
             <p style={{ fontSize: 12.5, color: 'var(--aspan-text-muted)', marginTop: 0, marginBottom: 12 }}>
               Reklam, GDS/API maliyeti, ofis kirası, personel primi veya ek hizmet gelirlerini buradan işleyebilirsiniz.
             </p>
-            <form className="panel-form-grid" onSubmit={handleAddFinance} style={{ marginBottom: 16 }}>
-              <select className="modal-input" value={fType} onChange={(e) => setFType(e.target.value as 'expense' | 'income')}>
-                <option value="expense">Gider (-)</option>
-                <option value="income">Ek Gelir (+)</option>
-              </select>
-              <select className="modal-input" value={fCategory} onChange={(e) => setFCategory(e.target.value)}>
-                <option value="Reklam & Pazarlama">Reklam &amp; Pazarlama</option>
-                <option value="GDS / API Ücreti">GDS / API Ücreti</option>
-                <option value="Personel & Prim">Personel &amp; Prim</option>
-                <option value="Ofis & Sabit Gider">Ofis &amp; Sabit Gider</option>
-                <option value="Ek Hizmet Geliri">Ek Hizmet Geliri</option>
-                <option value="Diğer">Diğer</option>
-              </select>
-              <input className="modal-input" required placeholder="Açıklama (Örn: Google Ads Kasım)" value={fTitle} onChange={(e) => setFTitle(e.target.value)} />
-              <input className="modal-input" required type="number" min={1} placeholder="Tutar (TL)" value={fAmount} onChange={(e) => setFAmount(e.target.value)} />
-              <input className="modal-input" type="date" value={fDate} onChange={(e) => setFDate(e.target.value)} />
-              <button type="submit" className="btn-gold-nav" style={{ borderRadius: 12 }} disabled={busy}>
-                <Plus size={15} /> Kaydet
-              </button>
-            </form>
+            {canWriteFinance && (
+              <form className="panel-form-grid" onSubmit={handleAddFinance} style={{ marginBottom: 16 }}>
+                <select className="modal-input" value={fType} onChange={(e) => setFType(e.target.value as 'expense' | 'income')}>
+                  <option value="expense">Gider (-)</option>
+                  <option value="income">Ek Gelir (+)</option>
+                </select>
+                <select className="modal-input" value={fCategory} onChange={(e) => setFCategory(e.target.value)}>
+                  <option value="Reklam & Pazarlama">Reklam &amp; Pazarlama</option>
+                  <option value="GDS / API Ücreti">GDS / API Ücreti</option>
+                  <option value="Personel & Prim">Personel &amp; Prim</option>
+                  <option value="Ofis & Sabit Gider">Ofis &amp; Sabit Gider</option>
+                  <option value="Ek Hizmet Geliri">Ek Hizmet Geliri</option>
+                  <option value="Diğer">Diğer</option>
+                </select>
+                <input className="modal-input" required placeholder="Açıklama (Örn: Google Ads Kasım)" value={fTitle} onChange={(e) => setFTitle(e.target.value)} />
+                <input className="modal-input" required type="number" min={1} placeholder="Tutar (TL)" value={fAmount} onChange={(e) => setFAmount(e.target.value)} />
+                <input className="modal-input" type="date" value={fDate} onChange={(e) => setFDate(e.target.value)} />
+                <button type="submit" className="btn-gold-nav" style={{ borderRadius: 12 }} disabled={busy}>
+                  <Plus size={15} /> Kaydet
+                </button>
+              </form>
+            )}
 
-            {entries.length === 0 ? (
+            {datedEntries.length === 0 ? (
               <div style={{ fontSize: 13, color: 'var(--aspan-text-muted)' }}>Henüz manuel gelir veya gider kaydı eklenmedi.</div>
             ) : (
-              entries.map((e) => (
+              datedEntries.map((e) => (
                 <div
                   key={e.id}
                   style={{
@@ -855,15 +925,17 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
                     <strong style={{ fontSize: 15, color: e.type === 'income' ? '#059669' : '#BE123C' }}>
                       {e.type === 'income' ? '+' : '-'}{formatPrice(e.amount, currency)}
                     </strong>
-                    <button
-                      type="button"
-                      className="drawer-close"
-                      disabled={busy}
-                      aria-label={`${e.title} sil`}
-                      onClick={() => void handleDeleteFinance(e.id)}
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    {canWriteFinance && (
+                      <button
+                        type="button"
+                        className="drawer-close"
+                        disabled={busy}
+                        aria-label={`${e.title} sil`}
+                        onClick={() => void handleDeleteFinance(e.id)}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))
@@ -935,7 +1007,7 @@ export const AdminFinanceCrmSection: React.FC<AdminFinanceCrmSectionProps> = ({
                     return (
                       <tr key={b.id} style={{ borderBottom: '1px solid var(--aspan-border)' }}>
                         <td style={{ padding: '10px 8px 10px 0', whiteSpace: 'nowrap' }}>
-                          <strong>{formatTrDateTime(b.createdAt)}</strong>
+                          <strong>{formatTrDateTime(b.createdAt, lang)}</strong>
                         </td>
                         <td style={{ padding: '10px 8px' }}>
                           <strong>{b.sellerName || b.sellerEmail || 'Web Direkt (B2C)'}</strong>

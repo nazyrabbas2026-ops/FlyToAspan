@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { X, Briefcase, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { LangCode, UserProfile } from '../types';
-import { api, apiMessage } from '../data/api';
+import { api, ApiError, apiMessage } from '../data/api';
 
 interface AuthModalsProps {
   lang?: LangCode;
@@ -179,11 +179,99 @@ export const AuthModals: React.FC<AuthModalsProps> = ({
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+  const [needs2fa, setNeeds2fa] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const [pendingSuccess, setPendingSuccess] = useState('');
+  const openerRef = useRef<HTMLElement | null>(null);
+  const modalCardRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!mode) return;
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const prev = openerRef.current;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !pending) {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    setTimeout(() => {
+      const firstInput = modalCardRef.current?.querySelector<HTMLElement>('input, button');
+      firstInput?.focus();
+    }, 20);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      if (prev && prev.isConnected) prev.focus();
+    };
+  }, [mode, onClose, pending]);
 
   if (!mode) return null;
+
+  const corpUi = {
+    TR: {
+      step1: '1. Başvuru',
+      step2: '2. Yönetici Onayı',
+      step3: '3. Şifre & Panel',
+      optAgency: 'B2B Alt Acente',
+      optCorp: 'Kurumsal Şirket',
+      optSales: 'Satış Temsilcisi',
+      taxPh: 'BIN / Vergi No',
+      modulesLbl: 'Talep Edilen Satış Modülleri',
+      modFlights: 'Uçak Bileti',
+      modHotels: 'Otel',
+      modTours: 'Paket Turlar',
+      totpLbl: '2FA Doğrulama Kodu (6 hane)',
+      totpPh: '123456',
+    },
+    EN: {
+      step1: '1. Application',
+      step2: '2. Admin Review',
+      step3: '3. Password & Portal',
+      optAgency: 'B2B Sub-Agency',
+      optCorp: 'Corporate Company',
+      optSales: 'Sales Representative',
+      taxPh: 'Tax / BIN ID',
+      modulesLbl: 'Requested Sales Modules',
+      modFlights: 'Flights',
+      modHotels: 'Hotels',
+      modTours: 'Package Tours',
+      totpLbl: '2FA Verification Code (6 digits)',
+      totpPh: '123456',
+    },
+    RU: {
+      step1: '1. Заявка',
+      step2: '2. Проверка админом',
+      step3: '3. Пароль и портал',
+      optAgency: 'B2B Субагент',
+      optCorp: 'Корпоративная компания',
+      optSales: 'Менеджер продаж',
+      taxPh: 'БИН / ИНН',
+      modulesLbl: 'Запрашиваемые модули продаж',
+      modFlights: 'Авиабилеты',
+      modHotels: 'Отели',
+      modTours: 'Пакетные туры',
+      totpLbl: 'Код 2FA (6 цифр)',
+      totpPh: '123456',
+    },
+    KK: {
+      step1: '1. Өтінім',
+      step2: '2. Әкімші растауы',
+      step3: '3. Құпиясөз және панель',
+      optAgency: 'B2B Субагент',
+      optCorp: 'Корпоративтік компания',
+      optSales: 'Сату өкілі',
+      taxPh: 'БСН / Салық №',
+      modulesLbl: 'Сұралған сату модульдері',
+      modFlights: 'Әуе билеттері',
+      modHotels: 'Қонақүйлер',
+      modTours: 'Пакеттік турлар',
+      totpLbl: '2FA растау коды (6 сан)',
+      totpPh: '123456',
+    },
+  }[lang];
 
   const passwordStrength = password.length === 0 ? 0 : password.length < 12 ? 1 : password.length < 16 ? 2 : 3;
 
@@ -194,9 +282,11 @@ export const AuthModals: React.FC<AuthModalsProps> = ({
     setError('');
     try {
       if (mode === 'login') {
-        const { user } = await api.login(email, password);
+        const { user } = await api.login(email, password, needs2fa ? totpCode : undefined);
         onAuthSuccess(user);
         setPassword('');
+        setTotpCode('');
+        setNeeds2fa(false);
         onClose();
       } else {
         const res = await api.register({
@@ -221,6 +311,9 @@ export const AuthModals: React.FC<AuthModalsProps> = ({
         }
       }
     } catch (cause) {
+      if (cause instanceof ApiError && cause.data?.requires2fa) {
+        setNeeds2fa(true);
+      }
       setError(apiMessage(cause));
     } finally {
       setPending(false);
@@ -234,7 +327,7 @@ export const AuthModals: React.FC<AuthModalsProps> = ({
       role="dialog"
       aria-modal="true"
     >
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-card" ref={modalCardRef} onClick={(e) => e.stopPropagation()}>
         <div
           style={{
             display: 'flex',
@@ -354,6 +447,28 @@ export const AuthModals: React.FC<AuthModalsProps> = ({
                     onChange={(e) => setPassword(e.target.value)}
                   />
                 </div>
+                {needs2fa && (
+                  <div>
+                    <label
+                      htmlFor="auth-login-totp"
+                      style={{ fontSize: 12, fontWeight: 700, display: 'block', marginBottom: 4 }}
+                    >
+                      {corpUi.totpLbl}
+                    </label>
+                    <input
+                      id="auth-login-totp"
+                      name="totpCode"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      required
+                      maxLength={6}
+                      className="modal-input"
+                      placeholder={corpUi.totpPh}
+                      value={totpCode}
+                      onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    />
+                  </div>
+                )}
                 <button type="submit" disabled={pending} className="uf-pop-done" style={{ height: 46 }}>
                   {accountType === 'corporate' ? ui.corpLoginBtn : ui.loginBtn}
                 </button>
@@ -395,13 +510,13 @@ export const AuthModals: React.FC<AuthModalsProps> = ({
                 }}
               >
                 <div style={{ padding: '7px 8px', borderRadius: 10, background: '#10B981', color: '#fff', textAlign: 'center' }}>
-                  1. Başvuru
+                  {corpUi.step1}
                 </div>
                 <div style={{ padding: '7px 8px', borderRadius: 10, background: 'var(--aspan-bg-soft)', border: '1px solid var(--aspan-border)', color: 'var(--aspan-text-muted)', textAlign: 'center' }}>
-                  2. Yönetici Onayı
+                  {corpUi.step2}
                 </div>
                 <div style={{ padding: '7px 8px', borderRadius: 10, background: 'var(--aspan-bg-soft)', border: '1px solid var(--aspan-border)', color: 'var(--aspan-text-muted)', textAlign: 'center' }}>
-                  3. Şifre &amp; Panel
+                  {corpUi.step3}
                 </div>
               </div>
             )}
@@ -411,9 +526,9 @@ export const AuthModals: React.FC<AuthModalsProps> = ({
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
                     {(
                       [
-                        { id: 'agency', label: 'B2B Alt Acente' },
-                        { id: 'corporate', label: 'Kurumsal Şirket' },
-                        { id: 'sales', label: 'Satış Temsilcisi' },
+                        { id: 'agency', label: corpUi.optAgency },
+                        { id: 'corporate', label: corpUi.optCorp },
+                        { id: 'sales', label: corpUi.optSales },
                       ] as const
                     ).map((opt) => {
                       const active = applicantType === opt.id;
@@ -453,7 +568,7 @@ export const AuthModals: React.FC<AuthModalsProps> = ({
                       id="auth-reg-taxid"
                       name="taxId"
                       className="modal-input"
-                      placeholder="BIN / Vergi No"
+                      placeholder={corpUi.taxPh}
                       value={taxId}
                       onChange={(e) => setTaxId(e.target.value)}
                     />
@@ -507,14 +622,14 @@ export const AuthModals: React.FC<AuthModalsProps> = ({
                 <>
                   <div>
                     <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--aspan-text-muted)', marginBottom: 6 }}>
-                      Talep Edilen Satış Modülleri
+                      {corpUi.modulesLbl}
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {(
                         [
-                          { id: 'flights', label: 'Uçak Bileti' },
-                          { id: 'hotels', label: 'Otel' },
-                          { id: 'tours', label: 'Paket Turlar' },
+                          { id: 'flights', label: corpUi.modFlights },
+                          { id: 'hotels', label: corpUi.modHotels },
+                          { id: 'tours', label: corpUi.modTours },
                         ] as const
                       ).map((mod) => {
                         const selected = requestedModules.includes(mod.id);

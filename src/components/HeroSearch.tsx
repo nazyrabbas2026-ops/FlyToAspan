@@ -589,6 +589,19 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
                 <Compass size={17} />
                 <span>{lang === 'EN' ? 'Package Tours' : lang === 'RU' ? 'Пакетные туры' : lang === 'KK' ? 'Тур пакеттері' : 'Paket Turlar'}</span>
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'transfer'}
+                className={`u4-tab-btn ${activeTab === 'transfer' ? 'active' : ''}`}
+                onClick={() => {
+                  onTabChange('transfer');
+                  setOpenPop(null);
+                }}
+              >
+                <CarTaxiFront size={17} />
+                <span>{t.tabTransfer}</span>
+              </button>
             </div>
 
             {activeTab === 'tour' && (

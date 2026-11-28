@@ -10,7 +10,9 @@ export type PageView =
   | 'booking-ops'
   | 'panel'
   | 'admin'
-  | 'legal';
+  | 'developer'
+  | 'legal'
+  | 'not-found';
 
 export type SearchTab = 'flight' | 'hotel' | 'transfer' | 'tour';
 export type TripType = 'oneway' | 'roundtrip' | 'multicity';
@@ -24,6 +26,7 @@ export interface AdminMarkupConfig {
   intlPercent: number;
   hotelPercent: number;
   transferAddTRY: number;
+  revision?: number;
 }
 
 export interface FlightSearchQuery {
@@ -65,8 +68,13 @@ export type StaffPermission =
   | 'tours.sell'
   | 'bookings.view_own'
   | 'bookings.view_org'
+  | 'bookings.view_all'
   | 'bookings.cancel_request'
   | 'bookings.manage'
+  | 'refunds.process'
+  | 'finance.view'
+  | 'finance.manage'
+  | 'analytics.view'
   | 'inventory.manage'
   | 'flights.manual'
   | 'pricing.edit'
@@ -120,6 +128,8 @@ export interface PriceAlertRecord {
 export interface UserProfile {
   id: string;
   role: 'member' | 'admin';
+  roleLabel?: string;
+  totpEnabled?: boolean;
   status?: 'active' | 'pending' | 'suspended';
   organizationId?: string | null;
   organizationDiscountPercent?: number;
@@ -198,8 +208,13 @@ export interface BoardingPassInfo {
 export interface BookingRecord {
   id: string;
   pnr: string;
+  revision?: number;
   eticketNumber?: string;
   demo?: boolean;
+  paymentStatus?: 'demo_unpaid' | 'demo_refunded' | 'pending' | 'verified' | 'failed' | 'refunded';
+  ticketingStatus?: 'demo_not_ticketed' | 'pending' | 'ticketed' | 'voided' | 'failed';
+  refundStatus?: 'none' | 'requested' | 'completed';
+  appliedPricingRule?: string;
   type: 'Uçak' | 'Otel' | 'Transfer' | 'Tur';
   title: string;
   subtitle: string;
